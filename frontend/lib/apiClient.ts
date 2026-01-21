@@ -73,7 +73,7 @@ export function createApiClient(token: string | null) {
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>
         apiRequest<any>(`/users/${data.id}`, { method: "PATCH", body: data, token }),
-      deactivate: (data: { id: string }) =>
+      remove: (data: { id: string }) =>
         apiRequest<any>(`/users/${data.id}`, { method: "DELETE", token }),
     },
     leave_requests: {

@@ -484,9 +484,29 @@ app.delete("/users/:id", asyncHandler(async (req, res) => {
     throw new HttpError(404, "User not found");
   }
 
-  await pool.query("UPDATE users SET is_active = false WHERE id = $1", [id]);
-  const after = { ...before, is_active: false };
-  await createEntityAuditLog(auth.userID, "users", id, "DEACTIVATE", before, after);
+  const leaveRequestCount = await queryRow<{ count: string }>(
+    "SELECT COUNT(*) as count FROM leave_requests WHERE user_id = $1",
+    [id]
+  );
+  const leaveBalanceCount = await queryRow<{ count: string }>(
+    "SELECT COUNT(*) as count FROM leave_balances WHERE user_id = $1",
+    [id]
+  );
+  const notificationCount = await queryRow<{ count: string }>(
+    "SELECT COUNT(*) as count FROM notifications WHERE user_id = $1",
+    [id]
+  );
+
+  const totalDependencies = Number(leaveRequestCount?.count ?? 0)
+    + Number(leaveBalanceCount?.count ?? 0)
+    + Number(notificationCount?.count ?? 0);
+
+  if (totalDependencies > 0) {
+    throw new HttpError(409, "Cannot delete user with related data. Remove related records first.");
+  }
+
+  await pool.query("DELETE FROM users WHERE id = $1", [id]);
+  await createEntityAuditLog(auth.userID, "users", id, "DELETE", before, null);
 
   res.json({ ok: true });
 }));

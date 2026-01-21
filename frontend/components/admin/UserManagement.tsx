@@ -94,15 +94,15 @@ export default function UserManagement() {
     },
   });
 
-  const deactivateMutation = useMutation({
-    mutationFn: async (payload: { id: string }) => backend.users.deactivate(payload),
+  const deleteMutation = useMutation({
+    mutationFn: async (payload: { id: string }) => backend.users.remove(payload),
     onSuccess: () => {
-      toast({ title: "Používateľ bol deaktivovaný." });
+      toast({ title: "Používateľ bol odstránený." });
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => {
       toast({
-        title: "Deaktivácia používateľa zlyhala",
+        title: "Odstránenie používateľa zlyhalo",
         description: error.message,
         variant: "destructive",
       });
@@ -137,13 +137,10 @@ export default function UserManagement() {
     setDialogOpen(true);
   };
 
-  const handleDeactivate = (user: any) => {
-    if (!user.isActive) {
-      return;
-    }
-    const confirmed = window.confirm(`Naozaj chcete deaktivovať používateľa ${user.name}?`);
+  const handleDelete = (user: any) => {
+    const confirmed = window.confirm(`Naozaj chcete odstrániť používateľa ${user.name}?`);
     if (confirmed) {
-      deactivateMutation.mutate({ id: user.id });
+      deleteMutation.mutate({ id: user.id });
     }
   };
 
@@ -210,10 +207,10 @@ export default function UserManagement() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => handleDeactivate(user)}
-                      disabled={!user.isActive || deactivateMutation.isPending}
+                      onClick={() => handleDelete(user)}
+                      disabled={deleteMutation.isPending}
                     >
-                      Deaktivovať
+                      Odstrániť
                     </Button>
                   </div>
                 </TableCell>
