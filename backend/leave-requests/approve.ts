@@ -8,12 +8,13 @@ import type { LeaveRequest } from "../shared/types";
 interface ApproveLeaveRequestParams {
   id: number;
   comment?: string;
+  bulk?: boolean;
 }
 
 export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
   { auth: true, expose: true, method: "POST", path: "/leave-requests/:id/approve" },
   async (req): Promise<LeaveRequest> => {
-    const { id, comment } = req;
+    const { id, comment, bulk } = req;
     const auth = getAuthData()!;
     requireManager(auth.role);
     const request = await db.queryRow<LeaveRequest & { teamId: number | null }>`
@@ -103,9 +104,9 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
     
     await createAuditLog(
       approverId,
-      "leave_requests",
+      "leave_request",
       id,
-      "APPROVE",
+      bulk ? "BULK_APPROVE" : "APPROVE",
       request,
       updated
     );
@@ -113,7 +114,8 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
     await createNotification(
       request.userId,
       "REQUEST_APPROVED",
-      { requestId: id }
+      { requestId: id, startDate: updated?.startDate, endDate: updated?.endDate },
+      `leave_request:${id}:approved`
     );
     
     return updated!;

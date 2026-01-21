@@ -132,6 +132,7 @@ model Notification {
   user        User     @relation(fields: [userId], references: [id])
   type        String
   payloadJson Json     @map("payload_json")
+  dedupeKey   String?  @unique @map("dedupe_key")
   sentAt      DateTime? @map("sent_at")
   readAt      DateTime? @map("read_at")
   createdAt   DateTime @default(now()) @map("created_at")
