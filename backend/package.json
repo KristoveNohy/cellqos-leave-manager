@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "bun",
   "scripts": {
-    "build": "cd ../frontend \u0026\u0026 bun install \u0026\u0026 npx vite build --outDir=../backend/frontend/dist",
+    "build": "cd ../frontend && bun install && npx vite build --outDir=../backend/frontend/dist",
     "dev": "tsx server.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -15,7 +15,8 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "encore.dev": "^1.53.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

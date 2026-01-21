@@ -41,7 +41,6 @@ model Team {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
   users               User[]
-  leaveRequests       LeaveRequest[]
 
   @@map("teams")
 }
