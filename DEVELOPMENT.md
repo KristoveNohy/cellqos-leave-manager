@@ -30,6 +30,12 @@ export JWT_SECRET="change-me"
 export DATABASE_URL="postgresql://user:password@localhost:5432/cellqos"
 ```
 
+Ensure the database has `pgcrypto` enabled for password hashing:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+```
+
 Generate the Prisma client, run migrations, and seed data:
 
 ```bash

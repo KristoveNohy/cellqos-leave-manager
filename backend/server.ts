@@ -1009,7 +1009,17 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => {
+
+async function startServer() {
+  await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+  app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`API server listening on http://localhost:${port}`);
+  });
+}
+
+startServer().catch((err) => {
   // eslint-disable-next-line no-console
-  console.log(`API server listening on http://localhost:${port}`);
+  console.error("Failed to start server", err);
+  process.exit(1);
 });
