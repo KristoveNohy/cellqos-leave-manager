@@ -1,39 +1,39 @@
 # CellQos Leave Manager
 
-A comprehensive leave and absence management system with role-based access control.
+Komplexný systém správy dovoleniek a absencií s riadením prístupu podľa rolí.
 
-## Features
+## Funkcie
 
-### Core Features (MVP)
-- **Calendar View**: Monthly/weekly view of all leave requests
-- **Leave Requests**: Create, edit, cancel requests with multiple types (Annual, Sick, Home Office, Unpaid, Other)
-- **Approval Workflow**: Managers can approve/reject requests with comments
-- **Role-Based Access Control**:
-  - **EMPLOYEE**: View own calendar, create/edit own requests (limited to DRAFT/PENDING)
-  - **MANAGER**: Full access to all requests, user management, approval workflow
+### Kľúčové funkcie (MVP)
+- **Kalendárový prehľad**: Mesačný/týždenný pohľad na všetky žiadosti o voľno
+- **Žiadosti o voľno**: Vytvárať, upravovať a rušiť žiadosti s viacerými typmi (dovolenka, PN, home office, neplatené voľno, iné)
+- **Schvaľovací workflow**: Manažéri môžu schvaľovať/zamietať žiadosti s komentármi
+- **Riadenie prístupu podľa rolí**:
+  - **EMPLOYEE**: Zobrazenie vlastného kalendára, vytváranie/úprava vlastných žiadostí (len DRAFT/PENDING)
+  - **MANAGER**: Plný prístup ku všetkým žiadostiam, správa používateľov, schvaľovací workflow
 
-### Advanced Features (v1)
-- **Team Limits**: Maximum concurrent approved leaves per day
-- **Holidays**: Slovak holidays + custom holiday management
-- **Export**: CSV export of leave requests
-- **Bulk Operations**: Approve/reject multiple requests at once
-- **Search & Filters**: Advanced filtering by user, type, status, dates, team
-- **Attachments**: Upload documents for sick leave and other types
-- **Audit Log**: Complete history of all changes
-- **Leave Balance**: Track allowance, used, and remaining days
+### Pokročilé funkcie (v1)
+- **Limity tímu**: Maximálny počet súčasných schválených absencií za deň
+- **Sviatky**: Slovenské sviatky + správa vlastných sviatkov
+- **Export**: Export žiadostí o voľno do CSV
+- **Hromadné operácie**: Schválenie/zamietnutie viacerých žiadostí naraz
+- **Vyhľadávanie a filtre**: Pokročilé filtrovanie podľa používateľa, typu, stavu, dátumov, tímu
+- **Prílohy**: Nahrávanie dokumentov pre PN a iné typy
+- **Audit log**: Kompletná história všetkých zmien
+- **Zostatok dovolenky**: Sledovanie nároku, vyčerpania a zostávajúcich dní
 
-## Tech Stack
+## Technologický stack
 
 - **Frontend**: React, TypeScript, shadcn/ui, React Big Calendar, React Hook Form, Zod
 - **Backend**: Encore.ts, PostgreSQL
-- **Authentication**: Clerk (to be configured)
+- **Autentifikácia**: Clerk (treba nakonfigurovať)
 
-## Database Schema
+## Schéma databázy
 
-### Tables
+### Tabuľky
 
 **users**
-- id (string, primary key) - Clerk user ID
+- id (string, primary key) - ID používateľa z Clerk
 - email (string, unique)
 - name (string)
 - role (enum: EMPLOYEE, MANAGER)
@@ -44,7 +44,7 @@ A comprehensive leave and absence management system with role-based access contr
 **teams**
 - id (bigserial, primary key)
 - name (string, unique)
-- max_concurrent_leaves (integer, nullable) - Max people on leave simultaneously
+- max_concurrent_leaves (integer, nullable) - Maximálny počet ľudí na voľne súčasne
 - created_at, updated_at (timestamp)
 
 **leave_requests**
@@ -53,14 +53,14 @@ A comprehensive leave and absence management system with role-based access contr
 - type (enum: ANNUAL_LEAVE, SICK_LEAVE, HOME_OFFICE, UNPAID_LEAVE, OTHER)
 - start_date (date)
 - end_date (date)
-- is_half_day_start (boolean) - AM/PM for first day
-- is_half_day_end (boolean) - AM/PM for last day
+- is_half_day_start (boolean) - AM/PM pre prvý deň
+- is_half_day_end (boolean) - AM/PM pre posledný deň
 - status (enum: DRAFT, PENDING, APPROVED, REJECTED, CANCELLED)
 - reason (text, nullable)
 - manager_comment (text, nullable)
-- approved_by (string, nullable) - Manager user ID
+- approved_by (string, nullable) - ID manažéra
 - approved_at (timestamp, nullable)
-- computed_days (double precision) - Working days excluding weekends/holidays
+- computed_days (double precision) - Pracovné dni bez víkendov/sviatkov
 - attachment_url (text, nullable)
 - created_at, updated_at (timestamp)
 
@@ -82,10 +82,10 @@ A comprehensive leave and absence management system with role-based access contr
 
 **audit_logs**
 - id (bigserial, primary key)
-- actor_user_id (string) - Who made the change
-- entity_type (string) - Table name
-- entity_id (string) - Record ID
-- action (string) - CREATE, UPDATE, DELETE, APPROVE, REJECT, etc.
+- actor_user_id (string) - Kto vykonal zmenu
+- entity_type (string) - Názov tabuľky
+- entity_id (string) - ID záznamu
+- action (string) - CREATE, UPDATE, DELETE, APPROVE, REJECT, atď.
 - before_json (jsonb, nullable)
 - after_json (jsonb, nullable)
 - created_at (timestamp)
@@ -93,89 +93,89 @@ A comprehensive leave and absence management system with role-based access contr
 **notifications**
 - id (bigserial, primary key)
 - user_id (string, foreign key)
-- type (string) - REQUEST_SUBMITTED, REQUEST_APPROVED, etc.
+- type (string) - REQUEST_SUBMITTED, REQUEST_APPROVED, atď.
 - payload_json (jsonb)
 - sent_at (timestamp, nullable)
 - read_at (timestamp, nullable)
 - created_at (timestamp)
 
-## Business Rules
+## Biznis pravidlá
 
-1. **Overlap Prevention**: No overlapping PENDING or APPROVED requests for the same user
-2. **Past Dates**: Cannot create requests in the past (configurable)
-3. **Weekend Handling**: Weekends are excluded from leave day calculations
-4. **Holiday Handling**: Company holidays are excluded from leave day calculations
-5. **Half-Day Support**: 0.5 days for AM/PM half-days
-6. **Team Limits**: Maximum concurrent approved leaves enforced per team
-7. **Manager Override**: Managers can override rules with audit logging
-8. **Timezone**: All dates use Europe/Bratislava timezone
-9. **Status Transitions**:
-   - DRAFT → PENDING (submit)
-   - PENDING → APPROVED/REJECTED (manager)
-   - PENDING → CANCELLED (employee/manager)
-   - Any status → CANCELLED (manager only)
+1. **Prevencia prekrytia**: Žiadne prekrytie PENDING alebo APPROVED žiadostí pre toho istého používateľa
+2. **Minulé dátumy**: Nemožno vytvárať žiadosti v minulosti (konfigurovateľné)
+3. **Víkendy**: Víkendy sa nezapočítavajú do výpočtu dní voľna
+4. **Sviatky**: Firemné sviatky sa nezapočítavajú do výpočtu dní voľna
+5. **Poldeň**: 0,5 dňa pre AM/PM poldeň
+6. **Limity tímu**: Maximálny počet súčasných schválených absencií za tím
+7. **Override manažéra**: Manažéri môžu obísť pravidlá s auditovaním
+8. **Časové pásmo**: Všetky dátumy používajú časové pásmo Europe/Bratislava
+9. **Prechody stavov**:
+   - DRAFT → PENDING (odoslanie)
+   - PENDING → APPROVED/REJECTED (manažér)
+   - PENDING → CANCELLED (zamestnanec/manažér)
+   - Akýkoľvek stav → CANCELLED (iba manažér)
 
-## API Endpoints
+## API rozhrania
 
-### Leave Requests
-- `POST /leave-requests` - Create request
-- `GET /leave-requests` - List requests (filterable)
-- `GET /leave-requests/:id` - Get request details
-- `PATCH /leave-requests/:id` - Update request
-- `POST /leave-requests/:id/submit` - Submit DRAFT → PENDING
-- `POST /leave-requests/:id/approve` - Approve request (manager)
-- `POST /leave-requests/:id/reject` - Reject request (manager)
-- `POST /leave-requests/:id/cancel` - Cancel request
-- `DELETE /leave-requests/:id` - Delete request (manager)
+### Žiadosti o voľno
+- `POST /leave-requests` - Vytvoriť žiadosť
+- `GET /leave-requests` - Zoznam žiadostí (filtrovanie)
+- `GET /leave-requests/:id` - Detaily žiadosti
+- `PATCH /leave-requests/:id` - Aktualizovať žiadosť
+- `POST /leave-requests/:id/submit` - Odoslať DRAFT → PENDING
+- `POST /leave-requests/:id/approve` - Schváliť žiadosť (manažér)
+- `POST /leave-requests/:id/reject` - Zamietnuť žiadosť (manažér)
+- `POST /leave-requests/:id/cancel` - Zrušiť žiadosť
+- `DELETE /leave-requests/:id` - Vymazať žiadosť (manažér)
 
-### Users
-- `GET /users` - List users (manager)
-- `GET /users/:id` - Get user (manager)
-- `POST /users` - Create user (manager)
-- `PATCH /users/:id` - Update user (manager)
-- `DELETE /users/:id` - Deactivate user (manager)
-- `GET /users/me` - Get current user
+### Používatelia
+- `GET /users` - Zoznam používateľov (manažér)
+- `GET /users/:id` - Používateľ (manažér)
+- `POST /users` - Vytvoriť používateľa (manažér)
+- `PATCH /users/:id` - Aktualizovať používateľa (manažér)
+- `DELETE /users/:id` - Deaktivovať používateľa (manažér)
+- `GET /users/me` - Aktuálny používateľ
 
-### Teams
-- `GET /teams` - List teams
-- `GET /teams/:id` - Get team
-- `POST /teams` - Create team (manager)
-- `PATCH /teams/:id` - Update team (manager)
-- `DELETE /teams/:id` - Delete team (manager)
+### Tímy
+- `GET /teams` - Zoznam tímov
+- `GET /teams/:id` - Tím
+- `POST /teams` - Vytvoriť tím (manažér)
+- `PATCH /teams/:id` - Aktualizovať tím (manažér)
+- `DELETE /teams/:id` - Zmazať tím (manažér)
 
-### Holidays
-- `GET /holidays` - List holidays
-- `POST /holidays` - Create holiday (manager)
-- `DELETE /holidays/:id` - Delete holiday (manager)
+### Sviatky
+- `GET /holidays` - Zoznam sviatkov
+- `POST /holidays` - Vytvoriť sviatok (manažér)
+- `DELETE /holidays/:id` - Zmazať sviatok (manažér)
 
-### Calendar
-- `GET /calendar` - Get calendar view (date range, team filter)
+### Kalendár
+- `GET /calendar` - Kalendár (rozsah dátumov, filter tímu)
 
 ### Audit
-- `GET /audit` - Get audit logs (manager)
+- `GET /audit` - Audit logy (manažér)
 
 ### Export
-- `GET /export/leave-requests` - Export to CSV (manager)
+- `GET /export/leave-requests` - Export do CSV (manažér)
 
-## Setup
+## Nastavenie
 
-1. Install dependencies (automatic)
-2. Configure authentication via Clerk (see setup instructions)
-3. Database migrations run automatically
-4. Seed data is automatically loaded
+1. Nainštalujte závislosti (automaticky)
+2. Nakonfigurujte autentifikáciu cez Clerk (pozrite si [SETUP.md](SETUP.md))
+3. Databázové migrácie prebehnú automaticky
+4. Seed dáta sa načítajú automaticky
 
-## Demo Accounts (after Clerk setup)
+## Demo účty (po nastavení Clerk)
 
-- **Manager**: manager@cellqos.com (full access)
-- **Employees**:
+- **Manažér**: manager@cellqos.com (plný prístup)
+- **Zamestnanci**:
   - anna@cellqos.com
   - peter@cellqos.com
   - lucia@cellqos.com
 
-## Architecture
+## Architektúra
 
-- **Backend Services**: Modular Encore.ts services for each domain
-- **Frontend**: Component-based React architecture with role guards
-- **State Management**: React Query for server state
-- **Validation**: Zod schemas on both client and server
-- **Security**: Server-side RBAC checks on all endpoints
+- **Backend služby**: Modulárne Encore.ts služby pre jednotlivé domény
+- **Frontend**: Komponentová architektúra Reactu s role guardmi
+- **Správa stavu**: React Query pre serverový stav
+- **Validácia**: Zod schémy na klientovi aj serveri
+- **Bezpečnosť**: Server-side RBAC kontroly na všetkých endpointoch

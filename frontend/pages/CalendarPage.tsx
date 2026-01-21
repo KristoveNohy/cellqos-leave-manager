@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar as BigCalendar, momentLocalizer, View } from "react-big-calendar";
 import moment from "moment";
+import "moment/locale/sk";
 import backend from "~backend/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 import "./calendar.css";
 
 const localizer = momentLocalizer(moment);
+moment.locale("sk");
 
 interface CalendarEvent {
   id: number;
@@ -42,9 +44,17 @@ export default function CalendarPage() {
     },
   });
   
+  const typeLabels = {
+    ANNUAL_LEAVE: "Dovolenka",
+    SICK_LEAVE: "PN",
+    HOME_OFFICE: "Home office",
+    UNPAID_LEAVE: "Neplatené voľno",
+    OTHER: "Iné",
+  };
+
   const events: CalendarEvent[] = (data?.events || []).map((event) => ({
     id: event.id,
-    title: `${event.userName} - ${event.type.replace("_", " ")}`,
+    title: `${event.userName} - ${typeLabels[event.type as keyof typeof typeLabels] ?? event.type.replace("_", " ")}`,
     start: new Date(event.startDate),
     end: new Date(event.endDate),
     resource: event,
@@ -67,10 +77,10 @@ export default function CalendarPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Team Calendar</h1>
+        <h1 className="text-3xl font-bold">Tímový kalendár</h1>
         <Button onClick={() => setShowCreateDialog(true)}>
           <Plus className="h-4 w-4 mr-2" />
-          New Request
+          Nová žiadosť
         </Button>
       </div>
       
@@ -88,6 +98,22 @@ export default function CalendarPage() {
             onNavigate={setDate}
             eventPropGetter={eventStyleGetter}
             onSelectEvent={(event) => setSelectedEvent(event.resource)}
+            messages={{
+              allDay: "Celý deň",
+              previous: "Späť",
+              next: "Ďalej",
+              today: "Dnes",
+              month: "Mesiac",
+              week: "Týždeň",
+              day: "Deň",
+              agenda: "Agenda",
+              date: "Dátum",
+              time: "Čas",
+              event: "Udalosť",
+              noEventsInRange: "Žiadne udalosti v tomto období",
+              showMore: (total) => `+${total} ďalšie`,
+              work_week: "Pracovný týždeň",
+            }}
           />
         </div>
       </Card>

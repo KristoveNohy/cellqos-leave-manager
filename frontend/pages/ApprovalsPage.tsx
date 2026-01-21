@@ -14,9 +14,9 @@ export default function ApprovalsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Approval Inbox</h1>
+        <h1 className="text-3xl font-bold">Schvaľovanie žiadostí</h1>
         <div className="text-sm text-muted-foreground">
-          {data?.requests.length || 0} pending requests
+          {data?.requests.length || 0} čakajúcich žiadostí
         </div>
       </div>
       
