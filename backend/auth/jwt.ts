@@ -1,8 +1,5 @@
 import jwt from "jsonwebtoken";
-import { secret } from "encore.dev/config";
 import type { UserRole } from "../shared/types";
-
-const jwtSecret = secret("JwtSecret");
 
 interface TokenPayload {
   sub: string;
@@ -12,5 +9,9 @@ interface TokenPayload {
 }
 
 export function signAuthToken(payload: TokenPayload, expiresIn = "7d"): string {
-  return jwt.sign(payload, jwtSecret(), { expiresIn });
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET is required");
+  }
+  return jwt.sign(payload, secret, { expiresIn });
 }

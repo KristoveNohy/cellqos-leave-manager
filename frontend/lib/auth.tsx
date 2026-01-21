@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
 import type { UserRole } from "~backend/shared/types";
-import { Local } from "~backend/client";
 
 interface AuthUser {
   id: string;
@@ -74,4 +73,4 @@ export function useAuth() {
   return context;
 }
 
-export const apiBaseUrl = import.meta.env.VITE_CLIENT_TARGET ?? Local;
+export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";

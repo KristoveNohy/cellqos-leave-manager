@@ -1,17 +1,21 @@
-import { APIError } from "encore.dev/api";
-import type { AuthData } from "../auth/auth";
 import type { UserRole } from "./types";
+import { HttpError } from "./http-error";
+
+type AuthData = {
+  userID: string;
+  role: UserRole;
+};
 
 export function requireAuth(auth?: AuthData | null): AuthData {
   if (!auth) {
-    throw APIError.unauthenticated("Authentication required");
+    throw new HttpError(401, "Authentication required");
   }
   return auth;
 }
 
 export function requireManager(userRole: UserRole | undefined): void {
   if (userRole !== "MANAGER") {
-    throw APIError.permissionDenied("This action requires manager role");
+    throw new HttpError(403, "This action requires manager role");
   }
 }
 
