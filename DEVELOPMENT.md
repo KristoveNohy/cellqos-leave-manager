@@ -4,12 +4,6 @@ This project consists of an Encore application. Follow the steps below to get th
 
 ## Prerequisites
 
-If this is your first time using Encore, you need to install the CLI that runs the local development environment. Use the appropriate command for your system:
-
-- **macOS:** `brew install encoredev/tap/encore`
-- **Linux:** `curl -L https://encore.dev/install.sh | bash`
-- **Windows:** `iwr https://encore.dev/install.ps1 | iex`
-
 You also need to have bun installed for package management. If you don't have bun installed, you can install it by running:
 
 ```bash
@@ -25,12 +19,29 @@ npm install -g bun
    cd backend
    ```
 
-2. Start the Encore development server:
+2. Start the backend without installing the Encore CLI globally:
    ```bash
-   encore run
+   npm run dev:backend
    ```
 
 The backend will be available at the URL shown in your terminal (typically `http://localhost:4000`).
+
+### Prisma Migrations & Seed
+
+Set the JWT secret for the auth service:
+
+```bash
+encore secret set JwtSecret
+```
+
+Generate the Prisma client, run migrations, and seed data:
+
+```bash
+cd backend
+npx prisma generate
+npx prisma migrate dev
+npx prisma db seed
+```
 
 
 
@@ -48,7 +59,7 @@ The backend will be available at the URL shown in your terminal (typically `http
 
 3. Start the development server:
    ```bash
-   npx vite dev
+   npm run dev:frontend
    ```
 
 The frontend will be available at `http://localhost:5173` (or the next available port).
@@ -126,6 +137,4 @@ git push origin main
 - [Deployment Guide](https://encore.dev/docs/platform/deploy/deploying)
 - [GitHub Integration](https://encore.dev/docs/platform/integrations/github)
 - [Encore Cloud Dashboard](https://app.encore.dev)
-
-
 

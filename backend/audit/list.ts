@@ -1,5 +1,7 @@
 import { api, Query } from "encore.dev/api";
+import { getAuthData } from "~encore/auth";
 import db from "../db";
+import { requireManager } from "../shared/rbac";
 import type { AuditLog } from "../shared/types";
 
 interface ListAuditLogsParams {
@@ -16,6 +18,8 @@ interface ListAuditLogsResponse {
 export const list = api(
   { auth: true, expose: true, method: "GET", path: "/audit" },
   async (params: ListAuditLogsParams): Promise<ListAuditLogsResponse> => {
+    const auth = getAuthData()!;
+    requireManager(auth.role);
     const conditions: string[] = ["1=1"];
     const values: any[] = [];
     

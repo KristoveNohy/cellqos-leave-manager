@@ -1,7 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
-import { datesOverlap } from "../shared/date-utils";
 import { createAuditLog, createNotification } from "../shared/audit";
 import type { LeaveRequest } from "../shared/types";
 
@@ -34,6 +33,10 @@ export const submit = api(
     
     if (!request) {
       throw APIError.notFound("Leave request not found");
+    }
+
+    if (auth.role !== "MANAGER" && request.userId !== auth.userID) {
+      throw APIError.permissionDenied("Cannot submit another user's request");
     }
     
     if (request.status !== "DRAFT") {

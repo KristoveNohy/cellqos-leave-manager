@@ -23,22 +23,30 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
     CANCELLED: "bg-gray-400",
   };
   
+  const statusLabels = {
+    DRAFT: "Návrh",
+    PENDING: "Čaká",
+    APPROVED: "Schválené",
+    REJECTED: "Zamietnuté",
+    CANCELLED: "Zrušené",
+  };
+
   const typeLabels = {
-    ANNUAL_LEAVE: "Annual Leave",
-    SICK_LEAVE: "Sick Leave",
-    HOME_OFFICE: "Home Office",
-    UNPAID_LEAVE: "Unpaid Leave",
-    OTHER: "Other",
+    ANNUAL_LEAVE: "Dovolenka",
+    SICK_LEAVE: "PN",
+    HOME_OFFICE: "Home office",
+    UNPAID_LEAVE: "Neplatené voľno",
+    OTHER: "Iné",
   };
   
   if (isLoading) {
-    return <div className="text-center py-12">Loading...</div>;
+    return <div className="text-center py-12">Načítava sa...</div>;
   }
   
   if (requests.length === 0) {
     return (
       <Card className="p-12 text-center">
-        <p className="text-muted-foreground">No requests found</p>
+        <p className="text-muted-foreground">Nenašli sa žiadne žiadosti</p>
       </Card>
     );
   }
@@ -55,12 +63,12 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
                     {typeLabels[request.type as keyof typeof typeLabels]}
                   </h3>
                   <Badge className={statusColors[request.status as keyof typeof statusColors]}>
-                    {request.status}
+                    {statusLabels[request.status as keyof typeof statusLabels] ?? request.status}
                   </Badge>
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
-                  {request.startDate} to {request.endDate} ({request.computedDays} days)
+                  {request.startDate} – {request.endDate} ({request.computedDays} dní)
                 </div>
                 
                 {request.reason && (
@@ -76,7 +84,7 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
                 onClick={() => setSelectedRequest(request)}
               >
                 <Eye className="h-4 w-4 mr-2" />
-                View
+                Detail
               </Button>
             </div>
           </Card>

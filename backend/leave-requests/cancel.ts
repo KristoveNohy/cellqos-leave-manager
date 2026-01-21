@@ -38,7 +38,11 @@ export const cancel = api(
     if (request.status === "CANCELLED") {
       throw APIError.failedPrecondition("Request is already cancelled");
     }
-    
+
+    if (auth.role !== "MANAGER" && request.userId !== auth.userID) {
+      throw APIError.permissionDenied("Cannot cancel another user's request");
+    }
+
     const actorId = auth.userID;
     
     await db.exec`
