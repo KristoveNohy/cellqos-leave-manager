@@ -365,8 +365,8 @@ app.post("/users", asyncHandler(async (req, res) => {
   try {
     await pool.query(
       `
-        INSERT INTO users (id, email, name, role, team_id)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO users (id, email, name, role, team_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
       `,
       [userId, email, name, userRole, teamId ?? null]
     );
@@ -446,6 +446,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
 
   if (updates.length > 0) {
     values.push(id);
+    updates.push(`updated_at = NOW()`);
     await pool.query(
       `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length}`,
       values
