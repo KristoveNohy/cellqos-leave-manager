@@ -26,12 +26,17 @@ export const get = api(
     const isManager = auth.role === "MANAGER";
     const viewerId = auth.userID;
     let viewerTeamId: number | null = null;
-    const settings = await db.queryRow<{ showTeamCalendarForEmployees: boolean }>`
-      SELECT show_team_calendar_for_employees as "showTeamCalendarForEmployees"
-      FROM settings
-      LIMIT 1
-    `;
-    const showTeamCalendarForEmployees = settings?.showTeamCalendarForEmployees ?? false;
+    let showTeamCalendarForEmployees = false;
+    try {
+      const settings = await db.queryRow<{ showTeamCalendarForEmployees: boolean }>`
+        SELECT show_team_calendar_for_employees as "showTeamCalendarForEmployees"
+        FROM settings
+        LIMIT 1
+      `;
+      showTeamCalendarForEmployees = settings?.showTeamCalendarForEmployees ?? false;
+    } catch {
+      showTeamCalendarForEmployees = false;
+    }
 
     if (!isManager) {
       const viewer = await db.queryRow<{ teamId: number | null }>`

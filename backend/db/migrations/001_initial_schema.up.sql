@@ -97,6 +97,17 @@ CREATE TABLE notifications (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Settings table (single row)
+CREATE TABLE settings (
+  id SMALLINT PRIMARY KEY DEFAULT 1,
+  show_team_calendar_for_employees BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO settings (id)
+VALUES (1)
+ON CONFLICT (id) DO NOTHING;
+
 -- Indexes for performance
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_team ON users(team_id);

@@ -114,20 +114,63 @@ async function createEntityAuditLog(
   );
 }
 
+let notificationsDedupeKeySupported: boolean | null = null;
+
+async function hasNotificationsDedupeKey(): Promise<boolean> {
+  if (notificationsDedupeKeySupported !== null) {
+    return notificationsDedupeKeySupported;
+  }
+  const result = await pool.query<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'notifications'
+          AND column_name = 'dedupe_key'
+      ) as "exists"
+    `
+  );
+  notificationsDedupeKeySupported = result.rows[0]?.exists ?? false;
+  return notificationsDedupeKeySupported;
+}
+
 async function createNotification(
   userId: string,
   type: string,
   payload: Record<string, unknown>,
   dedupeKey?: string | null
 ): Promise<void> {
+  const supportsDedupeKey = await hasNotificationsDedupeKey();
+  if (supportsDedupeKey) {
+    await pool.query(
+      `
+        INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (dedupe_key) DO NOTHING
+      `,
+      [userId, type, JSON.stringify(payload), dedupeKey ?? null]
+    );
+    return;
+  }
   await pool.query(
     `
-      INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (dedupe_key) DO NOTHING
+      INSERT INTO notifications (user_id, type, payload_json)
+      VALUES ($1, $2, $3)
     `,
-    [userId, type, JSON.stringify(payload), dedupeKey ?? null]
+    [userId, type, JSON.stringify(payload)]
   );
+}
+
+async function getShowTeamCalendarForEmployees(): Promise<boolean> {
+  try {
+    const settings = await queryRow<{ showTeamCalendarForEmployees: boolean }>(
+      "SELECT show_team_calendar_for_employees as \"showTeamCalendarForEmployees\" FROM settings LIMIT 1",
+      []
+    );
+    return settings?.showTeamCalendarForEmployees ?? false;
+  } catch {
+    return false;
+  }
 }
 
 type DatabaseBackup = {
@@ -1691,11 +1734,7 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const isManager = auth.role === "MANAGER";
   const viewerId = auth.userID;
   let viewerTeamId: number | null = null;
-  const settings = await queryRow<{ showTeamCalendarForEmployees: boolean }>(
-    "SELECT show_team_calendar_for_employees as \"showTeamCalendarForEmployees\" FROM settings LIMIT 1",
-    []
-  );
-  const showTeamCalendarForEmployees = settings?.showTeamCalendarForEmployees ?? false;
+  const showTeamCalendarForEmployees = await getShowTeamCalendarForEmployees();
 
   if (!isManager) {
     const viewer = await queryRow<{ teamId: number | null }>(
@@ -1832,6 +1871,8 @@ app.get("/audit", asyncHandler(async (req, res) => {
 
 app.get("/notifications", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const supportsDedupeKey = await hasNotificationsDedupeKey();
+  const dedupeSelect = supportsDedupeKey ? `, dedupe_key as "dedupeKey"` : "";
   const notifications = await queryRows<Notification>(
     `
       SELECT 
@@ -1841,8 +1882,8 @@ app.get("/notifications", asyncHandler(async (req, res) => {
         payload_json as "payloadJson",
         sent_at as "sentAt",
         read_at as "readAt",
-        created_at as "createdAt",
-        dedupe_key as "dedupeKey"
+        created_at as "createdAt"
+        ${dedupeSelect}
       FROM notifications
       WHERE user_id = $1
       ORDER BY (read_at IS NULL) DESC, created_at DESC
