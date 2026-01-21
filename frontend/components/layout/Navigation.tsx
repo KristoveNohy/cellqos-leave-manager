@@ -1,21 +1,37 @@
 import { Link, useLocation } from "react-router-dom";
-import { Calendar, FileText, Users, CheckSquare, Settings } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Bell, Calendar, FileText, Users, CheckSquare, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
+import { useBackend } from "@/lib/backend";
 
 export default function Navigation() {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const backend = useBackend();
   const userRole = user?.role ?? "EMPLOYEE";
   
   const navItems = [
     { path: "/calendar", label: "Kalendár", icon: Calendar, roles: ["EMPLOYEE", "MANAGER"] },
     { path: "/my-requests", label: "Moje žiadosti", icon: FileText, roles: ["EMPLOYEE", "MANAGER"] },
+    { path: "/notifications", label: "Notifikácie", icon: Bell, roles: ["EMPLOYEE", "MANAGER"] },
     { path: "/team", label: "Tím", icon: Users, roles: ["MANAGER"] },
     { path: "/approvals", label: "Schvaľovanie", icon: CheckSquare, roles: ["MANAGER"] },
     { path: "/admin", label: "Administrácia", icon: Settings, roles: ["MANAGER"] },
   ];
+
+  const notificationsQuery = useQuery({
+    queryKey: ["notifications"],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      const response = await backend.notifications.list();
+      return response.notifications;
+    },
+  });
+
+  const unreadCount = notificationsQuery.data?.filter((notification) => !notification.readAt).length ?? 0;
   
   const visibleItems = user ? navItems.filter(item => item.roles.includes(userRole)) : [];
   
@@ -47,6 +63,11 @@ export default function Navigation() {
                   >
                     <Icon className="h-4 w-4" />
                     <span>{item.label}</span>
+                    {item.path === "/notifications" && unreadCount > 0 && (
+                      <Badge variant="secondary" className="ml-1 px-2 py-0 text-xs">
+                        {unreadCount}
+                      </Badge>
+                    )}
                   </Link>
                 );
               })}

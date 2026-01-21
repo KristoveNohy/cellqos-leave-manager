@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
 import { useAuth } from "@/lib/auth";
 import {
@@ -13,6 +13,16 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { Calendar, Clock } from "lucide-react";
 import RequestFormDialog from "./RequestFormDialog";
+
+type AuditLogEntry = {
+  id: number;
+  actorUserId: string;
+  actorName?: string | null;
+  action: string;
+  beforeJson: any;
+  afterJson: any;
+  createdAt: string;
+};
 
 interface RequestDetailDialogProps {
   request: any;
@@ -96,6 +106,65 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
     REJECTED: "Zamietnuté",
     CANCELLED: "Zrušené",
   };
+
+  const actionLabels: Record<string, string> = {
+    CREATE: "Vytvorená",
+    UPDATE: "Upravená",
+    SUBMIT: "Odoslaná",
+    APPROVE: "Schválená",
+    REJECT: "Zamietnutá",
+    CANCEL: "Zrušená",
+    DELETE: "Odstránená",
+    BULK_APPROVE: "Hromadné schválenie",
+    BULK_REJECT: "Hromadné zamietnutie",
+  };
+
+  const canViewHistory = Boolean(user?.role === "MANAGER" || request.userId === user?.id);
+
+  const historyQuery = useQuery({
+    queryKey: ["audit", request.id],
+    enabled: open && canViewHistory,
+    queryFn: async () => {
+      const response = await backend.audit.list({
+        entityType: "leave_request",
+        entityId: String(request.id),
+      });
+      return response.logs as AuditLogEntry[];
+    },
+  });
+
+  const sortedHistory = useMemo(() => {
+    if (!historyQuery.data) {
+      return [];
+    }
+    return [...historyQuery.data].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  }, [historyQuery.data]);
+
+  const formatHistoryEntry = (entry: AuditLogEntry) => {
+    const before = entry.beforeJson ?? {};
+    const after = entry.afterJson ?? {};
+    const startDate = after.startDate ?? before.startDate;
+    const endDate = after.endDate ?? before.endDate;
+    const beforeStatus = before.status;
+    const afterStatus = after.status;
+    const statusChange =
+      beforeStatus && afterStatus && beforeStatus !== afterStatus
+        ? `${statusLabels[beforeStatus as keyof typeof statusLabels] ?? beforeStatus} → ${
+            statusLabels[afterStatus as keyof typeof statusLabels] ?? afterStatus
+          }`
+        : afterStatus
+          ? statusLabels[afterStatus as keyof typeof statusLabels] ?? afterStatus
+          : null;
+
+    const pieces = [
+      statusChange ? `Stav: ${statusChange}` : null,
+      startDate && endDate ? `Obdobie: ${startDate} – ${endDate}` : null,
+    ].filter(Boolean);
+
+    return pieces.length > 0 ? pieces.join(" • ") : "Bez detailu zmeny";
+  };
   
   const typeLabels = {
     ANNUAL_LEAVE: "Dovolenka",
@@ -165,6 +234,42 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
             <div>
               <div className="text-sm text-muted-foreground mb-1">Komentár manažéra</div>
               <div className="p-3 bg-muted rounded-md">{request.managerComment}</div>
+            </div>
+          )}
+
+          {canViewHistory && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-2">History</div>
+              {historyQuery.isLoading && (
+                <div className="text-sm text-muted-foreground">Načítavam históriu...</div>
+              )}
+              {historyQuery.isError && (
+                <div className="text-sm text-destructive">Históriu sa nepodarilo načítať.</div>
+              )}
+              {!historyQuery.isLoading && !historyQuery.isError && sortedHistory.length === 0 && (
+                <div className="text-sm text-muted-foreground">Žiadna história.</div>
+              )}
+              {!historyQuery.isLoading && !historyQuery.isError && sortedHistory.length > 0 && (
+                <ul className="space-y-3">
+                  {sortedHistory.map((entry) => (
+                    <li key={entry.id} className="flex items-start gap-3">
+                      <Badge variant="outline">
+                        {actionLabels[entry.action] ?? entry.action}
+                      </Badge>
+                      <div className="space-y-1">
+                        <div className="text-sm">
+                          {new Date(entry.createdAt).toLocaleString("sk-SK")}
+                          {" • "}
+                          {entry.actorName ?? entry.actorUserId}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {formatHistoryEntry(entry)}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           

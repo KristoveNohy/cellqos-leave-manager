@@ -29,7 +29,7 @@ export const remove = api(
     
     await createAuditLog(
       actorId,
-      "leave_requests",
+      "leave_request",
       id,
       "DELETE",
       request,

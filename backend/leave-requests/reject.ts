@@ -8,12 +8,13 @@ import type { LeaveRequest } from "../shared/types";
 interface RejectLeaveRequestParams {
   id: number;
   comment: string;
+  bulk?: boolean;
 }
 
 export const reject = api<RejectLeaveRequestParams, LeaveRequest>(
   { auth: true, expose: true, method: "POST", path: "/leave-requests/:id/reject" },
   async (req): Promise<LeaveRequest> => {
-    const { id, comment } = req;
+    const { id, comment, bulk } = req;
     const auth = getAuthData()!;
     requireManager(auth.role);
     const request = await db.queryRow<LeaveRequest>`
@@ -73,9 +74,9 @@ export const reject = api<RejectLeaveRequestParams, LeaveRequest>(
     
     await createAuditLog(
       approverId,
-      "leave_requests",
+      "leave_request",
       id,
-      "REJECT",
+      bulk ? "BULK_REJECT" : "REJECT",
       request,
       updated
     );
@@ -83,7 +84,8 @@ export const reject = api<RejectLeaveRequestParams, LeaveRequest>(
     await createNotification(
       request.userId,
       "REQUEST_REJECTED",
-      { requestId: id }
+      { requestId: id, startDate: updated?.startDate, endDate: updated?.endDate },
+      `leave_request:${id}:rejected`
     );
     
     return updated!;
