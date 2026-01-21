@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
+import { useAuth } from "@/lib/auth";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { Calendar, Clock } from "lucide-react";
+import RequestFormDialog from "./RequestFormDialog";
 
 interface RequestDetailDialogProps {
   request: any;
@@ -19,7 +22,10 @@ interface RequestDetailDialogProps {
 
 export default function RequestDetailDialog({ request, open, onClose }: RequestDetailDialogProps) {
   const backend = useBackend();
+  const { user } = useAuth();
+  const isManager = user?.role === "MANAGER";
   const { toast } = useToast();
+  const [showEditDialog, setShowEditDialog] = useState(false);
   
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -51,6 +57,24 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
       console.error("Failed to cancel request:", error);
       toast({
         title: "Zrušenie žiadosti zlyhalo",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      return backend.leave_requests.remove({ id: request.id });
+    },
+    onSuccess: () => {
+      toast({ title: "Žiadosť bola odstránená" });
+      onClose();
+    },
+    onError: (error: any) => {
+      console.error("Failed to delete request:", error);
+      toast({
+        title: "Odstránenie žiadosti zlyhalo",
         description: error.message,
         variant: "destructive",
       });
@@ -145,6 +169,24 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
           )}
           
           <div className="flex justify-end space-x-2">
+            {isManager && (
+              <>
+                <Button variant="outline" onClick={() => setShowEditDialog(true)}>
+                  Upraviť
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (window.confirm("Naozaj chcete odstrániť túto žiadosť?")) {
+                      deleteMutation.mutate();
+                    }
+                  }}
+                  disabled={deleteMutation.isPending}
+                >
+                  Odstrániť
+                </Button>
+              </>
+            )}
             {request.status === "DRAFT" && (
               <Button onClick={() => submitMutation.mutate()}>
                 Odoslať na schválenie
@@ -161,6 +203,16 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
           </div>
         </div>
       </DialogContent>
+      {showEditDialog && (
+        <RequestFormDialog
+          open={showEditDialog}
+          request={request}
+          onClose={() => {
+            setShowEditDialog(false);
+            onClose();
+          }}
+        />
+      )}
     </Dialog>
   );
 }

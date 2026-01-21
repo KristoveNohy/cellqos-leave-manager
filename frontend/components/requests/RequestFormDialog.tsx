@@ -1,10 +1,13 @@
-import { useMutation } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useBackend } from "@/lib/backend";
+import { useAuth } from "@/lib/auth";
 import type { LeaveType } from "~backend/shared/types";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -30,9 +33,12 @@ interface RequestFormDialogProps {
 
 export default function RequestFormDialog({ open, onClose, request }: RequestFormDialogProps) {
   const backend = useBackend();
+  const { user } = useAuth();
+  const isManager = user?.role === "MANAGER";
   const { toast } = useToast();
-  const { register, handleSubmit, setValue, watch } = useForm({
+  const { register, handleSubmit, setValue, watch, reset } = useForm({
     defaultValues: {
+      userId: user?.id ?? "",
       type: request?.type || "ANNUAL_LEAVE",
       startDate: request?.startDate || "",
       endDate: request?.endDate || "",
@@ -41,6 +47,24 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
       reason: request?.reason || "",
     },
   });
+
+  const { data: usersData } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => backend.users.list(),
+    enabled: isManager,
+  });
+
+  useEffect(() => {
+    reset({
+      userId: request?.userId || user?.id || "",
+      type: request?.type || "ANNUAL_LEAVE",
+      startDate: request?.startDate || "",
+      endDate: request?.endDate || "",
+      isHalfDayStart: request?.isHalfDayStart || false,
+      isHalfDayEnd: request?.isHalfDayEnd || false,
+      reason: request?.reason || "",
+    });
+  }, [request, reset, user?.id]);
   
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -59,10 +83,41 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
       });
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return backend.leave_requests.update(data);
+    },
+    onSuccess: () => {
+      toast({ title: "Žiadosť bola úspešne upravená" });
+      onClose();
+    },
+    onError: (error: any) => {
+      console.error("Failed to update request:", error);
+      toast({
+        title: "Úprava žiadosti zlyhala",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
   
   const onSubmit = (data: any) => {
-    createMutation.mutate(data);
+    const payload = {
+      ...data,
+      userId: isManager ? data.userId : undefined,
+    };
+
+    if (request) {
+      const { userId: _userId, ...rest } = payload;
+      updateMutation.mutate({ id: request.id, ...rest });
+      return;
+    }
+
+    createMutation.mutate(payload);
   };
+
+  const users = usersData?.users || [];
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -71,13 +126,38 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
           <DialogTitle>
             {request ? "Upraviť žiadosť o voľno" : "Nová žiadosť o voľno"}
           </DialogTitle>
+          <DialogDescription>
+            {request
+              ? "Upravte detaily žiadosti podľa potreby."
+              : "Vyplňte detaily žiadosti a odošlite ju na schválenie."}
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {isManager && !request && (
+            <div>
+              <Label>Žiadateľ</Label>
+              <Select
+                value={watch("userId")}
+                onValueChange={(value) => setValue("userId", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Vyberte používateľa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((entry: any) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      {entry.name} ({entry.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
             <Label>Typ</Label>
             <Select
-              defaultValue={watch("type")}
+              value={watch("type")}
               onValueChange={(value) => setValue("type", value as LeaveType)}
             >
               <SelectTrigger>
@@ -136,8 +216,8 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
             <Button type="button" variant="outline" onClick={onClose}>
               Zrušiť
             </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Ukladá sa..." : "Uložiť ako návrh"}
+            <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+              {createMutation.isPending || updateMutation.isPending ? "Ukladá sa..." : "Uložiť ako návrh"}
             </Button>
           </div>
         </form>

@@ -928,14 +928,28 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
 
 app.post("/leave-requests", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  const { type, startDate, endDate, isHalfDayStart, isHalfDayEnd, reason } = req.body as {
+  const { type, startDate, endDate, isHalfDayStart, isHalfDayEnd, reason, userId } = req.body as {
     type: LeaveType;
     startDate: string;
     endDate: string;
     isHalfDayStart?: boolean;
     isHalfDayEnd?: boolean;
     reason?: string;
+    userId?: string;
   };
+
+  const targetUserId = userId ?? auth.userID;
+  if (targetUserId !== auth.userID) {
+    requireManager(auth.role);
+  }
+
+  const userExists = await queryRow<{ id: string }>(
+    "SELECT id FROM users WHERE id = $1 AND is_active = true",
+    [targetUserId]
+  );
+  if (!userExists) {
+    throw new HttpError(404, "User not found");
+  }
 
   validateDateRange(startDate, endDate);
   validateNotInPast(startDate);
@@ -967,7 +981,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT', NOW(), NOW())
       RETURNING id
     `,
-    [auth.userID, type, startDate, endDate, isHalfDayStart ?? false, isHalfDayEnd ?? false, reason ?? null, computedDays]
+    [targetUserId, type, startDate, endDate, isHalfDayStart ?? false, isHalfDayEnd ?? false, reason ?? null, computedDays]
   );
 
   const leaveRequest = await queryRow<LeaveRequest>(
@@ -1119,6 +1133,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
 
   if (updates.length > 0) {
     values.push(id);
+    updates.push("updated_at = NOW()");
     await pool.query(`UPDATE leave_requests SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
   }
 
@@ -1144,6 +1159,43 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   );
 
   res.json(after);
+}));
+
+app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  const id = Number(req.params.id);
+
+  const request = await queryRow<LeaveRequest>(
+    `
+      SELECT 
+        id, user_id as "userId", type,
+        start_date::text as "startDate",
+        end_date::text as "endDate",
+        is_half_day_start as "isHalfDayStart",
+        is_half_day_end as "isHalfDayEnd",
+        status, reason, manager_comment as "managerComment",
+        approved_by as "approvedBy",
+        approved_at as "approvedAt",
+        computed_days as "computedDays",
+        attachment_url as "attachmentUrl",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM leave_requests
+      WHERE id = $1
+    `,
+    [id]
+  );
+
+  if (!request) {
+    throw new HttpError(404, "Leave request not found");
+  }
+
+  if (auth.role !== "MANAGER" && !canEditRequest(request.userId, request.status, auth.userID, auth.role)) {
+    throw new HttpError(403, "You are not allowed to delete this request");
+  }
+
+  await pool.query("DELETE FROM leave_requests WHERE id = $1", [id]);
+  res.json({ ok: true });
 }));
 
 app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {

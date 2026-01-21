@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
+import { useAuth } from "@/lib/auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import RequestsList from "@/components/requests/RequestsList";
+import RequestFormDialog from "@/components/requests/RequestFormDialog";
 
 export default function TeamPage() {
   const backend = useBackend();
+  const { user } = useAuth();
+  const isManager = user?.role === "MANAGER";
   const [activeTab, setActiveTab] = useState("all");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => backend.teams.list(),
@@ -30,6 +36,11 @@ export default function TeamPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Prehľad tímov</h1>
+        {isManager && (
+          <Button onClick={() => setShowCreateDialog(true)}>
+            Nová žiadosť
+          </Button>
+        )}
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -62,6 +73,16 @@ export default function TeamPage() {
           </TabsContent>
         ))}
       </Tabs>
+
+      {showCreateDialog && (
+        <RequestFormDialog
+          open={showCreateDialog}
+          onClose={() => {
+            setShowCreateDialog(false);
+            refetch();
+          }}
+        />
+      )}
     </div>
   );
 }
