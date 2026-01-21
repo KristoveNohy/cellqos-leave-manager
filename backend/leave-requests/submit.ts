@@ -86,23 +86,46 @@ export const submit = api(
     
     await createAuditLog(
       auth.userID,
-      "leave_requests",
+      "leave_request",
       id,
       "SUBMIT",
       request,
       updated
     );
     
-    // Notify managers
-    const managers = await db.queryAll<{ id: string }>`
-      SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true
+    const requester = await db.queryRow<{ teamId: number | null; name: string }>`
+      SELECT team_id as "teamId", name
+      FROM users
+      WHERE id = ${request.userId}
     `;
+
+    const managers = requester?.teamId
+      ? await db.queryAll<{ id: string }>`
+          SELECT id
+          FROM users
+          WHERE role = 'MANAGER'
+            AND is_active = true
+            AND team_id = ${requester.teamId}
+        `
+      : await db.queryAll<{ id: string }>`
+          SELECT id
+          FROM users
+          WHERE role = 'MANAGER'
+            AND is_active = true
+        `;
     
     for (const manager of managers) {
       await createNotification(
         manager.id,
         "NEW_PENDING_REQUEST",
-        { requestId: id, userId: request.userId }
+        {
+          requestId: id,
+          userId: request.userId,
+          userName: requester?.name,
+          startDate: updated?.startDate,
+          endDate: updated?.endDate,
+        },
+        `leave_request:${id}:submitted:${manager.id}`
       );
     }
     

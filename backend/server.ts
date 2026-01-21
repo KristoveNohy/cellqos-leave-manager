@@ -7,7 +7,7 @@ import { randomBytes, createHash, randomUUID } from "crypto";
 import { computeWorkingDays, parseDate } from "./shared/date-utils";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
-import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog } from "./shared/types";
+import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog, Notification } from "./shared/types";
 import { HttpError } from "./shared/http-error";
 
 const app = express();
@@ -111,6 +111,22 @@ async function createEntityAuditLog(
       before ? JSON.stringify(before) : null,
       after ? JSON.stringify(after) : null,
     ]
+  );
+}
+
+async function createNotification(
+  userId: string,
+  type: string,
+  payload: Record<string, unknown>,
+  dedupeKey?: string | null
+): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (dedupe_key) DO NOTHING
+    `,
+    [userId, type, JSON.stringify(payload), dedupeKey ?? null]
   );
 }
 
@@ -1005,6 +1021,15 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     [result?.id]
   );
 
+  await createEntityAuditLog(
+    auth.userID,
+    "leave_request",
+    leaveRequest!.id,
+    "CREATE",
+    null,
+    leaveRequest as unknown as Record<string, unknown>
+  );
+
   res.json(leaveRequest);
 }));
 
@@ -1158,6 +1183,30 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     [id]
   );
 
+  await createEntityAuditLog(
+    auth.userID,
+    "leave_request",
+    id,
+    "UPDATE",
+    before as unknown as Record<string, unknown>,
+    after as unknown as Record<string, unknown>
+  );
+
+  if (auth.role === "MANAGER" && before.userId !== auth.userID) {
+    await createNotification(
+      before.userId,
+      "REQUEST_UPDATED_BY_MANAGER",
+      {
+        requestId: id,
+        updatedBy: auth.userID,
+        startDate: after?.startDate,
+        endDate: after?.endDate,
+        status: after?.status,
+      },
+      `leave_request:${id}:manager-update:${after?.updatedAt}`
+    );
+  }
+
   res.json(after);
 }));
 
@@ -1195,6 +1244,16 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
   }
 
   await pool.query("DELETE FROM leave_requests WHERE id = $1", [id]);
+
+  await createEntityAuditLog(
+    auth.userID,
+    "leave_request",
+    id,
+    "DELETE",
+    request as unknown as Record<string, unknown>,
+    null
+  );
+
   res.json({ ok: true });
 }));
 
@@ -1274,6 +1333,45 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     [id]
   );
 
+  await createEntityAuditLog(
+    auth.userID,
+    "leave_request",
+    id,
+    "SUBMIT",
+    request as unknown as Record<string, unknown>,
+    updated as unknown as Record<string, unknown>
+  );
+
+  const requester = await queryRow<{ teamId: number | null; name: string }>(
+    "SELECT team_id as \"teamId\", name FROM users WHERE id = $1",
+    [request.userId]
+  );
+
+  const managers = requester?.teamId
+    ? await queryRows<{ id: string }>(
+        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true AND team_id = $1",
+        [requester.teamId]
+      )
+    : await queryRows<{ id: string }>(
+        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true",
+        []
+      );
+
+  for (const manager of managers) {
+    await createNotification(
+      manager.id,
+      "NEW_PENDING_REQUEST",
+      {
+        requestId: id,
+        userId: request.userId,
+        userName: requester?.name,
+        startDate: updated?.startDate,
+        endDate: updated?.endDate,
+      },
+      `leave_request:${id}:submitted:${manager.id}`
+    );
+  }
+
   res.json(updated);
 }));
 
@@ -1281,7 +1379,7 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
   const id = Number(req.params.id);
-  const { comment } = req.body as { comment?: string };
+  const { comment, bulk } = req.body as { comment?: string; bulk?: boolean };
 
   const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
@@ -1377,6 +1475,22 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
     [id]
   );
 
+  await createEntityAuditLog(
+    auth.userID,
+    "leave_request",
+    id,
+    bulk ? "BULK_APPROVE" : "APPROVE",
+    request as unknown as Record<string, unknown>,
+    updated as unknown as Record<string, unknown>
+  );
+
+  await createNotification(
+    request.userId,
+    "REQUEST_APPROVED",
+    { requestId: id, startDate: updated?.startDate, endDate: updated?.endDate },
+    `leave_request:${id}:approved`
+  );
+
   res.json(updated);
 }));
 
@@ -1384,7 +1498,7 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
   const id = Number(req.params.id);
-  const { comment } = req.body as { comment: string };
+  const { comment, bulk } = req.body as { comment: string; bulk?: boolean };
 
   const request = await queryRow<LeaveRequest>(
     `
@@ -1446,6 +1560,22 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
       WHERE id = $1
     `,
     [id]
+  );
+
+  await createEntityAuditLog(
+    auth.userID,
+    "leave_request",
+    id,
+    bulk ? "BULK_REJECT" : "REJECT",
+    request as unknown as Record<string, unknown>,
+    updated as unknown as Record<string, unknown>
+  );
+
+  await createNotification(
+    request.userId,
+    "REQUEST_REJECTED",
+    { requestId: id, startDate: updated?.startDate, endDate: updated?.endDate },
+    `leave_request:${id}:rejected`
   );
 
   res.json(updated);
@@ -1510,6 +1640,45 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     `,
     [id]
   );
+
+  await createEntityAuditLog(
+    auth.userID,
+    "leave_request",
+    id,
+    "CANCEL",
+    request as unknown as Record<string, unknown>,
+    updated as unknown as Record<string, unknown>
+  );
+
+  const requester = await queryRow<{ teamId: number | null; name: string }>(
+    "SELECT team_id as \"teamId\", name FROM users WHERE id = $1",
+    [request.userId]
+  );
+
+  const managers = requester?.teamId
+    ? await queryRows<{ id: string }>(
+        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true AND team_id = $1",
+        [requester.teamId]
+      )
+    : await queryRows<{ id: string }>(
+        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true",
+        []
+      );
+
+  for (const manager of managers) {
+    await createNotification(
+      manager.id,
+      "REQUEST_CANCELLED",
+      {
+        requestId: id,
+        userId: request.userId,
+        userName: requester?.name,
+        startDate: updated?.startDate,
+        endDate: updated?.endDate,
+      },
+      `leave_request:${id}:cancelled:${manager.id}`
+    );
+  }
 
   res.json(updated);
 }));
@@ -1608,10 +1777,23 @@ app.get("/calendar", asyncHandler(async (req, res) => {
 
 app.get("/audit", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  const isManager = auth.role === "MANAGER";
   const entityType = req.query.entityType as string | undefined;
   const entityId = req.query.entityId as string | undefined;
   const limit = req.query.limit ? Number(req.query.limit) : 100;
+
+  if (!isManager) {
+    if (entityType !== "leave_request" || !entityId) {
+      throw new HttpError(403, "Not allowed to view audit logs");
+    }
+    const owned = await queryRow<{ id: number }>(
+      "SELECT id FROM leave_requests WHERE id = $1 AND user_id = $2",
+      [Number(entityId), auth.userID]
+    );
+    if (!owned) {
+      throw new HttpError(403, "Not allowed to view audit logs");
+    }
+  }
 
   const conditions: string[] = ["1=1"];
   const values: any[] = [];
@@ -1628,22 +1810,67 @@ app.get("/audit", asyncHandler(async (req, res) => {
 
   const query = `
       SELECT 
-        id,
-        actor_user_id as "actorUserId",
-        entity_type as "entityType",
-        entity_id as "entityId",
-        action,
-        before_json as "beforeJson",
-        after_json as "afterJson",
-        created_at as "createdAt"
-      FROM audit_logs
+        a.id,
+        a.actor_user_id as "actorUserId",
+        u.name as "actorName",
+        a.entity_type as "entityType",
+        a.entity_id as "entityId",
+        a.action,
+        a.before_json as "beforeJson",
+        a.after_json as "afterJson",
+        a.created_at as "createdAt"
+      FROM audit_logs a
+      LEFT JOIN users u ON a.actor_user_id = u.id
       WHERE ${conditions.join(" AND ")}
-      ORDER BY created_at DESC
+      ORDER BY a.created_at DESC
       LIMIT ${limit}
     `;
 
   const logs = await queryRows<AuditLog>(query, values);
   res.json({ logs });
+}));
+
+app.get("/notifications", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  const notifications = await queryRows<Notification>(
+    `
+      SELECT 
+        id,
+        user_id as "userId",
+        type,
+        payload_json as "payloadJson",
+        sent_at as "sentAt",
+        read_at as "readAt",
+        created_at as "createdAt",
+        dedupe_key as "dedupeKey"
+      FROM notifications
+      WHERE user_id = $1
+      ORDER BY (read_at IS NULL) DESC, created_at DESC
+      LIMIT 50
+    `,
+    [auth.userID]
+  );
+
+  res.json({ notifications });
+}));
+
+app.post("/notifications/:id/read", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  const id = Number(req.params.id);
+  await pool.query(
+    "UPDATE notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2",
+    [id, auth.userID]
+  );
+  res.json({ ok: true });
+}));
+
+app.post("/notifications/read-all", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  await pool.query(
+    "UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL",
+    [auth.userID]
+  );
+  res.json({ ok: true });
 }));
 
 app.get("/admin/database/export", asyncHandler(async (req, res) => {
