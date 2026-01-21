@@ -9,11 +9,11 @@ export default function Navigation() {
   const userRole = "MANAGER";
   
   const navItems = [
-    { path: "/calendar", label: "Calendar", icon: Calendar, roles: ["EMPLOYEE", "MANAGER"] },
-    { path: "/my-requests", label: "My Requests", icon: FileText, roles: ["EMPLOYEE", "MANAGER"] },
-    { path: "/team", label: "Team", icon: Users, roles: ["MANAGER"] },
-    { path: "/approvals", label: "Approvals", icon: CheckSquare, roles: ["MANAGER"] },
-    { path: "/admin", label: "Admin", icon: Settings, roles: ["MANAGER"] },
+    { path: "/calendar", label: "Kalendár", icon: Calendar, roles: ["EMPLOYEE", "MANAGER"] },
+    { path: "/my-requests", label: "Moje žiadosti", icon: FileText, roles: ["EMPLOYEE", "MANAGER"] },
+    { path: "/team", label: "Tím", icon: Users, roles: ["MANAGER"] },
+    { path: "/approvals", label: "Schvaľovanie", icon: CheckSquare, roles: ["MANAGER"] },
+    { path: "/admin", label: "Administrácia", icon: Settings, roles: ["MANAGER"] },
   ];
   
   const visibleItems = navItems.filter(item => item.roles.includes(userRole));
@@ -25,7 +25,7 @@ export default function Navigation() {
           <div className="flex items-center space-x-8">
             <Link to="/" className="flex items-center space-x-2">
               <Calendar className="h-6 w-6 text-primary" />
-              <span className="font-semibold text-lg">CellQos Leave Manager</span>
+              <span className="font-semibold text-lg">CellQos Správa dovoleniek</span>
             </Link>
             
             <div className="flex space-x-1">
@@ -54,7 +54,7 @@ export default function Navigation() {
           
           <div className="flex items-center space-x-4">
             <div className="text-sm text-muted-foreground">
-              Manager User
+              Manažér
             </div>
           </div>
         </div>

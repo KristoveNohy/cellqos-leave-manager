@@ -18,20 +18,24 @@ export default function UserManagement() {
   });
   
   if (isLoading) {
-    return <div className="text-center py-12">Loading...</div>;
+    return <div className="text-center py-12">Načítava sa...</div>;
   }
   
   const users = data?.users || [];
+  const roleLabels = {
+    MANAGER: "Manažér",
+    EMPLOYEE: "Zamestnanec",
+  };
   
   return (
     <Card>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
+            <TableHead>Meno</TableHead>
             <TableHead>Email</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Rola</TableHead>
+            <TableHead>Stav</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -41,12 +45,12 @@ export default function UserManagement() {
               <TableCell>{user.email}</TableCell>
               <TableCell>
                 <Badge variant={user.role === "MANAGER" ? "default" : "secondary"}>
-                  {user.role}
+                  {roleLabels[user.role as keyof typeof roleLabels] ?? user.role}
                 </Badge>
               </TableCell>
               <TableCell>
                 <Badge variant={user.isActive ? "default" : "destructive"}>
-                  {user.isActive ? "Active" : "Inactive"}
+                  {user.isActive ? "Aktívny" : "Neaktívny"}
                 </Badge>
               </TableCell>
             </TableRow>

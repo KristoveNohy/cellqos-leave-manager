@@ -24,7 +24,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
       return backend.leave_requests.approve({ id, comment });
     },
     onSuccess: () => {
-      toast({ title: "Request approved" });
+      toast({ title: "Žiadosť bola schválená" });
       setComment("");
       setExpandedId(null);
       onUpdate();
@@ -32,7 +32,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
     onError: (error: any) => {
       console.error("Failed to approve request:", error);
       toast({
-        title: "Failed to approve request",
+        title: "Schválenie žiadosti zlyhalo",
         description: error.message,
         variant: "destructive",
       });
@@ -42,12 +42,12 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
   const rejectMutation = useMutation({
     mutationFn: async (id: number) => {
       if (!comment) {
-        throw new Error("Comment is required for rejection");
+        throw new Error("Komentár je povinný pri zamietnutí");
       }
       return backend.leave_requests.reject({ id, comment });
     },
     onSuccess: () => {
-      toast({ title: "Request rejected" });
+      toast({ title: "Žiadosť bola zamietnutá" });
       setComment("");
       setExpandedId(null);
       onUpdate();
@@ -55,7 +55,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
     onError: (error: any) => {
       console.error("Failed to reject request:", error);
       toast({
-        title: "Failed to reject request",
+        title: "Zamietnutie žiadosti zlyhalo",
         description: error.message,
         variant: "destructive",
       });
@@ -63,21 +63,21 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
   });
   
   const typeLabels = {
-    ANNUAL_LEAVE: "Annual Leave",
-    SICK_LEAVE: "Sick Leave",
-    HOME_OFFICE: "Home Office",
-    UNPAID_LEAVE: "Unpaid Leave",
-    OTHER: "Other",
+    ANNUAL_LEAVE: "Dovolenka",
+    SICK_LEAVE: "PN",
+    HOME_OFFICE: "Home office",
+    UNPAID_LEAVE: "Neplatené voľno",
+    OTHER: "Iné",
   };
   
   if (isLoading) {
-    return <div className="text-center py-12">Loading...</div>;
+    return <div className="text-center py-12">Načítava sa...</div>;
   }
   
   if (requests.length === 0) {
     return (
       <Card className="p-12 text-center">
-        <p className="text-muted-foreground">No pending requests</p>
+        <p className="text-muted-foreground">Žiadne čakajúce žiadosti</p>
       </Card>
     );
   }
@@ -93,16 +93,16 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                   <h3 className="font-semibold">
                     {typeLabels[request.type as keyof typeof typeLabels]}
                   </h3>
-                  <Badge className="bg-yellow-500">PENDING</Badge>
+                  <Badge className="bg-yellow-500">ČAKÁ</Badge>
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
-                  {request.startDate} to {request.endDate} ({request.computedDays} days)
+                  {request.startDate} – {request.endDate} ({request.computedDays} dní)
                 </div>
                 
                 {request.reason && (
                   <div className="text-sm text-muted-foreground italic">
-                    Reason: {request.reason}
+                    Dôvod: {request.reason}
                   </div>
                 )}
               </div>
@@ -115,7 +115,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                   onClick={() => setExpandedId(expandedId === request.id ? null : request.id)}
                 >
                   <Check className="h-4 w-4 mr-2" />
-                  Approve
+                  Schváliť
                 </Button>
                 <Button
                   size="sm"
@@ -124,7 +124,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                   onClick={() => setExpandedId(expandedId === request.id ? null : request.id)}
                 >
                   <X className="h-4 w-4 mr-2" />
-                  Reject
+                  Zamietnuť
                 </Button>
               </div>
             </div>
@@ -132,7 +132,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
             {expandedId === request.id && (
               <div className="space-y-3 pt-4 border-t">
                 <Textarea
-                  placeholder="Add a comment (optional for approval, required for rejection)"
+                  placeholder="Pridajte komentár (nepovinný pri schválení, povinný pri zamietnutí)"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   rows={3}
@@ -146,7 +146,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                       setComment("");
                     }}
                   >
-                    Cancel
+                    Zrušiť
                   </Button>
                   <Button
                     size="sm"
@@ -154,7 +154,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                     onClick={() => approveMutation.mutate(request.id)}
                     disabled={approveMutation.isPending}
                   >
-                    Confirm Approval
+                    Potvrdiť schválenie
                   </Button>
                   <Button
                     size="sm"
@@ -162,7 +162,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                     onClick={() => rejectMutation.mutate(request.id)}
                     disabled={rejectMutation.isPending || !comment}
                   >
-                    Confirm Rejection
+                    Potvrdiť zamietnutie
                   </Button>
                 </div>
               </div>

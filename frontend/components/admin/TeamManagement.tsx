@@ -17,7 +17,7 @@ export default function TeamManagement() {
   });
   
   if (isLoading) {
-    return <div className="text-center py-12">Loading...</div>;
+    return <div className="text-center py-12">Načítava sa...</div>;
   }
   
   const teams = data?.teams || [];
@@ -27,9 +27,9 @@ export default function TeamManagement() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Max Concurrent Leaves</TableHead>
-            <TableHead>Created</TableHead>
+            <TableHead>Názov</TableHead>
+            <TableHead>Max. súbežných dovoleniek</TableHead>
+            <TableHead>Vytvorené</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -37,7 +37,7 @@ export default function TeamManagement() {
             <TableRow key={team.id}>
               <TableCell className="font-medium">{team.name}</TableCell>
               <TableCell>
-                {team.maxConcurrentLeaves || "Unlimited"}
+                {team.maxConcurrentLeaves || "Neobmedzené"}
               </TableCell>
               <TableCell>
                 {new Date(team.createdAt).toLocaleDateString()}

@@ -24,12 +24,12 @@ export default function TeamPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Team Overview</h1>
+        <h1 className="text-3xl font-bold">Prehľad tímov</h1>
       </div>
       
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">All Teams</TabsTrigger>
+          <TabsTrigger value="all">Všetky tímy</TabsTrigger>
           {teams.map((team) => (
             <TabsTrigger key={team.id} value={String(team.id)}>
               {team.name}

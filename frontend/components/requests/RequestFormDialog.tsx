@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import backend from "~backend/client";
@@ -47,13 +46,13 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
       return backend.leave_requests.create(data);
     },
     onSuccess: () => {
-      toast({ title: "Request created successfully" });
+      toast({ title: "Žiadosť bola úspešne vytvorená" });
       onClose();
     },
     onError: (error: any) => {
       console.error("Failed to create request:", error);
       toast({
-        title: "Failed to create request",
+        title: "Vytvorenie žiadosti zlyhalo",
         description: error.message,
         variant: "destructive",
       });
@@ -69,13 +68,13 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {request ? "Edit Leave Request" : "New Leave Request"}
+            {request ? "Upraviť žiadosť o voľno" : "Nová žiadosť o voľno"}
           </DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <Label>Type</Label>
+            <Label>Typ</Label>
             <Select
               defaultValue={watch("type")}
               onValueChange={(value) => setValue("type", value as LeaveType)}
@@ -84,22 +83,22 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ANNUAL_LEAVE">Annual Leave</SelectItem>
-                <SelectItem value="SICK_LEAVE">Sick Leave</SelectItem>
-                <SelectItem value="HOME_OFFICE">Home Office</SelectItem>
-                <SelectItem value="UNPAID_LEAVE">Unpaid Leave</SelectItem>
-                <SelectItem value="OTHER">Other</SelectItem>
+                <SelectItem value="ANNUAL_LEAVE">Dovolenka</SelectItem>
+                <SelectItem value="SICK_LEAVE">PN</SelectItem>
+                <SelectItem value="HOME_OFFICE">Home office</SelectItem>
+                <SelectItem value="UNPAID_LEAVE">Neplatené voľno</SelectItem>
+                <SelectItem value="OTHER">Iné</SelectItem>
               </SelectContent>
             </Select>
           </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Start Date</Label>
+              <Label>Začiatok</Label>
               <Input type="date" {...register("startDate")} required />
             </div>
             <div>
-              <Label>End Date</Label>
+              <Label>Koniec</Label>
               <Input type="date" {...register("endDate")} required />
             </div>
           </div>
@@ -112,7 +111,7 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
                 onCheckedChange={(checked) => setValue("isHalfDayStart", checked as boolean)}
               />
               <Label htmlFor="halfDayStart" className="font-normal">
-                Half day (start)
+                Poldeň (začiatok)
               </Label>
             </div>
             <div className="flex items-center space-x-2">
@@ -122,22 +121,22 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
                 onCheckedChange={(checked) => setValue("isHalfDayEnd", checked as boolean)}
               />
               <Label htmlFor="halfDayEnd" className="font-normal">
-                Half day (end)
+                Poldeň (koniec)
               </Label>
             </div>
           </div>
           
           <div>
-            <Label>Reason (optional)</Label>
+            <Label>Dôvod (nepovinné)</Label>
             <Textarea {...register("reason")} rows={3} />
           </div>
           
           <div className="flex justify-end space-x-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              Zrušiť
             </Button>
             <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Saving..." : "Save as Draft"}
+              {createMutation.isPending ? "Ukladá sa..." : "Uložiť ako návrh"}
             </Button>
           </div>
         </form>
