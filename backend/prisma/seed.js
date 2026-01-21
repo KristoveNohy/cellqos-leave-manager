@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.$executeRaw`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`;
   const defaultPassword = "Password123!";
   const [{ hash }] = await prisma.$queryRaw`
     SELECT crypt(${defaultPassword}, gen_salt('bf')) AS hash
