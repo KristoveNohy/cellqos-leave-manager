@@ -32,6 +32,23 @@ npm install -g bun
 
 The backend will be available at the URL shown in your terminal (typically `http://localhost:4000`).
 
+### Prisma Migrations & Seed
+
+Set the JWT secret for the auth service:
+
+```bash
+encore secret set JwtSecret
+```
+
+Generate the Prisma client, run migrations, and seed data:
+
+```bash
+cd backend
+npx prisma generate
+npx prisma migrate dev
+npx prisma db seed
+```
+
 
 
 ### Frontend Setup
@@ -126,6 +143,5 @@ git push origin main
 - [Deployment Guide](https://encore.dev/docs/platform/deploy/deploying)
 - [GitHub Integration](https://encore.dev/docs/platform/integrations/github)
 - [Encore Cloud Dashboard](https://app.encore.dev)
-
 
 

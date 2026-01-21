@@ -2,6 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog, createNotification } from "../shared/audit";
+import { requireManager } from "../shared/rbac";
 import type { LeaveRequest } from "../shared/types";
 
 interface RejectLeaveRequestParams {
@@ -14,6 +15,7 @@ export const reject = api<RejectLeaveRequestParams, LeaveRequest>(
   async (req): Promise<LeaveRequest> => {
     const { id, comment } = req;
     const auth = getAuthData()!;
+    requireManager(auth.role);
     const request = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,

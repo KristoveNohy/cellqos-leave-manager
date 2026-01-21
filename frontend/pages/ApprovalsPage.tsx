@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import backend from "~backend/client";
-import { Card } from "@/components/ui/card";
+import { useBackend } from "@/lib/backend";
 import ApprovalInbox from "@/components/approvals/ApprovalInbox";
 
 export default function ApprovalsPage() {
+  const backend = useBackend();
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["pending-requests"],
     queryFn: async () => {
@@ -14,9 +14,9 @@ export default function ApprovalsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Approval Inbox</h1>
+        <h1 className="text-3xl font-bold">Schvaľovanie žiadostí</h1>
         <div className="text-sm text-muted-foreground">
-          {data?.requests.length || 0} pending requests
+          {data?.requests.length || 0} čakajúcich žiadostí
         </div>
       </div>
       

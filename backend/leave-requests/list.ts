@@ -1,4 +1,4 @@
-import { api, Query } from "encore.dev/api";
+import { api, APIError, Query } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import type { LeaveRequest, LeaveStatus, LeaveType } from "../shared/types";
@@ -21,12 +21,21 @@ export const list = api(
   { auth: true, expose: true, method: "GET", path: "/leave-requests" },
   async (params: ListLeaveRequestsParams): Promise<ListLeaveRequestsResponse> => {
     const auth = getAuthData()!;
+    const isManager = auth.role === "MANAGER";
     const conditions: string[] = ["1=1"];
     const values: any[] = [];
     
     if (params.userId) {
+      if (!isManager && params.userId !== auth.userID) {
+        throw APIError.permissionDenied("Not allowed to view other users' requests");
+      }
       conditions.push(`lr.user_id = $${values.length + 1}`);
       values.push(params.userId);
+    }
+
+    if (!isManager && !params.userId) {
+      conditions.push(`lr.user_id = $${values.length + 1}`);
+      values.push(auth.userID);
     }
     
     if (params.status) {
