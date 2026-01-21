@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
 import { computeWorkingDays } from "./shared/date-utils";
@@ -74,6 +74,77 @@ async function queryRow<T>(text: string, values: any[] = []): Promise<T | null> 
 async function queryRows<T>(text: string, values: any[] = []): Promise<T[]> {
   const result = await pool.query<T>(text, values);
   return result.rows;
+}
+
+async function createAuditLog(
+  actorUserId: string,
+  action: string,
+  details: Record<string, unknown>
+): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, after_json)
+      VALUES ($1, 'database', 'full', $2, $3)
+    `,
+    [actorUserId, action, JSON.stringify(details)]
+  );
+}
+
+type DatabaseBackup = {
+  version: number;
+  exportedAt: string;
+  tables: {
+    teams: Record<string, unknown>[];
+    users: Record<string, unknown>[];
+    leave_requests: Record<string, unknown>[];
+    holidays: Record<string, unknown>[];
+    leave_balances: Record<string, unknown>[];
+    audit_logs: Record<string, unknown>[];
+    notifications: Record<string, unknown>[];
+  };
+};
+
+async function insertRows(
+  client: PoolClient,
+  table: string,
+  rows: Record<string, unknown>[]
+): Promise<void> {
+  if (rows.length === 0) {
+    return;
+  }
+
+  const columns = Object.keys(rows[0]);
+  if (columns.length === 0) {
+    return;
+  }
+
+  const values: unknown[] = [];
+  const placeholders = rows
+    .map((row, rowIndex) => {
+      const offset = rowIndex * columns.length;
+      columns.forEach((column) => {
+        values.push(row[column] ?? null);
+      });
+      const cols = columns.map((_, colIndex) => `$${offset + colIndex + 1}`).join(", ");
+      return `(${cols})`;
+    })
+    .join(", ");
+
+  const query = `INSERT INTO ${table} (${columns.join(", ")}) VALUES ${placeholders}`;
+  await client.query(query, values);
+}
+
+async function resetSerialSequence(client: PoolClient, table: string, column: string): Promise<void> {
+  await client.query(
+    `
+      SELECT setval(
+        pg_get_serial_sequence('${table}', '${column}'),
+        COALESCE(MAX(${column}), 1),
+        MAX(${column}) IS NOT NULL
+      )
+      FROM ${table}
+    `
+  );
 }
 
 app.post("/auth/login", asyncHandler(async (req, res) => {
@@ -996,6 +1067,122 @@ app.get("/audit", asyncHandler(async (req, res) => {
 
   const logs = await queryRows<AuditLog>(query, values);
   res.json({ logs });
+}));
+
+app.get("/admin/database/export", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+
+  const tables = {
+    teams: await queryRows<Record<string, unknown>>("SELECT * FROM teams ORDER BY id ASC"),
+    users: await queryRows<Record<string, unknown>>("SELECT * FROM users ORDER BY id ASC"),
+    leave_requests: await queryRows<Record<string, unknown>>("SELECT * FROM leave_requests ORDER BY id ASC"),
+    holidays: await queryRows<Record<string, unknown>>("SELECT * FROM holidays ORDER BY id ASC"),
+    leave_balances: await queryRows<Record<string, unknown>>("SELECT * FROM leave_balances ORDER BY id ASC"),
+    audit_logs: await queryRows<Record<string, unknown>>("SELECT * FROM audit_logs ORDER BY id ASC"),
+    notifications: await queryRows<Record<string, unknown>>("SELECT * FROM notifications ORDER BY id ASC"),
+  };
+
+  const backup: DatabaseBackup = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    tables,
+  };
+
+  await createAuditLog(auth.userID, "database.export", {
+    exportedAt: backup.exportedAt,
+    counts: Object.fromEntries(
+      Object.entries(tables).map(([name, rows]) => [name, rows.length])
+    ),
+  });
+
+  res.json(backup);
+}));
+
+app.post("/admin/database/import", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+
+  const { backup, confirm } = req.body as { backup?: DatabaseBackup; confirm?: string };
+
+  if (confirm !== "IMPORT") {
+    throw new HttpError(400, "Invalid confirmation. Type IMPORT to proceed.");
+  }
+
+  if (!backup || typeof backup !== "object") {
+    throw new HttpError(400, "Backup payload is required.");
+  }
+
+  if (backup.version !== 1) {
+    throw new HttpError(400, "Unsupported backup version.");
+  }
+
+  const requiredTables = [
+    "teams",
+    "users",
+    "leave_requests",
+    "holidays",
+    "leave_balances",
+    "audit_logs",
+    "notifications",
+  ] as const;
+
+  if (!backup.tables) {
+    throw new HttpError(400, "Backup tables are missing.");
+  }
+
+  const missing = requiredTables.filter((table) => !Array.isArray(backup.tables[table]));
+  if (missing.length > 0) {
+    throw new HttpError(400, `Backup is missing tables: ${missing.join(", ")}`);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "TRUNCATE teams, users, leave_requests, holidays, leave_balances, audit_logs, notifications RESTART IDENTITY CASCADE"
+    );
+
+    await insertRows(client, "teams", backup.tables.teams);
+    await insertRows(client, "users", backup.tables.users);
+    await insertRows(client, "holidays", backup.tables.holidays);
+    await insertRows(client, "leave_balances", backup.tables.leave_balances);
+    await insertRows(client, "leave_requests", backup.tables.leave_requests);
+    await insertRows(client, "audit_logs", backup.tables.audit_logs);
+    await insertRows(client, "notifications", backup.tables.notifications);
+
+    await resetSerialSequence(client, "teams", "id");
+    await resetSerialSequence(client, "leave_requests", "id");
+    await resetSerialSequence(client, "holidays", "id");
+    await resetSerialSequence(client, "leave_balances", "id");
+    await resetSerialSequence(client, "audit_logs", "id");
+    await resetSerialSequence(client, "notifications", "id");
+
+    await client.query(
+      `
+        INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, after_json)
+        VALUES ($1, 'database', 'full', 'database.import', $2)
+      `,
+      [
+        auth.userID,
+        JSON.stringify({
+          importedAt: new Date().toISOString(),
+          counts: Object.fromEntries(
+            requiredTables.map((table) => [table, backup.tables[table].length])
+          ),
+        }),
+      ]
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  res.json({ ok: true });
 }));
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
