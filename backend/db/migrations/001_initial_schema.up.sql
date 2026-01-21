@@ -91,6 +91,7 @@ CREATE TABLE notifications (
   user_id TEXT NOT NULL REFERENCES users(id),
   type TEXT NOT NULL,
   payload_json JSONB NOT NULL,
+  dedupe_key TEXT,
   sent_at TIMESTAMP,
   read_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -108,6 +109,7 @@ CREATE INDEX idx_leave_balances_user_year ON leave_balances(user_id, year);
 CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_notifications_read ON notifications(read_at);
+CREATE UNIQUE INDEX idx_notifications_dedupe_key ON notifications(dedupe_key);
 
 -- Update timestamp trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()

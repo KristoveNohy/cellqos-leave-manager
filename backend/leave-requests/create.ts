@@ -82,7 +82,7 @@ export const create = api(
     
     await createAuditLog(
       userId,
-      "leave_requests",
+      "leave_request",
       result!.id,
       "CREATE",
       null,

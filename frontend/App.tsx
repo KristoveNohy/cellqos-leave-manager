@@ -9,6 +9,7 @@ import ApprovalsPage from "./pages/ApprovalsPage";
 import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import MagicLinkPage from "./pages/MagicLinkPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import type { UserRole } from "~backend/shared/types";
 
@@ -63,6 +64,14 @@ export default function App() {
                     <RequireRole role="MANAGER">
                       <ApprovalsPage />
                     </RequireRole>
+                  }
+                />
+                <Route
+                  path="/notifications"
+                  element={
+                    <RequireAuth>
+                      <NotificationsPage />
+                    </RequireAuth>
                   }
                 />
                 <Route
