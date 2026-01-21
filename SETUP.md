@@ -30,6 +30,12 @@ export JWT_SECRET="change-me"
 export DATABASE_URL="postgresql://user:password@localhost:5432/cellqos"
 ```
 
+Následne skontrolujte, že databáza má zapnuté rozšírenie `pgcrypto` (kvôli heslám):
+
+```sql
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+```
+
 Migrácie a seed spustite v `backend`:
 
 ```bash
