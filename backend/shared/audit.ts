@@ -56,7 +56,8 @@ export async function createNotification(
     return;
   }
   await db.exec`
-    INSERT INTO notifications (user_id, type, payload_json)
-    VALUES (${userId}, ${type}, ${JSON.stringify(payload)})
+    INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
+    VALUES (${userId}, ${type}, ${JSON.stringify(payload)}, ${dedupeKey ?? null})
+    ON CONFLICT (dedupe_key) DO NOTHING
   `;
 }
