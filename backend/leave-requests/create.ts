@@ -44,7 +44,8 @@ export const create = api(
       INSERT INTO leave_requests (
         user_id, type, start_date, end_date,
         is_half_day_start, is_half_day_end,
-        reason, computed_days, status
+        reason, computed_days, status,
+        created_at, updated_at
       ) VALUES (
         ${userId},
         ${req.type},
@@ -54,7 +55,9 @@ export const create = api(
         ${req.isHalfDayEnd || false},
         ${req.reason || null},
         ${computedDays},
-        'DRAFT'
+        'DRAFT',
+        NOW(),
+        NOW()
       )
       RETURNING id
     `;
