@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -190,6 +191,9 @@ export default function TeamManagement() {
             <DialogTitle>
               {editingTeam ? "Upraviť tím" : "Pridať tím"}
             </DialogTitle>
+            <DialogDescription>
+              Nastavte názov tímu a voliteľne limit súbežných dovoleniek.
+            </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -56,7 +57,7 @@ export default function UserManagement() {
       name: "",
       email: "",
       role: "EMPLOYEE",
-      teamId: "",
+      teamId: "none",
     },
   });
 
@@ -122,7 +123,7 @@ export default function UserManagement() {
 
   const openCreate = () => {
     setEditingUser(null);
-    reset({ name: "", email: "", role: "EMPLOYEE", teamId: "" });
+    reset({ name: "", email: "", role: "EMPLOYEE", teamId: "none" });
     setDialogOpen(true);
   };
 
@@ -132,7 +133,7 @@ export default function UserManagement() {
       name: user.name ?? "",
       email: user.email ?? "",
       role: user.role ?? "EMPLOYEE",
-      teamId: user.teamId ? String(user.teamId) : "",
+      teamId: user.teamId ? String(user.teamId) : "none",
     });
     setDialogOpen(true);
   };
@@ -149,7 +150,7 @@ export default function UserManagement() {
       email: values.email.trim(),
       name: values.name.trim(),
       role: values.role,
-      teamId: values.teamId ? Number(values.teamId) : null,
+      teamId: values.teamId !== "none" ? Number(values.teamId) : null,
     };
 
     if (editingUser) {
@@ -226,6 +227,9 @@ export default function UserManagement() {
             <DialogTitle>
               {editingUser ? "Upraviť používateľa" : "Pridať používateľa"}
             </DialogTitle>
+            <DialogDescription>
+              Vyplňte základné informácie o používateľovi a priraďte mu rolu alebo tím.
+            </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -265,7 +269,7 @@ export default function UserManagement() {
                     <SelectValue placeholder="Bez tímu" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Bez tímu</SelectItem>
+                    <SelectItem value="none">Bez tímu</SelectItem>
                     {teams.map((team: any) => (
                       <SelectItem key={team.id} value={String(team.id)}>
                         {team.name}

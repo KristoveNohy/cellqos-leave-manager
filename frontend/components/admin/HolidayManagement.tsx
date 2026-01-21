@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -198,6 +199,9 @@ export default function HolidayManagement() {
             <DialogTitle>
               {editingHoliday ? "Upraviť sviatok" : "Pridať sviatok"}
             </DialogTitle>
+            <DialogDescription>
+              Zadajte dátum a názov sviatku, prípadne označte firemný typ.
+            </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
