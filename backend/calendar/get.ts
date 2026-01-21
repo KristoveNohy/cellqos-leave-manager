@@ -26,6 +26,17 @@ export const get = api(
     const isManager = auth.role === "MANAGER";
     const viewerId = auth.userID;
     let viewerTeamId: number | null = null;
+    let showTeamCalendarForEmployees = false;
+    try {
+      const settings = await db.queryRow<{ showTeamCalendarForEmployees: boolean }>`
+        SELECT show_team_calendar_for_employees as "showTeamCalendarForEmployees"
+        FROM settings
+        LIMIT 1
+      `;
+      showTeamCalendarForEmployees = settings?.showTeamCalendarForEmployees ?? false;
+    } catch {
+      showTeamCalendarForEmployees = false;
+    }
 
     if (!isManager) {
       const viewer = await db.queryRow<{ teamId: number | null }>`
@@ -55,7 +66,7 @@ export const get = api(
     }
 
     if (!isManager) {
-      if (viewerTeamId) {
+      if (showTeamCalendarForEmployees && viewerTeamId) {
         conditions.push(`u.team_id = $${values.length + 1}`);
         values.push(viewerTeamId);
       } else {

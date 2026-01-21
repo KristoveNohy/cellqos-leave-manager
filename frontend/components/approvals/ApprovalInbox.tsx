@@ -73,7 +73,9 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
 
   const bulkApproveMutation = useMutation({
     mutationFn: async (ids: number[]) => {
-      await Promise.all(ids.map((id) => backend.leave_requests.approve({ id, comment: bulkComment })));
+      await Promise.all(
+        ids.map((id) => backend.leave_requests.approve({ id, comment: bulkComment, bulk: true }))
+      );
     },
     onSuccess: () => {
       toast({ title: "Vybrané žiadosti boli schválené" });
@@ -96,7 +98,9 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
       if (!bulkComment) {
         throw new Error("Komentár je povinný pri zamietnutí");
       }
-      await Promise.all(ids.map((id) => backend.leave_requests.reject({ id, comment: bulkComment })));
+      await Promise.all(
+        ids.map((id) => backend.leave_requests.reject({ id, comment: bulkComment, bulk: true }))
+      );
     },
     onSuccess: () => {
       toast({ title: "Vybrané žiadosti boli zamietnuté" });

@@ -3,7 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
 import { computeWorkingDays } from "../shared/date-utils";
-import { createAuditLog } from "../shared/audit";
+import { createAuditLog, createNotification } from "../shared/audit";
 import { canEditRequest } from "../shared/rbac";
 import type { LeaveRequest, LeaveType } from "../shared/types";
 
@@ -157,13 +157,28 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     
     await createAuditLog(
       auth.userID,
-      "leave_requests",
+      "leave_request",
       id,
       "UPDATE",
       before,
       after
     );
-    
+
+    if (auth.role === "MANAGER" && before.userId !== auth.userID) {
+      await createNotification(
+        before.userId,
+        "REQUEST_UPDATED_BY_MANAGER",
+        {
+          requestId: id,
+          updatedBy: auth.userID,
+          startDate: after?.startDate,
+          endDate: after?.endDate,
+          status: after?.status,
+        },
+        `leave_request:${id}:manager-update:${after?.updatedAt}`
+      );
+    }
+
     return after!;
   }
 );

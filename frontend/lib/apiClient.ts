@@ -43,6 +43,10 @@ function toQuery(params: Record<string, string | number | undefined>) {
 
 export function createApiClient(token: string | null) {
   return {
+    audit: {
+      list: (params: { entityType?: string; entityId?: string; limit?: number }) =>
+        apiRequest<{ logs: any[] }>(`/audit${toQuery(params)}`, { token }),
+    },
     calendar: {
       get: (params: { startDate: string; endDate: string; teamId?: number }) =>
         apiRequest<{ events: any[] }>(`/calendar${toQuery(params)}`, { token }),
@@ -90,14 +94,20 @@ export function createApiClient(token: string | null) {
         apiRequest<any>(`/leave-requests/${data.id}`, { method: "PATCH", body: data, token }),
       submit: (data: { id: number }) =>
         apiRequest<any>(`/leave-requests/${data.id}/submit`, { method: "POST", token }),
-      approve: (data: { id: number; comment?: string }) =>
+      approve: (data: { id: number; comment?: string; bulk?: boolean }) =>
         apiRequest<any>(`/leave-requests/${data.id}/approve`, { method: "POST", body: data, token }),
-      reject: (data: { id: number; comment: string }) =>
+      reject: (data: { id: number; comment: string; bulk?: boolean }) =>
         apiRequest<any>(`/leave-requests/${data.id}/reject`, { method: "POST", body: data, token }),
       cancel: (data: { id: number }) =>
         apiRequest<any>(`/leave-requests/${data.id}/cancel`, { method: "POST", token }),
       remove: (data: { id: number }) =>
         apiRequest<any>(`/leave-requests/${data.id}`, { method: "DELETE", token }),
+    },
+    notifications: {
+      list: () => apiRequest<{ notifications: any[] }>("/notifications", { token }),
+      read: (data: { id: number }) =>
+        apiRequest<{ ok: true }>(`/notifications/${data.id}/read`, { method: "POST", token }),
+      readAll: () => apiRequest<{ ok: true }>("/notifications/read-all", { method: "POST", token }),
     },
     database: {
       export: () => apiRequest<any>("/admin/database/export", { token }),
