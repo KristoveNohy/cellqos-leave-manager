@@ -4,7 +4,7 @@ import cors from "cors";
 import { Pool, type PoolClient } from "pg";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
-import { computeWorkingDays } from "./shared/date-utils";
+import { computeWorkingDays, parseDate } from "./shared/date-utils";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
 import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog } from "./shared/types";
@@ -87,6 +87,30 @@ async function createAuditLog(
       VALUES ($1, 'database', 'full', $2, $3)
     `,
     [actorUserId, action, JSON.stringify(details)]
+  );
+}
+
+async function createEntityAuditLog(
+  actorUserId: string,
+  entityType: string,
+  entityId: string | number,
+  action: string,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null
+): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, before_json, after_json)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `,
+    [
+      actorUserId,
+      entityType,
+      String(entityId),
+      action,
+      before ? JSON.stringify(before) : null,
+      after ? JSON.stringify(after) : null,
+    ]
   );
 }
 
@@ -312,12 +336,179 @@ app.get("/users", asyncHandler(async (req, res) => {
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM users
-      WHERE is_active = true
       ORDER BY name ASC
     `
   );
 
   res.json({ users });
+}));
+
+app.post("/users", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const { email, name, role, teamId } = req.body as {
+    email?: string;
+    name?: string;
+    role?: UserRole;
+    teamId?: number | null;
+  };
+
+  if (!email || !name) {
+    throw new HttpError(400, "Email and name are required");
+  }
+
+  validateEmail(email);
+
+  const userId = randomUUID();
+  const userRole: UserRole = role ?? "EMPLOYEE";
+
+  try {
+    await pool.query(
+      `
+        INSERT INTO users (id, email, name, role, team_id)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [userId, email, name, userRole, teamId ?? null]
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("duplicate key")) {
+      throw new HttpError(409, "User already exists");
+    }
+    throw error;
+  }
+
+  const user = await queryRow<User>(
+    `
+      SELECT id, email, name, role,
+        team_id as "teamId",
+        is_active as "isActive",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM users
+      WHERE id = $1
+    `,
+    [userId]
+  );
+
+  if (!user) {
+    throw new HttpError(500, "User creation failed");
+  }
+
+  await createEntityAuditLog(auth.userID, "users", userId, "CREATE", null, user as unknown as Record<string, unknown>);
+
+  res.json(user);
+}));
+
+app.patch("/users/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const { id } = req.params;
+  const { email, name, role, teamId, isActive } = req.body as {
+    email?: string;
+    name?: string;
+    role?: UserRole;
+    teamId?: number | null;
+    isActive?: boolean;
+  };
+
+  const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [id]);
+  if (!before) {
+    throw new HttpError(404, "User not found");
+  }
+
+  if (email !== undefined) {
+    validateEmail(email);
+  }
+
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (email !== undefined) {
+    updates.push(`email = $${values.length + 1}`);
+    values.push(email);
+  }
+  if (name !== undefined) {
+    updates.push(`name = $${values.length + 1}`);
+    values.push(name);
+  }
+  if (role !== undefined) {
+    updates.push(`role = $${values.length + 1}`);
+    values.push(role);
+  }
+  if (teamId !== undefined) {
+    updates.push(`team_id = $${values.length + 1}`);
+    values.push(teamId ?? null);
+  }
+  if (isActive !== undefined) {
+    updates.push(`is_active = $${values.length + 1}`);
+    values.push(isActive);
+  }
+
+  if (updates.length > 0) {
+    values.push(id);
+    await pool.query(
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length}`,
+      values
+    );
+  }
+
+  const user = await queryRow<User>(
+    `
+      SELECT id, email, name, role,
+        team_id as "teamId",
+        is_active as "isActive",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM users
+      WHERE id = $1
+    `,
+    [id]
+  );
+
+  if (!user) {
+    throw new HttpError(404, "User not found");
+  }
+
+  await createEntityAuditLog(auth.userID, "users", id, "UPDATE", before, user as unknown as Record<string, unknown>);
+
+  res.json(user);
+}));
+
+app.delete("/users/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const { id } = req.params;
+
+  const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [id]);
+  if (!before) {
+    throw new HttpError(404, "User not found");
+  }
+
+  const leaveRequestCount = await queryRow<{ count: string }>(
+    "SELECT COUNT(*) as count FROM leave_requests WHERE user_id = $1",
+    [id]
+  );
+  const leaveBalanceCount = await queryRow<{ count: string }>(
+    "SELECT COUNT(*) as count FROM leave_balances WHERE user_id = $1",
+    [id]
+  );
+  const notificationCount = await queryRow<{ count: string }>(
+    "SELECT COUNT(*) as count FROM notifications WHERE user_id = $1",
+    [id]
+  );
+
+  const totalDependencies = Number(leaveRequestCount?.count ?? 0)
+    + Number(leaveBalanceCount?.count ?? 0)
+    + Number(notificationCount?.count ?? 0);
+
+  if (totalDependencies > 0) {
+    throw new HttpError(409, "Cannot delete user with related data. Remove related records first.");
+  }
+
+  await pool.query("DELETE FROM users WHERE id = $1", [id]);
+  await createEntityAuditLog(auth.userID, "users", id, "DELETE", before, null);
+
+  res.json({ ok: true });
 }));
 
 app.get("/teams", asyncHandler(async (req, res) => {
@@ -335,6 +526,144 @@ app.get("/teams", asyncHandler(async (req, res) => {
   );
 
   res.json({ teams });
+}));
+
+app.post("/teams", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const { name, maxConcurrentLeaves } = req.body as {
+    name?: string;
+    maxConcurrentLeaves?: number | null;
+  };
+
+  if (!name) {
+    throw new HttpError(400, "Team name is required");
+  }
+
+  let result: { id: number } | null = null;
+  try {
+    result = await queryRow<{ id: number }>(
+      `
+        INSERT INTO teams (name, max_concurrent_leaves)
+        VALUES ($1, $2)
+        RETURNING id
+      `,
+      [name, maxConcurrentLeaves ?? null]
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("duplicate key")) {
+      throw new HttpError(409, "Team with this name already exists");
+    }
+    throw error;
+  }
+
+  if (!result) {
+    throw new HttpError(500, "Team creation failed");
+  }
+
+  const team = await queryRow<Team>(
+    `
+      SELECT id, name,
+        max_concurrent_leaves as "maxConcurrentLeaves",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM teams
+      WHERE id = $1
+    `,
+    [result.id]
+  );
+
+  if (!team) {
+    throw new HttpError(500, "Team creation failed");
+  }
+
+  await createEntityAuditLog(auth.userID, "teams", team.id, "CREATE", null, team as unknown as Record<string, unknown>);
+
+  res.json(team);
+}));
+
+app.patch("/teams/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const id = Number(req.params.id);
+  const { name, maxConcurrentLeaves } = req.body as {
+    name?: string;
+    maxConcurrentLeaves?: number | null;
+  };
+
+  const before = await queryRow<Record<string, unknown>>("SELECT * FROM teams WHERE id = $1", [id]);
+  if (!before) {
+    throw new HttpError(404, "Team not found");
+  }
+
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (name !== undefined) {
+    updates.push(`name = $${values.length + 1}`);
+    values.push(name);
+  }
+  if (maxConcurrentLeaves !== undefined) {
+    updates.push(`max_concurrent_leaves = $${values.length + 1}`);
+    values.push(maxConcurrentLeaves ?? null);
+  }
+
+  if (updates.length > 0) {
+    values.push(id);
+    try {
+      await pool.query(`UPDATE teams SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("duplicate key")) {
+        throw new HttpError(409, "Team with this name already exists");
+      }
+      throw error;
+    }
+  }
+
+  const team = await queryRow<Team>(
+    `
+      SELECT id, name,
+        max_concurrent_leaves as "maxConcurrentLeaves",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM teams
+      WHERE id = $1
+    `,
+    [id]
+  );
+
+  if (!team) {
+    throw new HttpError(404, "Team not found");
+  }
+
+  await createEntityAuditLog(auth.userID, "teams", id, "UPDATE", before, team as unknown as Record<string, unknown>);
+
+  res.json(team);
+}));
+
+app.delete("/teams/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const id = Number(req.params.id);
+
+  const before = await queryRow<Record<string, unknown>>("SELECT * FROM teams WHERE id = $1", [id]);
+  if (!before) {
+    throw new HttpError(404, "Team not found");
+  }
+
+  const userCount = await queryRow<{ count: string }>(
+    "SELECT COUNT(*) as count FROM users WHERE team_id = $1",
+    [id]
+  );
+
+  if (userCount && Number(userCount.count) > 0) {
+    throw new HttpError(409, "Cannot delete team with active users. Reassign users first.");
+  }
+
+  await pool.query("DELETE FROM teams WHERE id = $1", [id]);
+  await createEntityAuditLog(auth.userID, "teams", id, "DELETE", before, null);
+
+  res.json({ ok: true });
 }));
 
 app.get("/holidays", asyncHandler(async (req, res) => {
@@ -368,6 +697,156 @@ app.get("/holidays", asyncHandler(async (req, res) => {
   }
 
   res.json({ holidays });
+}));
+
+app.post("/holidays", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const { date, name, isCompanyHoliday } = req.body as {
+    date?: string;
+    name?: string;
+    isCompanyHoliday?: boolean;
+  };
+
+  if (!date || !name) {
+    throw new HttpError(400, "Date and name are required");
+  }
+
+  try {
+    parseDate(date);
+  } catch (error) {
+    throw new HttpError(400, error instanceof Error ? error.message : "Invalid date");
+  }
+
+  let result: { id: number } | null = null;
+  try {
+    result = await queryRow<{ id: number }>(
+      `
+        INSERT INTO holidays (date, name, is_company_holiday)
+        VALUES ($1, $2, $3)
+        RETURNING id
+      `,
+      [date, name, isCompanyHoliday ?? true]
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("duplicate key")) {
+      throw new HttpError(409, "Holiday for this date already exists");
+    }
+    throw error;
+  }
+
+  if (!result) {
+    throw new HttpError(500, "Holiday creation failed");
+  }
+
+  const holiday = await queryRow<Holiday>(
+    `
+      SELECT id, date::text as date, name,
+        is_company_holiday as "isCompanyHoliday",
+        created_at as "createdAt"
+      FROM holidays
+      WHERE id = $1
+    `,
+    [result.id]
+  );
+
+  if (!holiday) {
+    throw new HttpError(500, "Holiday creation failed");
+  }
+
+  await createEntityAuditLog(auth.userID, "holidays", holiday.id, "CREATE", null, holiday as unknown as Record<string, unknown>);
+
+  res.json(holiday);
+}));
+
+app.patch("/holidays/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const id = Number(req.params.id);
+  const { date, name, isCompanyHoliday } = req.body as {
+    date?: string;
+    name?: string;
+    isCompanyHoliday?: boolean;
+  };
+
+  const before = await queryRow<Record<string, unknown>>("SELECT * FROM holidays WHERE id = $1", [id]);
+  if (!before) {
+    throw new HttpError(404, "Holiday not found");
+  }
+
+  if (date !== undefined) {
+    try {
+      parseDate(date);
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : "Invalid date");
+    }
+  }
+
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (date !== undefined) {
+    updates.push(`date = $${values.length + 1}`);
+    values.push(date);
+  }
+  if (name !== undefined) {
+    updates.push(`name = $${values.length + 1}`);
+    values.push(name);
+  }
+  if (isCompanyHoliday !== undefined) {
+    updates.push(`is_company_holiday = $${values.length + 1}`);
+    values.push(isCompanyHoliday);
+  }
+
+  if (updates.length > 0) {
+    values.push(id);
+    try {
+      await pool.query(
+        `UPDATE holidays SET ${updates.join(", ")} WHERE id = $${values.length}`,
+        values
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("duplicate key")) {
+        throw new HttpError(409, "Holiday for this date already exists");
+      }
+      throw error;
+    }
+  }
+
+  const holiday = await queryRow<Holiday>(
+    `
+      SELECT id, date::text as date, name,
+        is_company_holiday as "isCompanyHoliday",
+        created_at as "createdAt"
+      FROM holidays
+      WHERE id = $1
+    `,
+    [id]
+  );
+
+  if (!holiday) {
+    throw new HttpError(404, "Holiday not found");
+  }
+
+  await createEntityAuditLog(auth.userID, "holidays", id, "UPDATE", before, holiday as unknown as Record<string, unknown>);
+
+  res.json(holiday);
+}));
+
+app.delete("/holidays/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const id = Number(req.params.id);
+
+  const before = await queryRow<Record<string, unknown>>("SELECT * FROM holidays WHERE id = $1", [id]);
+  if (!before) {
+    throw new HttpError(404, "Holiday not found");
+  }
+
+  await pool.query("DELETE FROM holidays WHERE id = $1", [id]);
+  await createEntityAuditLog(auth.userID, "holidays", id, "DELETE", before, null);
+
+  res.json({ ok: true });
 }));
 
 app.get("/leave-requests", asyncHandler(async (req, res) => {
