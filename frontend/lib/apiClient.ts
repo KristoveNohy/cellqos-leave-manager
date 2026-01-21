@@ -1,0 +1,85 @@
+import { apiBaseUrl } from "@/lib/auth";
+import type { LeaveStatus, LeaveType } from "~backend/shared/types";
+
+interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  token?: string | null;
+}
+
+async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (options.token) {
+    headers.Authorization = `Bearer ${options.token}`;
+  }
+
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: options.method ?? "GET",
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.message || "API request failed");
+  }
+
+  return (await response.json()) as T;
+}
+
+function toQuery(params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      searchParams.set(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+export function createApiClient(token: string | null) {
+  return {
+    calendar: {
+      get: (params: { startDate: string; endDate: string; teamId?: number }) =>
+        apiRequest<{ events: any[] }>(`/calendar${toQuery(params)}`, { token }),
+    },
+    holidays: {
+      list: (params: { year?: number }) =>
+        apiRequest<{ holidays: any[] }>(`/holidays${toQuery(params)}`, { token }),
+    },
+    teams: {
+      list: () => apiRequest<{ teams: any[] }>("/teams", { token }),
+    },
+    users: {
+      list: () => apiRequest<{ users: any[] }>("/users", { token }),
+      me: () => apiRequest<any>("/users/me", { token }),
+    },
+    leave_requests: {
+      list: (params: {
+        userId?: string;
+        status?: LeaveStatus;
+        type?: LeaveType;
+        startDate?: string;
+        endDate?: string;
+        teamId?: number;
+      }) => apiRequest<{ requests: any[] }>(`/leave-requests${toQuery(params)}`, { token }),
+      create: (data: any) => apiRequest<any>("/leave-requests", { method: "POST", body: data, token }),
+      update: (data: { id: number } & Record<string, unknown>) =>
+        apiRequest<any>(`/leave-requests/${data.id}`, { method: "PATCH", body: data, token }),
+      submit: (data: { id: number }) =>
+        apiRequest<any>(`/leave-requests/${data.id}/submit`, { method: "POST", token }),
+      approve: (data: { id: number; comment?: string }) =>
+        apiRequest<any>(`/leave-requests/${data.id}/approve`, { method: "POST", body: data, token }),
+      reject: (data: { id: number; comment: string }) =>
+        apiRequest<any>(`/leave-requests/${data.id}/reject`, { method: "POST", body: data, token }),
+      cancel: (data: { id: number }) =>
+        apiRequest<any>(`/leave-requests/${data.id}/cancel`, { method: "POST", token }),
+      remove: (data: { id: number }) =>
+        apiRequest<any>(`/leave-requests/${data.id}`, { method: "DELETE", token }),
+    },
+  };
+}

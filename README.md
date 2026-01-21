@@ -25,7 +25,7 @@ Komplexný systém správy dovoleniek a absencií s riadením prístupu podľa r
 ## Technologický stack
 
 - **Frontend**: React, TypeScript, shadcn/ui, React Big Calendar, React Hook Form, Zod
-- **Backend**: Encore.ts, PostgreSQL
+- **Backend**: Node.js (Express), PostgreSQL
 - **ORM**: Prisma (migrácie + seed)
 - **Autentifikácia**: Email + heslo, voliteľne magic link, JWT session
 
@@ -177,7 +177,7 @@ Predvolené heslo pre demo účty: `Password123!`
 
 ## Architektúra
 
-- **Backend služby**: Modulárne Encore.ts služby pre jednotlivé domény
+- **Backend služby**: Express API + SQL dotazy na PostgreSQL
 - **Frontend**: Komponentová architektúra Reactu s role guardmi
 - **Správa stavu**: React Query pre serverový stav
 - **Validácia**: Zod schémy na klientovi aj serveri
