@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -5,15 +6,20 @@ import RequestsList from "@/components/requests/RequestsList";
 
 export default function TeamPage() {
   const backend = useBackend();
+  const [activeTab, setActiveTab] = useState("all");
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => backend.teams.list(),
   });
   
+  const teamId =
+    activeTab === "all" ? undefined : Number.parseInt(activeTab, 10);
+  const teamFilter = Number.isNaN(teamId) ? undefined : teamId;
+
   const { data: requestsData, isLoading, refetch } = useQuery({
-    queryKey: ["team-requests"],
+    queryKey: ["team-requests", teamFilter ?? "all"],
     queryFn: async () => {
-      return backend.leave_requests.list({});
+      return backend.leave_requests.list(teamFilter ? { teamId: teamFilter } : {});
     },
   });
   
@@ -26,7 +32,7 @@ export default function TeamPage() {
         <h1 className="text-3xl font-bold">Prehľad tímov</h1>
       </div>
       
-      <Tabs defaultValue="all">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all">Všetky tímy</TabsTrigger>
           {teams.map((team) => (
@@ -48,9 +54,7 @@ export default function TeamPage() {
         {teams.map((team) => (
           <TabsContent key={team.id} value={String(team.id)} className="mt-6">
             <RequestsList
-              requests={allRequests.filter((r: any) => {
-                return true;
-              })}
+              requests={allRequests}
               isLoading={isLoading}
               onUpdate={refetch}
               showUser
