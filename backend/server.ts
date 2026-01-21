@@ -1165,6 +1165,10 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const id = Number(req.params.id);
 
+  if (auth.role !== "MANAGER") {
+    throw new HttpError(403, "Employees cannot delete requests; use cancel.");
+  }
+
   const request = await queryRow<LeaveRequest>(
     `
       SELECT 
@@ -1188,10 +1192,6 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
 
   if (!request) {
     throw new HttpError(404, "Leave request not found");
-  }
-
-  if (auth.role !== "MANAGER" && !canEditRequest(request.userId, request.status, auth.userID, auth.role)) {
-    throw new HttpError(403, "You are not allowed to delete this request");
   }
 
   await pool.query("DELETE FROM leave_requests WHERE id = $1", [id]);
@@ -1522,6 +1522,11 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const isManager = auth.role === "MANAGER";
   const viewerId = auth.userID;
   let viewerTeamId: number | null = null;
+  const settings = await queryRow<{ showTeamCalendarForEmployees: boolean }>(
+    "SELECT show_team_calendar_for_employees as \"showTeamCalendarForEmployees\" FROM settings LIMIT 1",
+    []
+  );
+  const showTeamCalendarForEmployees = settings?.showTeamCalendarForEmployees ?? false;
 
   if (!isManager) {
     const viewer = await queryRow<{ teamId: number | null }>(
@@ -1554,7 +1559,7 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   }
 
   if (!isManager) {
-    if (viewerTeamId) {
+    if (showTeamCalendarForEmployees && viewerTeamId) {
       conditions.push(`u.team_id = $${values.length + 1}`);
       values.push(viewerTeamId);
     } else {

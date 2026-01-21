@@ -1,0 +1,9 @@
+CREATE TABLE settings (
+  id SMALLINT PRIMARY KEY DEFAULT 1,
+  show_team_calendar_for_employees BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO settings (id)
+VALUES (1)
+ON CONFLICT (id) DO NOTHING;
