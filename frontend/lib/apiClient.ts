@@ -81,5 +81,10 @@ export function createApiClient(token: string | null) {
       remove: (data: { id: number }) =>
         apiRequest<any>(`/leave-requests/${data.id}`, { method: "DELETE", token }),
     },
+    database: {
+      export: () => apiRequest<any>("/admin/database/export", { token }),
+      import: (payload: { backup: any; confirm: string }) =>
+        apiRequest<any>("/admin/database/import", { method: "POST", body: payload, token }),
+    },
   };
 }
