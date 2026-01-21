@@ -540,14 +540,22 @@ app.post("/teams", asyncHandler(async (req, res) => {
     throw new HttpError(400, "Team name is required");
   }
 
-  const result = await queryRow<{ id: number }>(
-    `
-      INSERT INTO teams (name, max_concurrent_leaves)
-      VALUES ($1, $2)
-      RETURNING id
-    `,
-    [name, maxConcurrentLeaves ?? null]
-  );
+  let result: { id: number } | null = null;
+  try {
+    result = await queryRow<{ id: number }>(
+      `
+        INSERT INTO teams (name, max_concurrent_leaves, created_at, updated_at)
+        VALUES ($1, $2, NOW(), NOW())
+        RETURNING id
+      `,
+      [name, maxConcurrentLeaves ?? null]
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("duplicate key")) {
+      throw new HttpError(409, "Team with this name already exists");
+    }
+    throw error;
+  }
 
   if (!result) {
     throw new HttpError(500, "Team creation failed");
@@ -602,7 +610,15 @@ app.patch("/teams/:id", asyncHandler(async (req, res) => {
 
   if (updates.length > 0) {
     values.push(id);
-    await pool.query(`UPDATE teams SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
+    updates.push(`updated_at = NOW()`);
+    try {
+      await pool.query(`UPDATE teams SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("duplicate key")) {
+        throw new HttpError(409, "Team with this name already exists");
+      }
+      throw error;
+    }
   }
 
   const team = await queryRow<Team>(
