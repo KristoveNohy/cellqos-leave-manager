@@ -74,6 +74,7 @@ export interface LeaveBalance {
 export interface AuditLog {
   id: number;
   actorUserId: string;
+  actorName?: string | null;
   entityType: string;
   entityId: string;
   action: string;
@@ -87,6 +88,7 @@ export interface Notification {
   userId: string;
   type: string;
   payloadJson: any;
+  dedupeKey?: string | null;
   sentAt: Date | null;
   readAt: Date | null;
   createdAt: Date;
