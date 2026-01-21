@@ -1,10 +1,9 @@
-import { createClerkClient, verifyToken } from "@clerk/backend";
+import jwt from "jsonwebtoken";
 import { Header, Cookie, APIError, Gateway } from "encore.dev/api";
 import { authHandler } from "encore.dev/auth";
 import { secret } from "encore.dev/config";
 
-const clerkSecretKey = secret("ClerkSecretKey");
-const clerkClient = createClerkClient({ secretKey: clerkSecretKey() });
+const jwtSecret = secret("JwtSecret");
 
 interface AuthParams {
   authorization?: Header<"Authorization">;
@@ -15,6 +14,7 @@ export interface AuthData {
   userID: string;
   email: string;
   role: string;
+  name: string;
 }
 
 export const auth = authHandler<AuthParams, AuthData>(
@@ -25,18 +25,18 @@ export const auth = authHandler<AuthParams, AuthData>(
     }
 
     try {
-      const verifiedToken = await verifyToken(token, {
-        secretKey: clerkSecretKey(),
-      });
-
-      const user = await clerkClient.users.getUser(verifiedToken.sub);
-      const email = user.emailAddresses[0]?.emailAddress ?? "";
-      const role = (user.publicMetadata?.role as string) ?? "EMPLOYEE";
+      const payload = jwt.verify(token, jwtSecret()) as {
+        sub: string;
+        email: string;
+        role: string;
+        name: string;
+      };
 
       return {
-        userID: user.id,
-        email,
-        role,
+        userID: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        name: payload.name,
       };
     } catch (err) {
       throw APIError.unauthenticated("invalid token", err as Error);

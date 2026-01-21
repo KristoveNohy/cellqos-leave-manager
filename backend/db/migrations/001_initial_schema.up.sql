@@ -1,5 +1,7 @@
 -- Enable UUID extension for potential future use
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Enable pgcrypto for password hashing and token utilities
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Enums
 CREATE TYPE user_role AS ENUM ('EMPLOYEE', 'MANAGER');
@@ -15,7 +17,7 @@ CREATE TABLE teams (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- Users table (user_id is string for Clerk compatibility)
+-- Users table (user_id is string for auth compatibility)
 CREATE TABLE users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,

@@ -7,14 +7,14 @@ export default function AdminPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Admin Settings</h1>
+        <h1 className="text-3xl font-bold">Administrátorské nastavenia</h1>
       </div>
       
       <Tabs defaultValue="users">
         <TabsList>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="teams">Teams</TabsTrigger>
-          <TabsTrigger value="holidays">Holidays</TabsTrigger>
+          <TabsTrigger value="users">Používatelia</TabsTrigger>
+          <TabsTrigger value="teams">Tímy</TabsTrigger>
+          <TabsTrigger value="holidays">Sviatky</TabsTrigger>
         </TabsList>
         
         <TabsContent value="users" className="mt-6">

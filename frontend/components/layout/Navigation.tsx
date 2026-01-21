@@ -1,22 +1,23 @@
 import { Link, useLocation } from "react-router-dom";
 import { Calendar, FileText, Users, CheckSquare, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
 
 export default function Navigation() {
   const location = useLocation();
-  
-  // TODO: Replace with actual user role from Clerk
-  const userRole = "MANAGER";
+  const { user, logout } = useAuth();
+  const userRole = user?.role ?? "EMPLOYEE";
   
   const navItems = [
-    { path: "/calendar", label: "Calendar", icon: Calendar, roles: ["EMPLOYEE", "MANAGER"] },
-    { path: "/my-requests", label: "My Requests", icon: FileText, roles: ["EMPLOYEE", "MANAGER"] },
-    { path: "/team", label: "Team", icon: Users, roles: ["MANAGER"] },
-    { path: "/approvals", label: "Approvals", icon: CheckSquare, roles: ["MANAGER"] },
-    { path: "/admin", label: "Admin", icon: Settings, roles: ["MANAGER"] },
+    { path: "/calendar", label: "Kalendár", icon: Calendar, roles: ["EMPLOYEE", "MANAGER"] },
+    { path: "/my-requests", label: "Moje žiadosti", icon: FileText, roles: ["EMPLOYEE", "MANAGER"] },
+    { path: "/team", label: "Tím", icon: Users, roles: ["MANAGER"] },
+    { path: "/approvals", label: "Schvaľovanie", icon: CheckSquare, roles: ["MANAGER"] },
+    { path: "/admin", label: "Administrácia", icon: Settings, roles: ["MANAGER"] },
   ];
   
-  const visibleItems = navItems.filter(item => item.roles.includes(userRole));
+  const visibleItems = user ? navItems.filter(item => item.roles.includes(userRole)) : [];
   
   return (
     <nav className="border-b bg-card">
@@ -25,7 +26,7 @@ export default function Navigation() {
           <div className="flex items-center space-x-8">
             <Link to="/" className="flex items-center space-x-2">
               <Calendar className="h-6 w-6 text-primary" />
-              <span className="font-semibold text-lg">CellQos Leave Manager</span>
+              <span className="font-semibold text-lg">CellQos Správa dovoleniek</span>
             </Link>
             
             <div className="flex space-x-1">
@@ -53,9 +54,20 @@ export default function Navigation() {
           </div>
           
           <div className="flex items-center space-x-4">
-            <div className="text-sm text-muted-foreground">
-              Manager User
-            </div>
+            {user ? (
+              <>
+                <div className="text-sm text-muted-foreground">
+                  {user.name} ({user.role === "MANAGER" ? "Manažér" : "Zamestnanec"})
+                </div>
+                <Button variant="outline" size="sm" onClick={logout}>
+                  Odhlásiť
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/login">Prihlásiť</Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>

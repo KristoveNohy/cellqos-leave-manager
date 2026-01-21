@@ -3,6 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateEmail } from "../shared/validation";
 import { createAuditLog } from "../shared/audit";
+import { requireManager } from "../shared/rbac";
 import type { User, UserRole } from "../shared/types";
 
 interface UpdateUserParams {
@@ -18,6 +19,7 @@ export const update = api<UpdateUserParams, User>(
   async (req): Promise<User> => {
     const { id, email, name, role, teamId } = req;
     const auth = getAuthData()!;
+    requireManager(auth.role);
     const before = await db.queryRow`
       SELECT * FROM users WHERE id = ${id}
     `;

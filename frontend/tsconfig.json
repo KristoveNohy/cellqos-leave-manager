@@ -24,12 +24,6 @@
       ],
       "~backend/*": [
         "../backend/*"
-      ],
-      "~backend/client": [
-        "./client.ts"
-      ],
-      "~encore/*": [
-        "../backend/encore.gen/*"
       ]
     }
   },

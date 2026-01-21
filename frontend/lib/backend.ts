@@ -1,11 +1,11 @@
-import { useAuth } from "@clerk/clerk-react";
-import backend from "~backend/client";
+import { useMemo } from "react";
+import { useAuth } from "@/lib/auth";
+import { createApiClient } from "@/lib/apiClient";
 
 export function useBackend() {
-  const { getToken, isSignedIn } = useAuth();
-  if (!isSignedIn) return backend;
-  return backend.with({auth: async () => {
-    const token = await getToken();
-    return {authorization: `Bearer ${token}`};
-  }});
+  const { token } = useAuth();
+
+  return useMemo(() => {
+    return createApiClient(token);
+  }, [token]);
 }

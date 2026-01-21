@@ -1,25 +1,22 @@
-import { APIError } from "encore.dev/api";
 import type { UserRole } from "./types";
+import { HttpError } from "./http-error";
 
-// Temporary: Get current user from request header
-// This will be replaced with Clerk authentication
-export function getCurrentUserId(headers?: Record<string, string>): string | null {
-  // Placeholder: In production, this will use Clerk's authentication
-  // For now, accept user ID from X-User-Id header for development
-  return headers?.["x-user-id"] || null;
+type AuthData = {
+  userID: string;
+  role: UserRole;
+};
+
+export function requireAuth(auth?: AuthData | null): AuthData {
+  if (!auth) {
+    throw new HttpError(401, "Authentication required");
+  }
+  return auth;
 }
 
 export function requireManager(userRole: UserRole | undefined): void {
   if (userRole !== "MANAGER") {
-    throw APIError.permissionDenied("This action requires manager role");
+    throw new HttpError(403, "This action requires manager role");
   }
-}
-
-export function requireUser(userId: string | null): string {
-  if (!userId) {
-    throw APIError.unauthenticated("Authentication required");
-  }
-  return userId;
 }
 
 export function canEditRequest(

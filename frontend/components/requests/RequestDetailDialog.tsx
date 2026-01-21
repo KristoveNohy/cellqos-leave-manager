@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { Calendar, User, Clock } from "lucide-react";
+import { Calendar, Clock } from "lucide-react";
 
 interface RequestDetailDialogProps {
   request: any;
@@ -18,6 +18,7 @@ interface RequestDetailDialogProps {
 }
 
 export default function RequestDetailDialog({ request, open, onClose }: RequestDetailDialogProps) {
+  const backend = useBackend();
   const { toast } = useToast();
   
   const submitMutation = useMutation({
@@ -25,13 +26,13 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
       return backend.leave_requests.submit({ id: request.id });
     },
     onSuccess: () => {
-      toast({ title: "Request submitted for approval" });
+      toast({ title: "Žiadosť bola odoslaná na schválenie" });
       onClose();
     },
     onError: (error: any) => {
       console.error("Failed to submit request:", error);
       toast({
-        title: "Failed to submit request",
+        title: "Odoslanie žiadosti zlyhalo",
         description: error.message,
         variant: "destructive",
       });
@@ -43,13 +44,13 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
       return backend.leave_requests.cancel({ id: request.id });
     },
     onSuccess: () => {
-      toast({ title: "Request cancelled" });
+      toast({ title: "Žiadosť bola zrušená" });
       onClose();
     },
     onError: (error: any) => {
       console.error("Failed to cancel request:", error);
       toast({
-        title: "Failed to cancel request",
+        title: "Zrušenie žiadosti zlyhalo",
         description: error.message,
         variant: "destructive",
       });
@@ -63,74 +64,82 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
     REJECTED: "bg-red-500",
     CANCELLED: "bg-gray-400",
   };
+
+  const statusLabels = {
+    DRAFT: "Návrh",
+    PENDING: "Čaká",
+    APPROVED: "Schválené",
+    REJECTED: "Zamietnuté",
+    CANCELLED: "Zrušené",
+  };
   
   const typeLabels = {
-    ANNUAL_LEAVE: "Annual Leave",
-    SICK_LEAVE: "Sick Leave",
-    HOME_OFFICE: "Home Office",
-    UNPAID_LEAVE: "Unpaid Leave",
-    OTHER: "Other",
+    ANNUAL_LEAVE: "Dovolenka",
+    SICK_LEAVE: "PN",
+    HOME_OFFICE: "Home office",
+    UNPAID_LEAVE: "Neplatené voľno",
+    OTHER: "Iné",
   };
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Leave Request Details</DialogTitle>
+          <DialogTitle>Detail žiadosti o voľno</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-muted-foreground">Type</div>
+              <div className="text-sm text-muted-foreground">Typ</div>
               <div className="font-medium">{typeLabels[request.type as keyof typeof typeLabels]}</div>
             </div>
             <Badge className={statusColors[request.status as keyof typeof statusColors]}>
-              {request.status}
+              {statusLabels[request.status as keyof typeof statusLabels] ?? request.status}
             </Badge>
           </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Start Date</div>
+              <div className="text-sm text-muted-foreground mb-1">Začiatok</div>
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span>{request.startDate}</span>
                 {request.isHalfDayStart && (
-                  <Badge variant="outline" className="text-xs">Half day</Badge>
+                  <Badge variant="outline" className="text-xs">Poldeň</Badge>
                 )}
               </div>
             </div>
             <div>
-              <div className="text-sm text-muted-foreground mb-1">End Date</div>
+              <div className="text-sm text-muted-foreground mb-1">Koniec</div>
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span>{request.endDate}</span>
                 {request.isHalfDayEnd && (
-                  <Badge variant="outline" className="text-xs">Half day</Badge>
+                  <Badge variant="outline" className="text-xs">Poldeň</Badge>
                 )}
               </div>
             </div>
           </div>
           
           <div>
-            <div className="text-sm text-muted-foreground mb-1">Duration</div>
+            <div className="text-sm text-muted-foreground mb-1">Trvanie</div>
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{request.computedDays} working days</span>
+              <span>{request.computedDays} pracovných dní</span>
             </div>
           </div>
           
           {request.reason && (
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Reason</div>
+              <div className="text-sm text-muted-foreground mb-1">Dôvod</div>
               <div className="p-3 bg-muted rounded-md">{request.reason}</div>
             </div>
           )}
           
           {request.managerComment && (
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Manager Comment</div>
+              <div className="text-sm text-muted-foreground mb-1">Komentár manažéra</div>
               <div className="p-3 bg-muted rounded-md">{request.managerComment}</div>
             </div>
           )}
@@ -138,16 +147,16 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
           <div className="flex justify-end space-x-2">
             {request.status === "DRAFT" && (
               <Button onClick={() => submitMutation.mutate()}>
-                Submit for Approval
+                Odoslať na schválenie
               </Button>
             )}
             {(request.status === "DRAFT" || request.status === "PENDING") && (
               <Button variant="destructive" onClick={() => cancelMutation.mutate()}>
-                Cancel Request
+                Zrušiť žiadosť
               </Button>
             )}
             <Button variant="outline" onClick={onClose}>
-              Close
+              Zavrieť
             </Button>
           </div>
         </div>

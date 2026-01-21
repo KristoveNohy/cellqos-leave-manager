@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import backend from "~backend/client";
-import { Card } from "@/components/ui/card";
+import { useBackend } from "@/lib/backend";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import RequestsList from "@/components/requests/RequestsList";
 
 export default function TeamPage() {
+  const backend = useBackend();
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => backend.teams.list(),
@@ -24,12 +23,12 @@ export default function TeamPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Team Overview</h1>
+        <h1 className="text-3xl font-bold">Prehľad tímov</h1>
       </div>
       
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">All Teams</TabsTrigger>
+          <TabsTrigger value="all">Všetky tímy</TabsTrigger>
           {teams.map((team) => (
             <TabsTrigger key={team.id} value={String(team.id)}>
               {team.name}

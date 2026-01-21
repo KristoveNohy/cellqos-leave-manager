@@ -33,6 +33,10 @@ export const get = api(
     if (!request) {
       throw APIError.notFound("Leave request not found");
     }
+
+    if (auth.role !== "MANAGER" && request.userId !== auth.userID) {
+      throw APIError.permissionDenied("Cannot access another user's request");
+    }
     
     return request;
   }
