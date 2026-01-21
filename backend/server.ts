@@ -1463,10 +1463,26 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
 }));
 
 app.get("/calendar", asyncHandler(async (req, res) => {
-  requireAuth(req.auth ?? null);
+  const auth = requireAuth(req.auth ?? null);
   const startDate = req.query.startDate as string;
   const endDate = req.query.endDate as string;
   const teamId = req.query.teamId ? Number(req.query.teamId) : undefined;
+  const isManager = auth.role === "MANAGER";
+  const viewerId = auth.userID;
+  let viewerTeamId: number | null = null;
+
+  if (!isManager) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [viewerId]
+    );
+
+    if (!viewer) {
+      throw new HttpError(404, "User not found");
+    }
+
+    viewerTeamId = viewer.teamId;
+  }
 
   if (!startDate || !endDate) {
     throw new HttpError(400, "startDate and endDate are required");
@@ -1476,12 +1492,23 @@ app.get("/calendar", asyncHandler(async (req, res) => {
     "lr.start_date <= $2",
     "lr.end_date >= $1",
     "lr.status != 'DRAFT'",
+    "lr.status != 'REJECTED'",
   ];
   const values: any[] = [startDate, endDate];
 
-  if (teamId) {
+  if (isManager && teamId) {
     conditions.push(`u.team_id = $${values.length + 1}`);
     values.push(teamId);
+  }
+
+  if (!isManager) {
+    if (viewerTeamId) {
+      conditions.push(`u.team_id = $${values.length + 1}`);
+      values.push(viewerTeamId);
+    } else {
+      conditions.push(`lr.user_id = $${values.length + 1}`);
+      values.push(viewerId);
+    }
   }
 
   const query = `
@@ -1507,7 +1534,19 @@ app.get("/calendar", asyncHandler(async (req, res) => {
     `;
 
   const events = await queryRows<any>(query, values);
-  res.json({ events });
+  const safeEvents = events.map((event) => {
+    if (!isManager && event.userId !== viewerId) {
+      return {
+        ...event,
+        reason: null,
+        managerComment: null,
+      };
+    }
+
+    return event;
+  });
+
+  res.json({ events: safeEvents });
 }));
 
 app.get("/audit", asyncHandler(async (req, res) => {
