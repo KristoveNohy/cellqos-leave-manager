@@ -50,13 +50,31 @@ export function createApiClient(token: string | null) {
     holidays: {
       list: (params: { year?: number }) =>
         apiRequest<{ holidays: any[] }>(`/holidays${toQuery(params)}`, { token }),
+      create: (data: { date: string; name: string; isCompanyHoliday?: boolean }) =>
+        apiRequest<any>("/holidays", { method: "POST", body: data, token }),
+      update: (data: { id: number } & Record<string, unknown>) =>
+        apiRequest<any>(`/holidays/${data.id}`, { method: "PATCH", body: data, token }),
+      remove: (data: { id: number }) =>
+        apiRequest<any>(`/holidays/${data.id}`, { method: "DELETE", token }),
     },
     teams: {
       list: () => apiRequest<{ teams: any[] }>("/teams", { token }),
+      create: (data: { name: string; maxConcurrentLeaves?: number | null }) =>
+        apiRequest<any>("/teams", { method: "POST", body: data, token }),
+      update: (data: { id: number } & Record<string, unknown>) =>
+        apiRequest<any>(`/teams/${data.id}`, { method: "PATCH", body: data, token }),
+      remove: (data: { id: number }) =>
+        apiRequest<any>(`/teams/${data.id}`, { method: "DELETE", token }),
     },
     users: {
       list: () => apiRequest<{ users: any[] }>("/users", { token }),
       me: () => apiRequest<any>("/users/me", { token }),
+      create: (data: { email: string; name: string; role?: string; teamId?: number | null }) =>
+        apiRequest<any>("/users", { method: "POST", body: data, token }),
+      update: (data: { id: string } & Record<string, unknown>) =>
+        apiRequest<any>(`/users/${data.id}`, { method: "PATCH", body: data, token }),
+      deactivate: (data: { id: string }) =>
+        apiRequest<any>(`/users/${data.id}`, { method: "DELETE", token }),
     },
     leave_requests: {
       list: (params: {
