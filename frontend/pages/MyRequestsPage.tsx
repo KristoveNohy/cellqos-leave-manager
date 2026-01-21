@@ -1,22 +1,24 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import RequestsList from "@/components/requests/RequestsList";
 import RequestFormDialog from "@/components/requests/RequestFormDialog";
 
 export default function MyRequestsPage() {
+  const backend = useBackend();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  
-  // TODO: Replace with actual user ID from Clerk
-  const userId = "user_manager_placeholder";
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
   
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["my-requests"],
     queryFn: async () => {
       return backend.leave_requests.list({ userId });
     },
+    enabled: Boolean(userId),
   });
   
   return (

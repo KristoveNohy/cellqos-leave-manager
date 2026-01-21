@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import backend from "~backend/client";
-import { Card } from "@/components/ui/card";
+import { useBackend } from "@/lib/backend";
 import ApprovalInbox from "@/components/approvals/ApprovalInbox";
 
 export default function ApprovalsPage() {
+  const backend = useBackend();
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["pending-requests"],
     queryFn: async () => {

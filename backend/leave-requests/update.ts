@@ -2,8 +2,9 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
-import { computeWorkingDays, datesOverlap } from "../shared/date-utils";
+import { computeWorkingDays } from "../shared/date-utils";
 import { createAuditLog } from "../shared/audit";
+import { canEditRequest } from "../shared/rbac";
 import type { LeaveRequest, LeaveType } from "../shared/types";
 
 interface UpdateLeaveRequestParams {
@@ -42,6 +43,10 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     
     if (!before) {
       throw APIError.notFound("Leave request not found");
+    }
+
+    if (!canEditRequest(before.userId, before.status, auth.userID, auth.role)) {
+      throw APIError.permissionDenied("You are not allowed to edit this request");
     }
     
     const newStartDate = startDate || before.startDate;

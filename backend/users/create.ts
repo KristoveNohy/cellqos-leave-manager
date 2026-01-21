@@ -3,6 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateEmail } from "../shared/validation";
 import { createAuditLog } from "../shared/audit";
+import { requireManager } from "../shared/rbac";
 import type { User, UserRole } from "../shared/types";
 
 interface CreateUserRequest {
@@ -18,6 +19,7 @@ export const create = api(
   { auth: true, expose: true, method: "POST", path: "/users" },
   async (req: CreateUserRequest): Promise<User> => {
     const auth = getAuthData()!;
+    requireManager(auth.role);
     validateEmail(req.email);
     
     await db.exec`

@@ -2,8 +2,7 @@
 INSERT INTO teams (id, name, max_concurrent_leaves) VALUES
   (1, 'Engineering', 2);
 
--- Insert demo users (IDs will be replaced with real Clerk IDs after auth setup)
--- Using placeholder IDs that will be updated during Clerk integration
+-- Insert demo users (IDs are stable for local development)
 INSERT INTO users (id, email, name, role, team_id) VALUES
   ('user_manager_placeholder', 'manager@cellqos.com', 'Manager User', 'MANAGER', 1),
   ('user_anna_placeholder', 'anna@cellqos.com', 'Anna Novakova', 'EMPLOYEE', 1),

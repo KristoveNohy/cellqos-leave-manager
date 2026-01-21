@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Calendar as BigCalendar, momentLocalizer, View } from "react-big-calendar";
 import moment from "moment";
 import "moment/locale/sk";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import RequestFormDialog from "@/components/requests/RequestFormDialog";
 import RequestDetailDialog from "@/components/requests/RequestDetailDialog";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -24,6 +24,7 @@ interface CalendarEvent {
 }
 
 export default function CalendarPage() {
+  const backend = useBackend();
   const [date, setDate] = useState(new Date());
   const [view, setView] = useState<View>("month");
   const [showCreateDialog, setShowCreateDialog] = useState(false);

@@ -26,14 +26,15 @@ Komplexný systém správy dovoleniek a absencií s riadením prístupu podľa r
 
 - **Frontend**: React, TypeScript, shadcn/ui, React Big Calendar, React Hook Form, Zod
 - **Backend**: Encore.ts, PostgreSQL
-- **Autentifikácia**: Clerk (treba nakonfigurovať)
+- **ORM**: Prisma (migrácie + seed)
+- **Autentifikácia**: Email + heslo, voliteľne magic link, JWT session
 
 ## Schéma databázy
 
 ### Tabuľky
 
 **users**
-- id (string, primary key) - ID používateľa z Clerk
+- id (string, primary key) - ID používateľa
 - email (string, unique)
 - name (string)
 - role (enum: EMPLOYEE, MANAGER)
@@ -160,17 +161,19 @@ Komplexný systém správy dovoleniek a absencií s riadením prístupu podľa r
 ## Nastavenie
 
 1. Nainštalujte závislosti (automaticky)
-2. Nakonfigurujte autentifikáciu cez Clerk (pozrite si [SETUP.md](SETUP.md))
+2. Nastavte JWT secret a spustite migrácie/seed podľa [SETUP.md](SETUP.md)
 3. Databázové migrácie prebehnú automaticky
 4. Seed dáta sa načítajú automaticky
 
-## Demo účty (po nastavení Clerk)
+## Demo účty (po nastavení autentifikácie)
 
 - **Manažér**: manager@cellqos.com (plný prístup)
 - **Zamestnanci**:
   - anna@cellqos.com
   - peter@cellqos.com
   - lucia@cellqos.com
+
+Predvolené heslo pre demo účty: `Password123!`
 
 ## Architektúra
 

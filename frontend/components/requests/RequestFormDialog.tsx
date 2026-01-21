@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
 import type { LeaveType } from "~backend/shared/types";
 import {
   Dialog,
@@ -29,6 +29,7 @@ interface RequestFormDialogProps {
 }
 
 export default function RequestFormDialog({ open, onClose, request }: RequestFormDialogProps) {
+  const backend = useBackend();
   const { toast } = useToast();
   const { register, handleSubmit, setValue, watch } = useForm({
     defaultValues: {

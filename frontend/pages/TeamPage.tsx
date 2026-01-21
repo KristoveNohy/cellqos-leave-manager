@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import backend from "~backend/client";
-import { Card } from "@/components/ui/card";
+import { useBackend } from "@/lib/backend";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import RequestsList from "@/components/requests/RequestsList";
 
 export default function TeamPage() {
+  const backend = useBackend();
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => backend.teams.list(),

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ interface ApprovalInboxProps {
 }
 
 export default function ApprovalInbox({ requests, isLoading, onUpdate }: ApprovalInboxProps) {
+  const backend = useBackend();
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [comment, setComment] = useState("");

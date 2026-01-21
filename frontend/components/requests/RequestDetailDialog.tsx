@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ interface RequestDetailDialogProps {
 }
 
 export default function RequestDetailDialog({ request, open, onClose }: RequestDetailDialogProps) {
+  const backend = useBackend();
   const { toast } = useToast();
   
   const submitMutation = useMutation({

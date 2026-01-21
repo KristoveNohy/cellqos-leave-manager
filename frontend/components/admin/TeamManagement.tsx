@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 
 export default function TeamManagement() {
+  const backend = useBackend();
   const { data, isLoading } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => backend.teams.list(),

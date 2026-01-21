@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import backend from "~backend/client";
+import { useBackend } from "@/lib/backend";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 
 export default function HolidayManagement() {
+  const backend = useBackend();
   const currentYear = new Date().getFullYear();
   
   const { data, isLoading } = useQuery({

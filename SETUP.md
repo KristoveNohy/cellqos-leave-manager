@@ -32,6 +32,23 @@ npm install -g bun
 
 Backend bude dostupný na adrese zobrazené v termináli (typicky `http://localhost:4000`).
 
+### Prisma migrácie a seed
+
+Prisma schéma sa nachádza v `backend/prisma/schema.prisma`. Pred prvým spustením nastavte JWT secret pre Encore:
+
+```bash
+encore secret set JwtSecret
+```
+
+Migrácie a seed spustite v `backend`:
+
+```bash
+cd backend
+npx prisma generate
+npx prisma migrate dev
+npx prisma db seed
+```
+
 ### Frontend
 
 1. Prejdite do priečinka frontendu:
@@ -50,6 +67,17 @@ Backend bude dostupný na adrese zobrazené v termináli (typicky `http://localh
    ```
 
 Frontend bude dostupný na `http://localhost:5173` (alebo na najbližšom voľnom porte).
+
+### Autentifikácia
+
+Aplikácia používa email + heslo, voliteľne magic link. API endpointy:
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/magic-link`
+- `POST /auth/magic-link/verify`
+
+Demo účty používajú heslo `Password123!`.
 
 ### Generovanie frontend klienta
 
