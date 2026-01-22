@@ -103,6 +103,13 @@ export function createApiClient(token: string | null) {
       remove: (data: { id: number }) =>
         apiRequest<any>(`/leave-requests/${data.id}`, { method: "DELETE", token }),
     },
+    leave_balances: {
+      me: () =>
+        apiRequest<{ year: number; allowanceDays: number; usedDays: number; remainingDays: number }>(
+          "/leave-balances/me",
+          { token }
+        ),
+    },
     notifications: {
       list: () => apiRequest<{ notifications: any[] }>("/notifications", { token }),
       read: (data: { id: number }) =>
