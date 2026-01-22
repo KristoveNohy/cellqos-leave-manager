@@ -20,6 +20,7 @@ interface CalendarEvent {
   title: string;
   start: Date;
   end: Date;
+  allDay?: boolean;
   resource: any;
 }
 
@@ -93,8 +94,9 @@ export default function CalendarPage() {
   const holidayEvents: CalendarEvent[] = (holidayData?.holidays || []).map((holiday) => ({
     id: `holiday-${holiday.id}`,
     title: `Sviatok: ${holiday.name}`,
-    start: new Date(holiday.date),
-    end: moment(holiday.date).add(1, "day").toDate(),
+    start: moment(holiday.date).startOf("day").toDate(),
+    end: moment(holiday.date).startOf("day").add(1, "day").toDate(),
+    allDay: true,
     resource: { ...holiday, kind: "HOLIDAY" },
   }));
   const calendarEvents = [...events, ...holidayEvents];
