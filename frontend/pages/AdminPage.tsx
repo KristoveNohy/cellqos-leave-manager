@@ -3,6 +3,7 @@ import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
 import HolidayManagement from "@/components/admin/HolidayManagement";
 import DatabaseManagement from "@/components/admin/DatabaseManagement";
+import VacationPolicyManagement from "@/components/admin/VacationPolicyManagement";
 
 export default function AdminPage() {
   return (
@@ -16,6 +17,7 @@ export default function AdminPage() {
           <TabsTrigger value="users">Používatelia</TabsTrigger>
           <TabsTrigger value="teams">Tímy</TabsTrigger>
           <TabsTrigger value="holidays">Sviatky</TabsTrigger>
+          <TabsTrigger value="policies">Politiky</TabsTrigger>
           <TabsTrigger value="database">Databáza</TabsTrigger>
         </TabsList>
         
@@ -29,6 +31,10 @@ export default function AdminPage() {
         
         <TabsContent value="holidays" className="mt-6">
           <HolidayManagement />
+        </TabsContent>
+
+        <TabsContent value="policies" className="mt-6">
+          <VacationPolicyManagement />
         </TabsContent>
 
         <TabsContent value="database" className="mt-6">

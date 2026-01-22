@@ -73,7 +73,14 @@ export function createApiClient(token: string | null) {
     users: {
       list: () => apiRequest<{ users: any[] }>("/users", { token }),
       me: () => apiRequest<any>("/users/me", { token }),
-      create: (data: { email: string; name: string; role?: string; teamId?: number | null }) =>
+      create: (data: {
+        email: string;
+        name: string;
+        role?: string;
+        teamId?: number | null;
+        birthDate?: string | null;
+        hasChild?: boolean;
+      }) =>
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>
         apiRequest<any>(`/users/${data.id}`, { method: "PATCH", body: data, token }),
@@ -102,6 +109,13 @@ export function createApiClient(token: string | null) {
         apiRequest<any>(`/leave-requests/${data.id}/cancel`, { method: "POST", token }),
       remove: (data: { id: number }) =>
         apiRequest<any>(`/leave-requests/${data.id}`, { method: "DELETE", token }),
+    },
+    leave_balances: {
+      me: () =>
+        apiRequest<{ year: number; allowanceDays: number; usedDays: number; remainingDays: number }>(
+          "/leave-balances/me",
+          { token }
+        ),
     },
     notifications: {
       list: () => apiRequest<{ notifications: any[] }>("/notifications", { token }),

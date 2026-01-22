@@ -24,6 +24,8 @@ CREATE TABLE users (
   name TEXT NOT NULL,
   role user_role NOT NULL DEFAULT 'EMPLOYEE',
   team_id BIGINT REFERENCES teams(id),
+  birth_date DATE,
+  has_child BOOLEAN NOT NULL DEFAULT FALSE,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()

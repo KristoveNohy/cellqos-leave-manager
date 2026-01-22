@@ -4,6 +4,7 @@ import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
 import { computeWorkingDays } from "../shared/date-utils";
 import { createAuditLog } from "../shared/audit";
+import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import type { LeaveRequest, LeaveType } from "../shared/types";
 
 interface CreateLeaveRequestRequest {
@@ -40,6 +41,14 @@ export const create = api(
       req.isHalfDayEnd || false,
       holidayDates
     );
+
+    if (req.type === "ANNUAL_LEAVE") {
+      await ensureAnnualLeaveBalance({
+        userId,
+        startDate: req.startDate,
+        requestedDays: computedDays,
+      });
+    }
     
     const result = await db.queryRow<{ id: number }>`
       INSERT INTO leave_requests (

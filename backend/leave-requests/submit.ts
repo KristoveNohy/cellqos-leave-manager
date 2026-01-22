@@ -2,6 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog, createNotification } from "../shared/audit";
+import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import type { LeaveRequest } from "../shared/types";
 
 interface SubmitLeaveRequestParams {
@@ -58,6 +59,15 @@ export const submit = api(
       throw APIError.failedPrecondition(
         "Request overlaps with existing pending or approved request"
       );
+    }
+
+    if (request.type === "ANNUAL_LEAVE") {
+      await ensureAnnualLeaveBalance({
+        userId: request.userId,
+        startDate: request.startDate,
+        requestedDays: request.computedDays,
+        requestId: request.id,
+      });
     }
     
     await db.exec`

@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,6 +37,8 @@ type UserFormValues = {
   email: string;
   role: "EMPLOYEE" | "MANAGER";
   teamId: string;
+  birthDate: string;
+  hasChild: boolean;
 };
 
 export default function UserManagement() {
@@ -58,11 +61,20 @@ export default function UserManagement() {
       email: "",
       role: "EMPLOYEE",
       teamId: "none",
+      birthDate: "",
+      hasChild: false,
     },
   });
 
   const createMutation = useMutation({
-    mutationFn: async (payload: { email: string; name: string; role: string; teamId?: number | null }) =>
+    mutationFn: async (payload: {
+      email: string;
+      name: string;
+      role: string;
+      teamId?: number | null;
+      birthDate?: string | null;
+      hasChild?: boolean;
+    }) =>
       backend.users.create(payload),
     onSuccess: () => {
       toast({ title: "Používateľ bol vytvorený." });
@@ -123,7 +135,7 @@ export default function UserManagement() {
 
   const openCreate = () => {
     setEditingUser(null);
-    reset({ name: "", email: "", role: "EMPLOYEE", teamId: "none" });
+    reset({ name: "", email: "", role: "EMPLOYEE", teamId: "none", birthDate: "", hasChild: false });
     setDialogOpen(true);
   };
 
@@ -134,6 +146,8 @@ export default function UserManagement() {
       email: user.email ?? "",
       role: user.role ?? "EMPLOYEE",
       teamId: user.teamId ? String(user.teamId) : "none",
+      birthDate: user.birthDate ? String(user.birthDate).slice(0, 10) : "",
+      hasChild: Boolean(user.hasChild),
     });
     setDialogOpen(true);
   };
@@ -151,6 +165,8 @@ export default function UserManagement() {
       name: values.name.trim(),
       role: values.role,
       teamId: values.teamId !== "none" ? Number(values.teamId) : null,
+      birthDate: values.birthDate ? values.birthDate : null,
+      hasChild: values.hasChild,
     };
 
     if (editingUser) {
@@ -178,6 +194,8 @@ export default function UserManagement() {
             <TableHead>Email</TableHead>
             <TableHead>Rola</TableHead>
             <TableHead>Tím</TableHead>
+            <TableHead>Narodenie</TableHead>
+            <TableHead>Dieťa</TableHead>
             <TableHead>Stav</TableHead>
             <TableHead className="text-right">Akcie</TableHead>
           </TableRow>
@@ -195,6 +213,10 @@ export default function UserManagement() {
                   </Badge>
                 </TableCell>
                 <TableCell>{teamName || "Bez tímu"}</TableCell>
+                <TableCell>
+                  {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—"}
+                </TableCell>
+                <TableCell>{user.hasChild ? "Áno" : "Nie"}</TableCell>
                 <TableCell>
                   <Badge variant={user.isActive ? "default" : "destructive"}>
                     {user.isActive ? "Aktívny" : "Neaktívny"}
@@ -277,6 +299,20 @@ export default function UserManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="user-birth-date">Dátum narodenia</Label>
+                <Input id="user-birth-date" type="date" {...register("birthDate")} />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <Checkbox
+                  id="user-has-child"
+                  checked={watch("hasChild")}
+                  onCheckedChange={(value) => setValue("hasChild", Boolean(value))}
+                />
+                <Label htmlFor="user-has-child">Má dieťa</Label>
               </div>
             </div>
             <div className="flex justify-end gap-2">

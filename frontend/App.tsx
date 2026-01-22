@@ -10,6 +10,7 @@ import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import MagicLinkPage from "./pages/MagicLinkPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import ProfilePage from "./pages/ProfilePage";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import type { UserRole } from "~backend/shared/types";
 
@@ -71,6 +72,14 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <NotificationsPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <RequireAuth>
+                      <ProfilePage />
                     </RequireAuth>
                   }
                 />
