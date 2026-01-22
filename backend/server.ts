@@ -123,7 +123,7 @@ async function ensureSlovakHolidaysForYear(year: number, actorUserId: string): P
   const seeds = getSlovakHolidaySeeds(year);
   const existingRows = await queryRows<{ date: string }>(
     `
-      SELECT date::text as date
+      SELECT date::date::text as date
       FROM holidays
       WHERE EXTRACT(YEAR FROM date) = $1
     `,
@@ -141,7 +141,7 @@ async function ensureSlovakHolidaysForYear(year: number, actorUserId: string): P
         INSERT INTO holidays (date, name, is_company_holiday, is_active)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (date) DO NOTHING
-        RETURNING id, date::text as date, name,
+        RETURNING id, date::date::text as date, name,
           is_company_holiday as "isCompanyHoliday",
           is_active as "isActive",
           created_at as "createdAt"
@@ -803,7 +803,7 @@ app.get("/holidays", asyncHandler(async (req, res) => {
 
   const holidays = await queryRows<Holiday>(
     `
-      SELECT id, date::text as date, name,
+      SELECT id, date::date::text as date, name,
         is_company_holiday as "isCompanyHoliday",
         is_active as "isActive",
         created_at as "createdAt"
@@ -864,7 +864,7 @@ app.post("/holidays", asyncHandler(async (req, res) => {
 
   const holiday = await queryRow<Holiday>(
     `
-      SELECT id, date::text as date, name,
+      SELECT id, date::date::text as date, name,
         is_company_holiday as "isCompanyHoliday",
         is_active as "isActive",
         created_at as "createdAt"
@@ -947,7 +947,7 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
 
   const holiday = await queryRow<Holiday>(
     `
-      SELECT id, date::text as date, name,
+      SELECT id, date::date::text as date, name,
         is_company_holiday as "isCompanyHoliday",
         is_active as "isActive",
         created_at as "createdAt"

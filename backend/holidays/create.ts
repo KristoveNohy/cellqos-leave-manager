@@ -41,7 +41,7 @@ export const create = api(
       
       const holiday = await db.queryRow<Holiday>`
         SELECT 
-          id, date::text as date, name,
+          id, date::date::text as date, name,
           is_company_holiday as "isCompanyHoliday",
           is_active as "isActive",
           created_at as "createdAt"

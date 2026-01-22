@@ -27,7 +27,7 @@ export const list = api(
     if (year) {
       const seeds = getSlovakHolidaySeeds(year);
       const existingRows = await db.queryAll<{ date: string }>`
-        SELECT date::text as date FROM holidays
+        SELECT date::date::text as date FROM holidays
         WHERE EXTRACT(YEAR FROM date) = ${year}
       `;
       const existingDates = new Set(existingRows.map((row) => row.date));
@@ -40,7 +40,7 @@ export const list = api(
           INSERT INTO holidays (date, name, is_company_holiday, is_active)
           VALUES (${seed.date}, ${seed.name}, ${seed.isCompanyHoliday}, ${true})
           ON CONFLICT (date) DO NOTHING
-          RETURNING id, date::text as date, name,
+          RETURNING id, date::date::text as date, name,
             is_company_holiday as "isCompanyHoliday",
             is_active as "isActive",
             created_at as "createdAt"
@@ -54,7 +54,7 @@ export const list = api(
     if (year) {
       for await (const row of db.query<Holiday>`
         SELECT 
-          id, date::text as date, name,
+          id, date::date::text as date, name,
           is_company_holiday as "isCompanyHoliday",
           is_active as "isActive",
           created_at as "createdAt"
@@ -68,7 +68,7 @@ export const list = api(
     } else {
       for await (const row of db.query<Holiday>`
         SELECT 
-          id, date::text as date, name,
+          id, date::date::text as date, name,
           is_company_holiday as "isCompanyHoliday",
           is_active as "isActive",
           created_at as "createdAt"
