@@ -133,6 +133,15 @@ async function createEntityAuditLog(
 }
 
 async function getVacationPolicy(): Promise<VacationPolicy> {
+  const policySupport = await getVacationPolicySupport();
+  if (!policySupport.hasPolicyColumns) {
+    return {
+      accrualPolicy: "YEAR_START",
+      carryOverEnabled: false,
+      carryOverLimitDays: 0,
+    };
+  }
+
   const policy = await queryRow<{
     accrualPolicy: VacationAccrualPolicy;
     carryOverEnabled: boolean;
@@ -157,7 +166,66 @@ async function getVacationPolicy(): Promise<VacationPolicy> {
   );
 }
 
+type UserColumnSupport = {
+  employmentStartDate: boolean;
+  manualLeaveAllowanceDays: boolean;
+};
+
+type VacationPolicyColumnSupport = {
+  hasPolicyColumns: boolean;
+};
+
+const columnSupportCache = new Map<string, boolean>();
+
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const cacheKey = `${table}.${column}`;
+  const cached = columnSupportCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const result = await queryRow<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = $1
+          AND column_name = $2
+      ) as "exists"
+    `,
+    [table, column]
+  );
+  const exists = Boolean(result?.exists);
+  columnSupportCache.set(cacheKey, exists);
+  return exists;
+}
+
+async function getUserColumnSupport(): Promise<UserColumnSupport> {
+  const [employmentStartDate, manualLeaveAllowanceDays] = await Promise.all([
+    columnExists("users", "employment_start_date"),
+    columnExists("users", "manual_leave_allowance_days"),
+  ]);
+
+  return {
+    employmentStartDate,
+    manualLeaveAllowanceDays,
+  };
+}
+
+async function getVacationPolicySupport(): Promise<VacationPolicyColumnSupport> {
+  const [accrualPolicy, carryOverEnabled, carryOverLimitDays] = await Promise.all([
+    columnExists("settings", "annual_leave_accrual_policy"),
+    columnExists("settings", "carry_over_enabled"),
+    columnExists("settings", "carry_over_limit_days"),
+  ]);
+
+  return {
+    hasPolicyColumns: accrualPolicy && carryOverEnabled && carryOverLimitDays,
+  };
+}
+
 async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Promise<number> {
+  const columnSupport = await getUserColumnSupport();
   const user = await queryRow<{
     birthDate: string | null;
     hasChild: boolean;
@@ -167,8 +235,8 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
     `
       SELECT birth_date::text as "birthDate",
         has_child as "hasChild",
-        employment_start_date::text as "employmentStartDate",
-        manual_leave_allowance_days as "manualLeaveAllowanceDays"
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays"
       FROM users
       WHERE id = $1
     `,
@@ -528,14 +596,15 @@ app.post("/auth/magic-link/verify", asyncHandler(async (req, res) => {
 
 app.get("/users/me", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const columnSupport = await getUserColumnSupport();
   const user = await queryRow<User>(
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        employment_start_date::text as "employmentStartDate",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        manual_leave_allowance_days as "manualLeaveAllowanceDays",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -581,15 +650,16 @@ app.get("/leave-balances/me", asyncHandler(async (req, res) => {
 app.get("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
+  const columnSupport = await getUserColumnSupport();
 
   const users = await queryRows<User>(
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        employment_start_date::text as "employmentStartDate",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        manual_leave_allowance_days as "manualLeaveAllowanceDays",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -604,6 +674,7 @@ app.get("/users", asyncHandler(async (req, res) => {
 app.post("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
+  const columnSupport = await getUserColumnSupport();
   const { email, name, role, teamId, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceDays } = req.body as {
     email?: string;
     name?: string;
@@ -631,25 +702,28 @@ app.post("/users", asyncHandler(async (req, res) => {
   }
 
   try {
+    const columns = ["id", "email", "name", "role", "team_id", "birth_date", "has_child", "created_at", "updated_at"];
+    const values: any[] = [userId, email, name, userRole, teamId ?? null, birthDate ?? null, hasChild ?? false];
+
+    if (columnSupport.employmentStartDate) {
+      columns.splice(5, 0, "employment_start_date");
+      values.splice(5, 0, employmentStartDate ?? null);
+    }
+
+    if (columnSupport.manualLeaveAllowanceDays) {
+      columns.splice(columnSupport.employmentStartDate ? 7 : 6, 0, "manual_leave_allowance_days");
+      values.splice(columnSupport.employmentStartDate ? 7 : 6, 0, manualLeaveAllowanceDays ?? null);
+    }
+
+    const placeholders: string[] = values.map((_value, index) => `$${index + 1}`);
+    placeholders.push("NOW()", "NOW()");
+
     await pool.query(
       `
-        INSERT INTO users (
-          id, email, name, role, team_id, employment_start_date, birth_date, has_child,
-          manual_leave_allowance_days, created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        INSERT INTO users (${columns.join(", ")})
+        VALUES (${placeholders.join(", ")})
       `,
-      [
-        userId,
-        email,
-        name,
-        userRole,
-        teamId ?? null,
-        employmentStartDate ?? null,
-        birthDate ?? null,
-        hasChild ?? false,
-        manualLeaveAllowanceDays ?? null,
-      ]
+      values
     );
   } catch (error) {
     if (error instanceof Error && error.message.includes("duplicate key")) {
@@ -662,10 +736,10 @@ app.post("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        employment_start_date::text as "employmentStartDate",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        manual_leave_allowance_days as "manualLeaveAllowanceDays",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -688,6 +762,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
   const { id } = req.params;
+  const columnSupport = await getUserColumnSupport();
   const { email, name, role, teamId, isActive, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceDays } = req.body as {
     email?: string;
     name?: string;
@@ -728,7 +803,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     updates.push(`team_id = $${values.length + 1}`);
     values.push(teamId ?? null);
   }
-  if (employmentStartDate !== undefined) {
+  if (columnSupport.employmentStartDate && employmentStartDate !== undefined) {
     updates.push(`employment_start_date = $${values.length + 1}`);
     values.push(employmentStartDate);
   }
@@ -740,7 +815,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     updates.push(`has_child = $${values.length + 1}`);
     values.push(hasChild);
   }
-  if (manualLeaveAllowanceDays !== undefined) {
+  if (columnSupport.manualLeaveAllowanceDays && manualLeaveAllowanceDays !== undefined) {
     if (manualLeaveAllowanceDays !== null && (Number.isNaN(manualLeaveAllowanceDays) || manualLeaveAllowanceDays < 0)) {
       throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
     }
@@ -765,10 +840,10 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        employment_start_date::text as "employmentStartDate",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        manual_leave_allowance_days as "manualLeaveAllowanceDays",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -2204,6 +2279,11 @@ app.get("/admin/vacation-policy", asyncHandler(async (req, res) => {
 app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
+
+  const policySupport = await getVacationPolicySupport();
+  if (!policySupport.hasPolicyColumns) {
+    throw new HttpError(409, "Vacation policy settings are unavailable. Run database migrations.");
+  }
 
   const before = await getVacationPolicy();
   const payload = req.body as Partial<VacationPolicy>;
