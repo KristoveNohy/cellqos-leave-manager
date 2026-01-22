@@ -8,8 +8,24 @@ import { computeWorkingDays, parseDate } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
-import { computeAnnualLeaveAllowance } from "./shared/leave-entitlement";
-import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog, Notification } from "./shared/types";
+import {
+  computeAnnualLeaveAllowance,
+  computeCarryOverDays,
+  getAnnualLeaveGroupAllowance,
+} from "./shared/leave-entitlement";
+import type {
+  LeaveRequest,
+  LeaveStatus,
+  LeaveType,
+  Team,
+  User,
+  Holiday,
+  UserRole,
+  AuditLog,
+  Notification,
+  VacationPolicy,
+  VacationAccrualPolicy,
+} from "./shared/types";
 import { HttpError } from "./shared/http-error";
 
 const app = express();
@@ -114,6 +130,173 @@ async function createEntityAuditLog(
       after ? JSON.stringify(after) : null,
     ]
   );
+}
+
+async function getVacationPolicy(): Promise<VacationPolicy> {
+  const policySupport = await getVacationPolicySupport();
+  if (!policySupport.hasPolicyColumns) {
+    return {
+      accrualPolicy: "YEAR_START",
+      carryOverEnabled: false,
+      carryOverLimitDays: 0,
+    };
+  }
+
+  const policy = await queryRow<{
+    accrualPolicy: VacationAccrualPolicy;
+    carryOverEnabled: boolean;
+    carryOverLimitDays: number;
+  }>(
+    `
+      SELECT
+        annual_leave_accrual_policy as "accrualPolicy",
+        carry_over_enabled as "carryOverEnabled",
+        carry_over_limit_days as "carryOverLimitDays"
+      FROM settings
+      LIMIT 1
+    `
+  );
+
+  return (
+    policy ?? {
+      accrualPolicy: "YEAR_START",
+      carryOverEnabled: false,
+      carryOverLimitDays: 0,
+    }
+  );
+}
+
+type UserColumnSupport = {
+  employmentStartDate: boolean;
+  manualLeaveAllowanceDays: boolean;
+};
+
+type VacationPolicyColumnSupport = {
+  hasPolicyColumns: boolean;
+};
+
+const columnSupportCache = new Map<string, boolean>();
+
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const cacheKey = `${table}.${column}`;
+  const cached = columnSupportCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const result = await queryRow<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = $1
+          AND column_name = $2
+      ) as "exists"
+    `,
+    [table, column]
+  );
+  const exists = Boolean(result?.exists);
+  columnSupportCache.set(cacheKey, exists);
+  return exists;
+}
+
+async function getUserColumnSupport(): Promise<UserColumnSupport> {
+  const [employmentStartDate, manualLeaveAllowanceDays] = await Promise.all([
+    columnExists("users", "employment_start_date"),
+    columnExists("users", "manual_leave_allowance_days"),
+  ]);
+
+  return {
+    employmentStartDate,
+    manualLeaveAllowanceDays,
+  };
+}
+
+async function getVacationPolicySupport(): Promise<VacationPolicyColumnSupport> {
+  const [accrualPolicy, carryOverEnabled, carryOverLimitDays] = await Promise.all([
+    columnExists("settings", "annual_leave_accrual_policy"),
+    columnExists("settings", "carry_over_enabled"),
+    columnExists("settings", "carry_over_limit_days"),
+  ]);
+
+  return {
+    hasPolicyColumns: accrualPolicy && carryOverEnabled && carryOverLimitDays,
+  };
+}
+
+async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Promise<number> {
+  const columnSupport = await getUserColumnSupport();
+  const user = await queryRow<{
+    birthDate: string | null;
+    hasChild: boolean;
+    employmentStartDate: string | null;
+    manualLeaveAllowanceDays: number | null;
+  }>(
+    `
+      SELECT birth_date::text as "birthDate",
+        has_child as "hasChild",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays"
+      FROM users
+      WHERE id = $1
+    `,
+    [userId]
+  );
+
+  if (!user) {
+    return 0;
+  }
+
+  const policy = await getVacationPolicy();
+
+  const baseAllowance = computeAnnualLeaveAllowance({
+    birthDate: user.birthDate,
+    hasChild: user.hasChild,
+    year,
+    employmentStartDate: user.employmentStartDate,
+    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    accrualPolicy: policy.accrualPolicy,
+  });
+
+  if (!policy.carryOverEnabled) {
+    return baseAllowance;
+  }
+
+  const previousYear = year - 1;
+  const previousAllowance = computeAnnualLeaveAllowance({
+    birthDate: user.birthDate,
+    hasChild: user.hasChild,
+    year: previousYear,
+    employmentStartDate: user.employmentStartDate,
+    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    accrualPolicy: policy.accrualPolicy,
+  });
+
+  const previousUsed = await queryRow<{ total: number }>(
+    `
+      SELECT COALESCE(SUM(computed_days), 0) as total
+      FROM leave_requests
+      WHERE user_id = $1
+        AND type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = $2
+    `,
+    [userId, previousYear]
+  );
+
+  const carryOverLimit = getAnnualLeaveGroupAllowance({
+    birthDate: user.birthDate,
+    hasChild: user.hasChild,
+    year,
+  });
+
+  const carryOverDays = computeCarryOverDays({
+    previousAllowance,
+    previousUsed: Number(previousUsed?.total ?? 0),
+    carryOverLimit,
+  });
+
+  return baseAllowance + carryOverDays;
 }
 
 function parseBooleanFlag(value: unknown): boolean {
@@ -231,6 +414,7 @@ type DatabaseBackup = {
     leave_requests: Record<string, unknown>[];
     holidays: Record<string, unknown>[];
     leave_balances: Record<string, unknown>[];
+    settings: Record<string, unknown>[];
     audit_logs: Record<string, unknown>[];
     notifications: Record<string, unknown>[];
   };
@@ -412,12 +596,15 @@ app.post("/auth/magic-link/verify", asyncHandler(async (req, res) => {
 
 app.get("/users/me", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const columnSupport = await getUserColumnSupport();
   const user = await queryRow<User>(
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -437,15 +624,6 @@ app.get("/users/me", asyncHandler(async (req, res) => {
 app.get("/leave-balances/me", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const currentYear = new Date().getFullYear();
-  const user = await queryRow<{ birthDate: string | null; hasChild: boolean }>(
-    `
-      SELECT birth_date::text as "birthDate",
-        has_child as "hasChild"
-      FROM users
-      WHERE id = $1
-    `,
-    [auth.userID]
-  );
   const booked = await queryRow<{ total: number }>(
     `
       SELECT COALESCE(SUM(computed_days), 0) as total
@@ -458,11 +636,7 @@ app.get("/leave-balances/me", asyncHandler(async (req, res) => {
     [auth.userID, currentYear]
   );
 
-  const allowanceDays = computeAnnualLeaveAllowance({
-    birthDate: user?.birthDate ?? null,
-    hasChild: user?.hasChild ?? false,
-    year: currentYear,
-  });
+  const allowanceDays = await getAnnualLeaveAllowanceForUser(auth.userID, currentYear);
   const usedDays = Number(booked?.total ?? 0);
 
   res.json({
@@ -476,13 +650,16 @@ app.get("/leave-balances/me", asyncHandler(async (req, res) => {
 app.get("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
+  const columnSupport = await getUserColumnSupport();
 
   const users = await queryRows<User>(
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -497,13 +674,16 @@ app.get("/users", asyncHandler(async (req, res) => {
 app.post("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
-  const { email, name, role, teamId, birthDate, hasChild } = req.body as {
+  const columnSupport = await getUserColumnSupport();
+  const { email, name, role, teamId, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceDays } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
     teamId?: number | null;
     birthDate?: string | null;
     hasChild?: boolean;
+    employmentStartDate?: string | null;
+    manualLeaveAllowanceDays?: number | null;
   };
 
   if (!email || !name) {
@@ -515,15 +695,35 @@ app.post("/users", asyncHandler(async (req, res) => {
   const userId = randomUUID();
   const userRole: UserRole = role ?? "EMPLOYEE";
 
+  if (manualLeaveAllowanceDays !== undefined && manualLeaveAllowanceDays !== null) {
+    if (Number.isNaN(manualLeaveAllowanceDays) || manualLeaveAllowanceDays < 0) {
+      throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
+    }
+  }
+
   try {
+    const columns = ["id", "email", "name", "role", "team_id", "birth_date", "has_child", "created_at", "updated_at"];
+    const values: any[] = [userId, email, name, userRole, teamId ?? null, birthDate ?? null, hasChild ?? false];
+
+    if (columnSupport.employmentStartDate) {
+      columns.splice(5, 0, "employment_start_date");
+      values.splice(5, 0, employmentStartDate ?? null);
+    }
+
+    if (columnSupport.manualLeaveAllowanceDays) {
+      columns.splice(columnSupport.employmentStartDate ? 7 : 6, 0, "manual_leave_allowance_days");
+      values.splice(columnSupport.employmentStartDate ? 7 : 6, 0, manualLeaveAllowanceDays ?? null);
+    }
+
+    const placeholders: string[] = values.map((_value, index) => `$${index + 1}`);
+    placeholders.push("NOW()", "NOW()");
+
     await pool.query(
       `
-        INSERT INTO users (
-          id, email, name, role, team_id, birth_date, has_child, created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        INSERT INTO users (${columns.join(", ")})
+        VALUES (${placeholders.join(", ")})
       `,
-      [userId, email, name, userRole, teamId ?? null, birthDate ?? null, hasChild ?? false]
+      values
     );
   } catch (error) {
     if (error instanceof Error && error.message.includes("duplicate key")) {
@@ -536,8 +736,10 @@ app.post("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -560,7 +762,8 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
   const { id } = req.params;
-  const { email, name, role, teamId, isActive, birthDate, hasChild } = req.body as {
+  const columnSupport = await getUserColumnSupport();
+  const { email, name, role, teamId, isActive, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceDays } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
@@ -568,6 +771,8 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     isActive?: boolean;
     birthDate?: string | null;
     hasChild?: boolean;
+    employmentStartDate?: string | null;
+    manualLeaveAllowanceDays?: number | null;
   };
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [id]);
@@ -598,6 +803,10 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     updates.push(`team_id = $${values.length + 1}`);
     values.push(teamId ?? null);
   }
+  if (columnSupport.employmentStartDate && employmentStartDate !== undefined) {
+    updates.push(`employment_start_date = $${values.length + 1}`);
+    values.push(employmentStartDate);
+  }
   if (birthDate !== undefined) {
     updates.push(`birth_date = $${values.length + 1}`);
     values.push(birthDate);
@@ -605,6 +814,13 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   if (hasChild !== undefined) {
     updates.push(`has_child = $${values.length + 1}`);
     values.push(hasChild);
+  }
+  if (columnSupport.manualLeaveAllowanceDays && manualLeaveAllowanceDays !== undefined) {
+    if (manualLeaveAllowanceDays !== null && (Number.isNaN(manualLeaveAllowanceDays) || manualLeaveAllowanceDays < 0)) {
+      throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
+    }
+    updates.push(`manual_leave_allowance_days = $${values.length + 1}`);
+    values.push(manualLeaveAllowanceDays);
   }
   if (isActive !== undefined) {
     updates.push(`is_active = $${values.length + 1}`);
@@ -624,8 +840,10 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
+        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -2050,6 +2268,64 @@ app.post("/notifications/read-all", asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+app.get("/admin/vacation-policy", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+
+  const policy = await getVacationPolicy();
+  res.json({ policy });
+}));
+
+app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+
+  const policySupport = await getVacationPolicySupport();
+  if (!policySupport.hasPolicyColumns) {
+    throw new HttpError(409, "Vacation policy settings are unavailable. Run database migrations.");
+  }
+
+  const before = await getVacationPolicy();
+  const payload = req.body as Partial<VacationPolicy>;
+  const accrualPolicy = payload.accrualPolicy ?? before.accrualPolicy;
+  const carryOverEnabled =
+    typeof payload.carryOverEnabled === "boolean" ? payload.carryOverEnabled : before.carryOverEnabled;
+  const carryOverLimitDays =
+    typeof payload.carryOverLimitDays === "number" ? payload.carryOverLimitDays : before.carryOverLimitDays;
+
+  if (!["YEAR_START", "PRO_RATA"].includes(accrualPolicy)) {
+    throw new HttpError(400, "Invalid accrual policy.");
+  }
+
+  if (Number.isNaN(carryOverLimitDays) || carryOverLimitDays < 0) {
+    throw new HttpError(400, "Carry-over limit must be a non-negative number.");
+  }
+
+  const updated = await queryRow<VacationPolicy>(
+    `
+      UPDATE settings
+      SET annual_leave_accrual_policy = $1,
+          carry_over_enabled = $2,
+          carry_over_limit_days = $3,
+          updated_at = NOW()
+      WHERE id = 1
+      RETURNING
+        annual_leave_accrual_policy as "accrualPolicy",
+        carry_over_enabled as "carryOverEnabled",
+        carry_over_limit_days as "carryOverLimitDays"
+    `,
+    [accrualPolicy, carryOverEnabled, carryOverLimitDays]
+  );
+
+  if (!updated) {
+    throw new HttpError(500, "Failed to update vacation policy.");
+  }
+
+  await createEntityAuditLog(auth.userID, "settings", 1, "UPDATE", before, updated);
+
+  res.json({ policy: updated });
+}));
+
 app.get("/admin/database/export", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
@@ -2060,6 +2336,7 @@ app.get("/admin/database/export", asyncHandler(async (req, res) => {
     leave_requests: await queryRows<Record<string, unknown>>("SELECT * FROM leave_requests ORDER BY id ASC"),
     holidays: await queryRows<Record<string, unknown>>("SELECT * FROM holidays ORDER BY id ASC"),
     leave_balances: await queryRows<Record<string, unknown>>("SELECT * FROM leave_balances ORDER BY id ASC"),
+    settings: await queryRows<Record<string, unknown>>("SELECT * FROM settings ORDER BY id ASC"),
     audit_logs: await queryRows<Record<string, unknown>>("SELECT * FROM audit_logs ORDER BY id ASC"),
     notifications: await queryRows<Record<string, unknown>>("SELECT * FROM notifications ORDER BY id ASC"),
   };
@@ -2104,6 +2381,7 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
     "leave_requests",
     "holidays",
     "leave_balances",
+    "settings",
     "audit_logs",
     "notifications",
   ] as const;
@@ -2121,7 +2399,7 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
   try {
     await client.query("BEGIN");
     await client.query(
-      "TRUNCATE teams, users, leave_requests, holidays, leave_balances, audit_logs, notifications RESTART IDENTITY CASCADE"
+      "TRUNCATE teams, users, leave_requests, holidays, leave_balances, settings, audit_logs, notifications RESTART IDENTITY CASCADE"
     );
 
     await insertRows(client, "teams", backup.tables.teams);
@@ -2129,6 +2407,7 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
     await insertRows(client, "holidays", backup.tables.holidays);
     await insertRows(client, "leave_balances", backup.tables.leave_balances);
     await insertRows(client, "leave_requests", backup.tables.leave_requests);
+    await insertRows(client, "settings", backup.tables.settings);
     await insertRows(client, "audit_logs", backup.tables.audit_logs);
     await insertRows(client, "notifications", backup.tables.notifications);
 

@@ -14,14 +14,20 @@ export type LeaveStatus =
   | "REJECTED" 
   | "CANCELLED";
 
+export type VacationAccrualPolicy =
+  | "YEAR_START"
+  | "PRO_RATA";
+
 export interface User {
   id: string;
   email: string;
   name: string;
   role: UserRole;
   teamId: number | null;
+  employmentStartDate: string | null;
   birthDate: string | null;
   hasChild: boolean;
+  manualLeaveAllowanceDays: number | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -95,4 +101,10 @@ export interface Notification {
   sentAt: Date | null;
   readAt: Date | null;
   createdAt: Date;
+}
+
+export interface VacationPolicy {
+  accrualPolicy: VacationAccrualPolicy;
+  carryOverEnabled: boolean;
+  carryOverLimitDays: number;
 }

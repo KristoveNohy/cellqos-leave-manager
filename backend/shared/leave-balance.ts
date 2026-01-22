@@ -1,11 +1,22 @@
 import { APIError } from "encore.dev/api";
 import db from "../db";
-import { computeAnnualLeaveAllowance } from "./leave-entitlement";
+import {
+  computeAnnualLeaveAllowance,
+  computeCarryOverDays,
+  getAnnualLeaveGroupAllowance,
+} from "./leave-entitlement";
 
-async function getAnnualLeaveAllowance(userId: string, year: number): Promise<number> {
-  const user = await db.queryRow<{ birthDate: string | null; hasChild: boolean }>`
+export async function getAnnualLeaveAllowance(userId: string, year: number): Promise<number> {
+  const user = await db.queryRow<{
+    birthDate: string | null;
+    hasChild: boolean;
+    employmentStartDate: string | null;
+    manualLeaveAllowanceDays: number | null;
+  }>`
     SELECT birth_date::text as "birthDate",
-      has_child as "hasChild"
+      has_child as "hasChild",
+      employment_start_date::text as "employmentStartDate",
+      manual_leave_allowance_days as "manualLeaveAllowanceDays"
     FROM users
     WHERE id = ${userId}
   `;
@@ -14,11 +25,64 @@ async function getAnnualLeaveAllowance(userId: string, year: number): Promise<nu
     return 0;
   }
 
-  return computeAnnualLeaveAllowance({
+  const policy = await db.queryRow<{
+    accrualPolicy: "YEAR_START" | "PRO_RATA";
+    carryOverEnabled: boolean;
+  }>`
+    SELECT annual_leave_accrual_policy as "accrualPolicy",
+      carry_over_enabled as "carryOverEnabled"
+    FROM settings
+    LIMIT 1
+  `;
+
+  const accrualPolicy = policy?.accrualPolicy ?? "YEAR_START";
+  const carryOverEnabled = policy?.carryOverEnabled ?? false;
+
+  const baseAllowance = computeAnnualLeaveAllowance({
+    birthDate: user.birthDate,
+    hasChild: user.hasChild,
+    year,
+    employmentStartDate: user.employmentStartDate,
+    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    accrualPolicy,
+  });
+
+  if (!carryOverEnabled) {
+    return baseAllowance;
+  }
+
+  const previousYear = year - 1;
+  const previousAllowance = computeAnnualLeaveAllowance({
+    birthDate: user.birthDate,
+    hasChild: user.hasChild,
+    year: previousYear,
+    employmentStartDate: user.employmentStartDate,
+    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    accrualPolicy,
+  });
+
+  const previousUsed = await db.queryRow<{ total: number }>`
+    SELECT COALESCE(SUM(computed_days), 0) as total
+    FROM leave_requests
+    WHERE user_id = ${userId}
+      AND type = 'ANNUAL_LEAVE'
+      AND status IN ('PENDING', 'APPROVED')
+      AND EXTRACT(YEAR FROM start_date) = ${previousYear}
+  `;
+
+  const carryOverLimit = getAnnualLeaveGroupAllowance({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
   });
+
+  const carryOverDays = computeCarryOverDays({
+    previousAllowance,
+    previousUsed: Number(previousUsed?.total ?? 0),
+    carryOverLimit,
+  });
+
+  return baseAllowance + carryOverDays;
 }
 
 type AnnualLeaveBalanceCheck = {
