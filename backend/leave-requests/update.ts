@@ -80,6 +80,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       for await (const holiday of db.query<{ date: string }>`
         SELECT date::text as date FROM holidays
         WHERE date >= ${newStartDate} AND date <= ${newEndDate}
+          AND is_active = true
       `) {
         holidayDates.add(holiday.date);
       }

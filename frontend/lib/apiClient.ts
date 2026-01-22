@@ -52,9 +52,9 @@ export function createApiClient(token: string | null) {
         apiRequest<{ events: any[] }>(`/calendar${toQuery(params)}`, { token }),
     },
     holidays: {
-      list: (params: { year?: number }) =>
+      list: (params: { year?: number; includeInactive?: boolean }) =>
         apiRequest<{ holidays: any[] }>(`/holidays${toQuery(params)}`, { token }),
-      create: (data: { date: string; name: string; isCompanyHoliday?: boolean }) =>
+      create: (data: { date: string; name: string; isCompanyHoliday?: boolean; isActive?: boolean }) =>
         apiRequest<any>("/holidays", { method: "POST", body: data, token }),
       update: (data: { id: number } & Record<string, unknown>) =>
         apiRequest<any>(`/holidays/${data.id}`, { method: "PATCH", body: data, token }),

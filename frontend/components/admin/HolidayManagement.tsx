@@ -29,6 +29,7 @@ type HolidayFormValues = {
   date: string;
   name: string;
   isCompanyHoliday: boolean;
+  isActive: boolean;
 };
 
 export default function HolidayManagement() {
@@ -41,19 +42,24 @@ export default function HolidayManagement() {
   
   const { data, isLoading } = useQuery({
     queryKey: ["holidays", currentYear],
-    queryFn: async () => backend.holidays.list({ year: currentYear }),
+    queryFn: async () => backend.holidays.list({ year: currentYear, includeInactive: true }),
   });
   const { register, handleSubmit, setValue, watch, reset } = useForm<HolidayFormValues>({
     defaultValues: {
       date: "",
       name: "",
       isCompanyHoliday: true,
+      isActive: true,
     },
   });
 
   const createMutation = useMutation({
-    mutationFn: async (payload: { date: string; name: string; isCompanyHoliday: boolean }) =>
-      backend.holidays.create(payload),
+    mutationFn: async (payload: {
+      date: string;
+      name: string;
+      isCompanyHoliday: boolean;
+      isActive: boolean;
+    }) => backend.holidays.create(payload),
     onSuccess: () => {
       toast({ title: "Sviatok bol pridaný." });
       queryClient.invalidateQueries({ queryKey: ["holidays", currentYear] });
@@ -108,7 +114,7 @@ export default function HolidayManagement() {
 
   const openCreate = () => {
     setEditingHoliday(null);
-    reset({ date: "", name: "", isCompanyHoliday: true });
+    reset({ date: "", name: "", isCompanyHoliday: true, isActive: true });
     setDialogOpen(true);
   };
 
@@ -118,6 +124,7 @@ export default function HolidayManagement() {
       date: holiday.date ?? "",
       name: holiday.name ?? "",
       isCompanyHoliday: Boolean(holiday.isCompanyHoliday),
+      isActive: holiday.isActive ?? true,
     });
     setDialogOpen(true);
   };
@@ -134,6 +141,7 @@ export default function HolidayManagement() {
       date: values.date,
       name: values.name.trim(),
       isCompanyHoliday: values.isCompanyHoliday,
+      isActive: values.isActive,
     };
 
     if (editingHoliday) {
@@ -160,6 +168,7 @@ export default function HolidayManagement() {
             <TableHead>Dátum</TableHead>
             <TableHead>Názov</TableHead>
             <TableHead>Typ</TableHead>
+            <TableHead>Stav</TableHead>
             <TableHead className="text-right">Akcie</TableHead>
           </TableRow>
         </TableHeader>
@@ -171,6 +180,11 @@ export default function HolidayManagement() {
               <TableCell>
                 <Badge variant={holiday.isCompanyHoliday ? "default" : "secondary"}>
                   {holiday.isCompanyHoliday ? "Firemný" : "Voliteľný"}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <Badge variant={holiday.isActive ? "default" : "secondary"}>
+                  {holiday.isActive ? "Aktívny" : "Vypnutý"}
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
@@ -223,6 +237,16 @@ export default function HolidayManagement() {
               />
               <Label htmlFor="holiday-company" className="font-normal">
                 Firemný sviatok
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="holiday-active"
+                checked={watch("isActive")}
+                onCheckedChange={(checked) => setValue("isActive", checked as boolean)}
+              />
+              <Label htmlFor="holiday-active" className="font-normal">
+                Aktívny sviatok
               </Label>
             </div>
             <div className="flex justify-end gap-2">

@@ -57,6 +57,7 @@ export interface Holiday {
   date: string;
   name: string;
   isCompanyHoliday: boolean;
+  isActive: boolean;
   createdAt: Date;
 }
 

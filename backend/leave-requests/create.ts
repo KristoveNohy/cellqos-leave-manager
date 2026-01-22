@@ -28,6 +28,7 @@ export const create = api(
     for await (const holiday of db.query<{ date: string }>`
       SELECT date::text as date FROM holidays
       WHERE date >= ${req.startDate} AND date <= ${req.endDate}
+        AND is_active = true
     `) {
       holidayDates.add(holiday.date);
     }
