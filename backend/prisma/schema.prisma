@@ -144,3 +144,14 @@ model Notification {
 
   @@map("notifications")
 }
+
+model Setting {
+  id                         Int      @id @default(1)
+  showTeamCalendarForEmployees Boolean  @default(false) @map("show_team_calendar_for_employees")
+  annualLeaveAccrualPolicy   String   @default("YEAR_START") @map("annual_leave_accrual_policy")
+  carryOverEnabled           Boolean  @default(false) @map("carry_over_enabled")
+  carryOverLimitDays         Float    @default(0) @map("carry_over_limit_days")
+  updatedAt                  DateTime @default(now()) @map("updated_at")
+
+  @@map("settings")
+}
