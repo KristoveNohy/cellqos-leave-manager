@@ -80,6 +80,8 @@ export function createApiClient(token: string | null) {
         teamId?: number | null;
         birthDate?: string | null;
         hasChild?: boolean;
+        employmentStartDate?: string | null;
+        manualLeaveAllowanceDays?: number | null;
       }) =>
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>

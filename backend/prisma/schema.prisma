@@ -52,8 +52,10 @@ model User {
   role               UserRole @default(EMPLOYEE)
   teamId             BigInt?  @map("team_id")
   team               Team?    @relation(fields: [teamId], references: [id])
+  employmentStartDate DateTime? @map("employment_start_date") @db.Date
   birthDate          DateTime? @map("birth_date") @db.Date
   hasChild           Boolean  @default(false) @map("has_child")
+  manualLeaveAllowanceDays Float? @map("manual_leave_allowance_days")
   isActive           Boolean  @default(true) @map("is_active")
   passwordHash       String?  @map("password_hash")
   magicLinkTokenHash String?  @map("magic_link_token_hash")

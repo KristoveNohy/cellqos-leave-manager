@@ -6,7 +6,6 @@ import { useBackend } from "@/lib/backend";
 import { useToast } from "@/components/ui/use-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -20,7 +19,6 @@ import {
 type VacationPolicyFormValues = {
   accrualPolicy: VacationAccrualPolicy;
   carryOverEnabled: boolean;
-  carryOverLimitDays: string;
 };
 
 export default function VacationPolicyManagement() {
@@ -30,11 +28,10 @@ export default function VacationPolicyManagement() {
     queryKey: ["vacation-policy"],
     queryFn: () => backend.vacation_policy.get(),
   });
-  const { register, handleSubmit, reset, setValue, watch } = useForm<VacationPolicyFormValues>({
+  const { handleSubmit, reset, setValue, watch } = useForm<VacationPolicyFormValues>({
     defaultValues: {
       accrualPolicy: "YEAR_START",
       carryOverEnabled: false,
-      carryOverLimitDays: "0",
     },
   });
 
@@ -50,7 +47,6 @@ export default function VacationPolicyManagement() {
       reset({
         accrualPolicy: policy.accrualPolicy,
         carryOverEnabled: policy.carryOverEnabled,
-        carryOverLimitDays: String(policy.carryOverLimitDays ?? 0),
       });
     },
     onError: (error: any) => {
@@ -67,7 +63,6 @@ export default function VacationPolicyManagement() {
       reset({
         accrualPolicy: data.policy.accrualPolicy,
         carryOverEnabled: data.policy.carryOverEnabled,
-        carryOverLimitDays: String(data.policy.carryOverLimitDays ?? 0),
       });
     }
   }, [data, reset]);
@@ -76,17 +71,11 @@ export default function VacationPolicyManagement() {
     return <div className="text-center py-12">Načítava sa...</div>;
   }
 
-  const carryOverEnabled = watch("carryOverEnabled");
-
   const onSubmit = (values: VacationPolicyFormValues) => {
-    const carryOverLimitDays = values.carryOverEnabled
-      ? Number(values.carryOverLimitDays || 0)
-      : 0;
-
     updateMutation.mutate({
       accrualPolicy: values.accrualPolicy,
       carryOverEnabled: values.carryOverEnabled,
-      carryOverLimitDays,
+      carryOverLimitDays: 0,
     });
   };
 
@@ -122,25 +111,14 @@ export default function VacationPolicyManagement() {
           <div className="flex items-center gap-2">
             <Checkbox
               id="carry-over-enabled"
-              checked={carryOverEnabled}
+              checked={watch("carryOverEnabled")}
               onCheckedChange={(value) => setValue("carryOverEnabled", Boolean(value))}
             />
             <Label htmlFor="carry-over-enabled">Povoliť prenos nevyčerpanej dovolenky</Label>
           </div>
-          <div className="space-y-1 max-w-xs">
-            <Label htmlFor="carry-over-limit">Limit prenosu (dni)</Label>
-            <Input
-              id="carry-over-limit"
-              type="number"
-              min={0}
-              step="0.5"
-              disabled={!carryOverEnabled}
-              {...register("carryOverLimitDays")}
-            />
-            <p className="text-xs text-muted-foreground">
-              Nastavte maximálny počet dní, ktoré je možné preniesť do ďalšieho obdobia.
-            </p>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Prenášať sa môže maximálne výška ročného nároku (20 alebo 25 dní podľa skupiny).
+          </p>
         </div>
 
         <div className="flex justify-end">

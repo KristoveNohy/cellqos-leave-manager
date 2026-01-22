@@ -37,8 +37,10 @@ type UserFormValues = {
   email: string;
   role: "EMPLOYEE" | "MANAGER";
   teamId: string;
+  employmentStartDate: string;
   birthDate: string;
   hasChild: boolean;
+  manualLeaveAllowanceDays: string;
 };
 
 export default function UserManagement() {
@@ -61,8 +63,10 @@ export default function UserManagement() {
       email: "",
       role: "EMPLOYEE",
       teamId: "none",
+      employmentStartDate: "",
       birthDate: "",
       hasChild: false,
+      manualLeaveAllowanceDays: "",
     },
   });
 
@@ -74,6 +78,8 @@ export default function UserManagement() {
       teamId?: number | null;
       birthDate?: string | null;
       hasChild?: boolean;
+      employmentStartDate?: string | null;
+      manualLeaveAllowanceDays?: number | null;
     }) =>
       backend.users.create(payload),
     onSuccess: () => {
@@ -135,7 +141,16 @@ export default function UserManagement() {
 
   const openCreate = () => {
     setEditingUser(null);
-    reset({ name: "", email: "", role: "EMPLOYEE", teamId: "none", birthDate: "", hasChild: false });
+    reset({
+      name: "",
+      email: "",
+      role: "EMPLOYEE",
+      teamId: "none",
+      employmentStartDate: "",
+      birthDate: "",
+      hasChild: false,
+      manualLeaveAllowanceDays: "",
+    });
     setDialogOpen(true);
   };
 
@@ -146,8 +161,12 @@ export default function UserManagement() {
       email: user.email ?? "",
       role: user.role ?? "EMPLOYEE",
       teamId: user.teamId ? String(user.teamId) : "none",
+      employmentStartDate: user.employmentStartDate ? String(user.employmentStartDate).slice(0, 10) : "",
       birthDate: user.birthDate ? String(user.birthDate).slice(0, 10) : "",
       hasChild: Boolean(user.hasChild),
+      manualLeaveAllowanceDays: user.manualLeaveAllowanceDays !== null && user.manualLeaveAllowanceDays !== undefined
+        ? String(user.manualLeaveAllowanceDays)
+        : "",
     });
     setDialogOpen(true);
   };
@@ -165,8 +184,12 @@ export default function UserManagement() {
       name: values.name.trim(),
       role: values.role,
       teamId: values.teamId !== "none" ? Number(values.teamId) : null,
+      employmentStartDate: values.employmentStartDate ? values.employmentStartDate : null,
       birthDate: values.birthDate ? values.birthDate : null,
       hasChild: values.hasChild,
+      manualLeaveAllowanceDays: values.manualLeaveAllowanceDays
+        ? Number(values.manualLeaveAllowanceDays)
+        : null,
     };
 
     if (editingUser) {
@@ -194,8 +217,10 @@ export default function UserManagement() {
             <TableHead>Email</TableHead>
             <TableHead>Rola</TableHead>
             <TableHead>Tím</TableHead>
+            <TableHead>Nástup</TableHead>
             <TableHead>Narodenie</TableHead>
             <TableHead>Dieťa</TableHead>
+            <TableHead>Manuálny nárok</TableHead>
             <TableHead>Stav</TableHead>
             <TableHead className="text-right">Akcie</TableHead>
           </TableRow>
@@ -214,9 +239,13 @@ export default function UserManagement() {
                 </TableCell>
                 <TableCell>{teamName || "Bez tímu"}</TableCell>
                 <TableCell>
+                  {user.employmentStartDate ? new Date(user.employmentStartDate).toLocaleDateString() : "—"}
+                </TableCell>
+                <TableCell>
                   {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—"}
                 </TableCell>
                 <TableCell>{user.hasChild ? "Áno" : "Nie"}</TableCell>
+                <TableCell>{user.manualLeaveAllowanceDays ?? "—"}</TableCell>
                 <TableCell>
                   <Badge variant={user.isActive ? "default" : "destructive"}>
                     {user.isActive ? "Aktívny" : "Neaktívny"}
@@ -313,6 +342,23 @@ export default function UserManagement() {
                   onCheckedChange={(value) => setValue("hasChild", Boolean(value))}
                 />
                 <Label htmlFor="user-has-child">Má dieťa</Label>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="user-start-date">Dátum nástupu</Label>
+                <Input id="user-start-date" type="date" {...register("employmentStartDate")} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="user-manual-allowance">Manuálny nárok (dni)</Label>
+                <Input
+                  id="user-manual-allowance"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  placeholder="Napr. 12.5"
+                  {...register("manualLeaveAllowanceDays")}
+                />
               </div>
             </div>
             <div className="flex justify-end gap-2">

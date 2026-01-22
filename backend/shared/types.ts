@@ -24,8 +24,10 @@ export interface User {
   name: string;
   role: UserRole;
   teamId: number | null;
+  employmentStartDate: string | null;
   birthDate: string | null;
   hasChild: boolean;
+  manualLeaveAllowanceDays: number | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
