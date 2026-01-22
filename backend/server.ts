@@ -4,7 +4,7 @@ import cors from "cors";
 import { Pool, type PoolClient } from "pg";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
-import { computeWorkingDays, parseDate } from "./shared/date-utils";
+import { computeWorkingHours, HOURS_PER_WORKDAY, parseDate } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
@@ -249,7 +249,7 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
 
   const policy = await getVacationPolicy();
 
-  const baseAllowance = computeAnnualLeaveAllowance({
+  const baseAllowanceDays = computeAnnualLeaveAllowance({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
@@ -259,11 +259,11 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
   });
 
   if (!policy.carryOverEnabled) {
-    return baseAllowance;
+    return baseAllowanceDays * HOURS_PER_WORKDAY;
   }
 
   const previousYear = year - 1;
-  const previousAllowance = computeAnnualLeaveAllowance({
+  const previousAllowanceDays = computeAnnualLeaveAllowance({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year: previousYear,
@@ -291,12 +291,12 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
   });
 
   const carryOverDays = computeCarryOverDays({
-    previousAllowance,
-    previousUsed: Number(previousUsed?.total ?? 0),
+    previousAllowance: previousAllowanceDays,
+    previousUsed: Number(previousUsed?.total ?? 0) / HOURS_PER_WORKDAY,
     carryOverLimit,
   });
 
-  return baseAllowance + carryOverDays;
+  return (baseAllowanceDays + carryOverDays) * HOURS_PER_WORKDAY;
 }
 
 function parseBooleanFlag(value: unknown): boolean {
@@ -1446,7 +1446,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   );
 
   const holidayDates = new Set(holidayRows.map((h) => h.date));
-  const computedDays = computeWorkingDays(
+  const computedDays = computeWorkingHours(
     startDate,
     endDate,
     isHalfDayStart ?? false,
@@ -1579,7 +1579,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     );
 
     const holidayDates = new Set(holidayRows.map((h) => h.date));
-    computedDays = computeWorkingDays(
+    computedDays = computeWorkingHours(
       newStartDate,
       newEndDate,
       isHalfDayStart ?? before.isHalfDayStart,

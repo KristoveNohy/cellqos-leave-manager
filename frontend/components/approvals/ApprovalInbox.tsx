@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
+import { formatLeaveHours } from "@/lib/leaveFormat";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -212,15 +213,15 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
 
                 <div className="text-sm text-muted-foreground space-y-1">
                   <div>
-                    {request.startDate} – {request.endDate} ({request.computedDays} dní)
+                    {request.startDate} – {request.endDate} ({formatLeaveHours(request.computedDays)})
                   </div>
                   {request.userName && (
                     <div>Žiadateľ: {request.userName}</div>
                   )}
                   {request.currentBalanceDays !== null && request.currentBalanceDays !== undefined && (
                     <div>
-                      Zostatok: {request.currentBalanceDays} dní · Po schválení:{" "}
-                      {request.balanceAfterApprovalDays ?? "—"} dní
+                      Zostatok: {formatLeaveHours(request.currentBalanceDays)} · Po schválení:{" "}
+                      {formatLeaveHours(request.balanceAfterApprovalDays)}
                     </div>
                   )}
                 </div>

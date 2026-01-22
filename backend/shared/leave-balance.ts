@@ -5,6 +5,8 @@ import {
   computeCarryOverDays,
   getAnnualLeaveGroupAllowance,
 } from "./leave-entitlement";
+import { HOURS_PER_WORKDAY } from "./date-utils";
+import { formatLeaveHours } from "./leave-format";
 
 export async function getAnnualLeaveAllowance(userId: string, year: number): Promise<number> {
   const user = await db.queryRow<{
@@ -38,7 +40,7 @@ export async function getAnnualLeaveAllowance(userId: string, year: number): Pro
   const accrualPolicy = policy?.accrualPolicy ?? "YEAR_START";
   const carryOverEnabled = policy?.carryOverEnabled ?? false;
 
-  const baseAllowance = computeAnnualLeaveAllowance({
+  const baseAllowanceDays = computeAnnualLeaveAllowance({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
@@ -48,11 +50,11 @@ export async function getAnnualLeaveAllowance(userId: string, year: number): Pro
   });
 
   if (!carryOverEnabled) {
-    return baseAllowance;
+    return baseAllowanceDays * HOURS_PER_WORKDAY;
   }
 
   const previousYear = year - 1;
-  const previousAllowance = computeAnnualLeaveAllowance({
+  const previousAllowanceDays = computeAnnualLeaveAllowance({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year: previousYear,
@@ -77,33 +79,33 @@ export async function getAnnualLeaveAllowance(userId: string, year: number): Pro
   });
 
   const carryOverDays = computeCarryOverDays({
-    previousAllowance,
-    previousUsed: Number(previousUsed?.total ?? 0),
+    previousAllowance: previousAllowanceDays,
+    previousUsed: Number(previousUsed?.total ?? 0) / HOURS_PER_WORKDAY,
     carryOverLimit,
   });
 
-  return baseAllowance + carryOverDays;
+  return (baseAllowanceDays + carryOverDays) * HOURS_PER_WORKDAY;
 }
 
 type AnnualLeaveBalanceCheck = {
   userId: string;
   startDate: string;
-  requestedDays: number;
+  requestedHours: number;
   requestId?: number | null;
 };
 
 export async function ensureAnnualLeaveBalance({
   userId,
   startDate,
-  requestedDays,
+  requestedHours,
   requestId,
 }: AnnualLeaveBalanceCheck): Promise<void> {
-  if (requestedDays <= 0) {
+  if (requestedHours <= 0) {
     return;
   }
 
   const year = new Date(startDate).getFullYear();
-  const allowanceDays = await getAnnualLeaveAllowance(userId, year);
+  const allowanceHours = await getAnnualLeaveAllowance(userId, year);
 
   const booked = requestId
     ? await db.queryRow<{ total: number }>`
@@ -124,12 +126,12 @@ export async function ensureAnnualLeaveBalance({
           AND EXTRACT(YEAR FROM start_date) = EXTRACT(YEAR FROM ${startDate}::date)
       `;
 
-  const bookedDays = Number(booked?.total ?? 0);
-  const availableDays = allowanceDays - bookedDays;
+  const bookedHours = Number(booked?.total ?? 0);
+  const availableHours = allowanceHours - bookedHours;
 
-  if (requestedDays > availableDays) {
+  if (requestedHours > availableHours) {
     throw APIError.failedPrecondition(
-      `Nedostatok dostupnej dovolenky. Zostatok: ${availableDays} dní.`
+      `Nedostatok dostupnej dovolenky. Zostatok: ${formatLeaveHours(availableHours)}.`
     );
   }
 }

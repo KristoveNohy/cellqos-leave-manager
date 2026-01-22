@@ -2,7 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
-import { computeWorkingDays } from "../shared/date-utils";
+import { computeWorkingHours } from "../shared/date-utils";
 import { createAuditLog, createNotification } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import { canEditRequest } from "../shared/rbac";
@@ -75,7 +75,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       }
     }
     
-    let computedDays = before.computedDays;
+    let computedHours = before.computedDays;
     if (startDate || endDate || isHalfDayStart !== undefined || isHalfDayEnd !== undefined) {
       const holidayDates = new Set<string>();
       for await (const holiday of db.query<{ date: string }>`
@@ -86,7 +86,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         holidayDates.add(holiday.date);
       }
       
-      computedDays = computeWorkingDays(
+      computedHours = computeWorkingHours(
         newStartDate,
         newEndDate,
         isHalfDayStart ?? before.isHalfDayStart,
@@ -100,7 +100,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       await ensureAnnualLeaveBalance({
         userId: before.userId,
         startDate: newStartDate,
-        requestedDays: computedDays,
+        requestedHours: computedHours,
         requestId: id,
       });
     }
@@ -136,9 +136,9 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       updates.push(`manager_comment = $${values.length + 1}`);
       values.push(managerComment || null);
     }
-    if (computedDays !== before.computedDays) {
+    if (computedHours !== before.computedDays) {
       updates.push(`computed_days = $${values.length + 1}`);
-      values.push(computedDays);
+      values.push(computedHours);
     }
     
     if (updates.length > 0) {

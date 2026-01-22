@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
 import { useAuth } from "@/lib/auth";
+import { formatLeaveHours } from "@/lib/leaveFormat";
 import {
   Dialog,
   DialogContent,
@@ -219,7 +220,7 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
             <div className="text-sm text-muted-foreground mb-1">Trvanie</div>
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{request.computedDays} pracovných dní</span>
+              <span>{formatLeaveHours(request.computedDays)} pracovného času</span>
             </div>
           </div>
           
