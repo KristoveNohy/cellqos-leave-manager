@@ -51,6 +51,8 @@ export default function RequestFormDialog({
       type: request?.type || "ANNUAL_LEAVE",
       startDate: request?.startDate || initialStartDate || "",
       endDate: request?.endDate || initialEndDate || "",
+      startTime: request?.startTime || "",
+      endTime: request?.endTime || "",
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
@@ -69,6 +71,8 @@ export default function RequestFormDialog({
       type: request?.type || "ANNUAL_LEAVE",
       startDate: request?.startDate || initialStartDate || "",
       endDate: request?.endDate || initialEndDate || "",
+      startTime: request?.startTime || "",
+      endTime: request?.endTime || "",
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
@@ -226,6 +230,16 @@ export default function RequestFormDialog({
             <div>
               <Label>Koniec</Label>
               <Input type="date" {...register("endDate")} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Príchod</Label>
+              <Input type="time" {...register("startTime")} />
+            </div>
+            <div>
+              <Label>Odchod</Label>
+              <Input type="time" {...register("endTime")} />
             </div>
           </div>
           {holidaysInRange.length > 0 && (

@@ -11,6 +11,8 @@ interface CreateLeaveRequestRequest {
   type: LeaveType;
   startDate: string;
   endDate: string;
+  startTime?: string | null;
+  endTime?: string | null;
   isHalfDayStart?: boolean;
   isHalfDayEnd?: boolean;
   reason?: string;
@@ -52,7 +54,7 @@ export const create = api(
     
     const result = await db.queryRow<{ id: number }>`
       INSERT INTO leave_requests (
-        user_id, type, start_date, end_date,
+        user_id, type, start_date, end_date, start_time, end_time,
         is_half_day_start, is_half_day_end,
         reason, computed_days, status,
         created_at, updated_at
@@ -61,6 +63,8 @@ export const create = api(
         ${req.type},
         ${req.startDate},
         ${req.endDate},
+        ${req.startTime || null},
+        ${req.endTime || null},
         ${req.isHalfDayStart || false},
         ${req.isHalfDayEnd || false},
         ${req.reason || null},
@@ -77,6 +81,8 @@ export const create = api(
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",

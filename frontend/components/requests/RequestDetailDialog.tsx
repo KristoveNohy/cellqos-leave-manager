@@ -37,6 +37,8 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   const isManager = user?.role === "MANAGER";
   const { toast } = useToast();
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const startTimeLabel = request.startTime ? request.startTime.slice(0, 5) : null;
+  const endTimeLabel = request.endTime ? request.endTime.slice(0, 5) : null;
   
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -199,6 +201,7 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span>{request.startDate}</span>
+                {startTimeLabel && <span className="text-muted-foreground">• {startTimeLabel}</span>}
                 {request.isHalfDayStart && (
                   <Badge variant="outline" className="text-xs">Poldeň</Badge>
                 )}
@@ -209,6 +212,7 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span>{request.endDate}</span>
+                {endTimeLabel && <span className="text-muted-foreground">• {endTimeLabel}</span>}
                 {request.isHalfDayEnd && (
                   <Badge variant="outline" className="text-xs">Poldeň</Badge>
                 )}
