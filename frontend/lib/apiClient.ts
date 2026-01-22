@@ -1,5 +1,5 @@
 import { apiBaseUrl } from "@/lib/auth";
-import type { LeaveStatus, LeaveType } from "~backend/shared/types";
+import type { LeaveStatus, LeaveType, VacationPolicy } from "~backend/shared/types";
 
 interface RequestOptions {
   method?: string;
@@ -127,6 +127,11 @@ export function createApiClient(token: string | null) {
       export: () => apiRequest<any>("/admin/database/export", { token }),
       import: (payload: { backup: any; confirm: string }) =>
         apiRequest<any>("/admin/database/import", { method: "POST", body: payload, token }),
+    },
+    vacation_policy: {
+      get: () => apiRequest<{ policy: VacationPolicy }>("/admin/vacation-policy", { token }),
+      update: (data: Partial<VacationPolicy>) =>
+        apiRequest<{ policy: VacationPolicy }>("/admin/vacation-policy", { method: "PATCH", body: data, token }),
     },
   };
 }
