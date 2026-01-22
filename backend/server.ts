@@ -5,6 +5,7 @@ import { Pool, type PoolClient } from "pg";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
 import { computeWorkingDays, parseDate } from "./shared/date-utils";
+import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
 import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog, Notification } from "./shared/types";
@@ -112,6 +113,53 @@ async function createEntityAuditLog(
       after ? JSON.stringify(after) : null,
     ]
   );
+}
+
+function parseBooleanFlag(value: unknown): boolean {
+  return value === "true" || value === "1" || value === true;
+}
+
+async function ensureSlovakHolidaysForYear(year: number, actorUserId: string): Promise<void> {
+  const seeds = getSlovakHolidaySeeds(year);
+  const existingRows = await queryRows<{ date: string }>(
+    `
+      SELECT date::text as date
+      FROM holidays
+      WHERE EXTRACT(YEAR FROM date) = $1
+    `,
+    [year]
+  );
+  const existingDates = new Set(existingRows.map((row) => row.date));
+
+  for (const seed of seeds) {
+    if (existingDates.has(seed.date)) {
+      continue;
+    }
+
+    const holiday = await queryRow<Holiday>(
+      `
+        INSERT INTO holidays (date, name, is_company_holiday, is_active)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (date) DO NOTHING
+        RETURNING id, date::text as date, name,
+          is_company_holiday as "isCompanyHoliday",
+          is_active as "isActive",
+          created_at as "createdAt"
+      `,
+      [seed.date, seed.name, seed.isCompanyHoliday, true]
+    );
+
+    if (holiday) {
+      await createEntityAuditLog(
+        actorUserId,
+        "holidays",
+        holiday.id,
+        "CREATE",
+        null,
+        holiday as unknown as Record<string, unknown>
+      );
+    }
+  }
 }
 
 let notificationsDedupeKeySupported: boolean | null = null;
@@ -728,34 +776,43 @@ app.delete("/teams/:id", asyncHandler(async (req, res) => {
 }));
 
 app.get("/holidays", asyncHandler(async (req, res) => {
-  requireAuth(req.auth ?? null);
-  const year = req.query.year ? Number(req.query.year) : undefined;
-
-  let holidays: Holiday[] = [];
+  const auth = requireAuth(req.auth ?? null);
+  const yearParam = req.query.year;
+  const year = yearParam ? Number(yearParam) : undefined;
+  if (yearParam && !Number.isFinite(year)) {
+    throw new HttpError(400, "Invalid year");
+  }
+  const includeInactive = parseBooleanFlag(req.query.includeInactive);
 
   if (year) {
-    holidays = await queryRows<Holiday>(
-      `
-        SELECT id, date::text as date, name,
-          is_company_holiday as "isCompanyHoliday",
-          created_at as "createdAt"
-        FROM holidays
-        WHERE EXTRACT(YEAR FROM date) = $1
-        ORDER BY date ASC
-      `,
-      [year]
-    );
-  } else {
-    holidays = await queryRows<Holiday>(
-      `
-        SELECT id, date::text as date, name,
-          is_company_holiday as "isCompanyHoliday",
-          created_at as "createdAt"
-        FROM holidays
-        ORDER BY date ASC
-      `
-    );
+    await ensureSlovakHolidaysForYear(year, auth.userID);
   }
+
+  const conditions: string[] = [];
+  const values: any[] = [];
+
+  if (year) {
+    values.push(year);
+    conditions.push(`EXTRACT(YEAR FROM date) = $${values.length}`);
+  }
+  if (!includeInactive) {
+    conditions.push("is_active = true");
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const holidays = await queryRows<Holiday>(
+    `
+      SELECT id, date::text as date, name,
+        is_company_holiday as "isCompanyHoliday",
+        is_active as "isActive",
+        created_at as "createdAt"
+      FROM holidays
+      ${whereClause}
+      ORDER BY date ASC
+    `,
+    values
+  );
 
   res.json({ holidays });
 }));
@@ -763,14 +820,19 @@ app.get("/holidays", asyncHandler(async (req, res) => {
 app.post("/holidays", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
-  const { date, name, isCompanyHoliday } = req.body as {
+  const { date, name, isCompanyHoliday, isActive } = req.body as {
     date?: string;
     name?: string;
     isCompanyHoliday?: boolean;
+    isActive?: boolean;
   };
 
   if (!date || !name) {
     throw new HttpError(400, "Date and name are required");
+  }
+
+  if (isActive !== undefined && typeof isActive !== "boolean") {
+    throw new HttpError(400, "isActive must be a boolean");
   }
 
   try {
@@ -783,11 +845,11 @@ app.post("/holidays", asyncHandler(async (req, res) => {
   try {
     result = await queryRow<{ id: number }>(
       `
-        INSERT INTO holidays (date, name, is_company_holiday)
-        VALUES ($1, $2, $3)
+        INSERT INTO holidays (date, name, is_company_holiday, is_active)
+        VALUES ($1, $2, $3, $4)
         RETURNING id
       `,
-      [date, name, isCompanyHoliday ?? true]
+      [date, name, isCompanyHoliday ?? true, isActive ?? true]
     );
   } catch (error) {
     if (error instanceof Error && error.message.includes("duplicate key")) {
@@ -804,6 +866,7 @@ app.post("/holidays", asyncHandler(async (req, res) => {
     `
       SELECT id, date::text as date, name,
         is_company_holiday as "isCompanyHoliday",
+        is_active as "isActive",
         created_at as "createdAt"
       FROM holidays
       WHERE id = $1
@@ -824,10 +887,11 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
   const id = Number(req.params.id);
-  const { date, name, isCompanyHoliday } = req.body as {
+  const { date, name, isCompanyHoliday, isActive } = req.body as {
     date?: string;
     name?: string;
     isCompanyHoliday?: boolean;
+    isActive?: boolean;
   };
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM holidays WHERE id = $1", [id]);
@@ -841,6 +905,9 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : "Invalid date");
     }
+  }
+  if (isActive !== undefined && typeof isActive !== "boolean") {
+    throw new HttpError(400, "isActive must be a boolean");
   }
 
   const updates: string[] = [];
@@ -857,6 +924,10 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
   if (isCompanyHoliday !== undefined) {
     updates.push(`is_company_holiday = $${values.length + 1}`);
     values.push(isCompanyHoliday);
+  }
+  if (isActive !== undefined) {
+    updates.push(`is_active = $${values.length + 1}`);
+    values.push(isActive);
   }
 
   if (updates.length > 0) {
@@ -878,6 +949,7 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
     `
       SELECT id, date::text as date, name,
         is_company_holiday as "isCompanyHoliday",
+        is_active as "isActive",
         created_at as "createdAt"
       FROM holidays
       WHERE id = $1
@@ -1017,6 +1089,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     `
       SELECT date::text as date FROM holidays
       WHERE date >= $1 AND date <= $2
+        AND is_active = true
     `,
     [startDate, endDate]
   );
@@ -1149,6 +1222,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
       `
         SELECT date::text as date FROM holidays
         WHERE date >= $1 AND date <= $2
+          AND is_active = true
       `,
       [newStartDate, newEndDate]
     );
@@ -2046,6 +2120,13 @@ const port = Number(process.env.PORT ?? 4000);
 
 async function startServer() {
   await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+  await pool.query(`
+    ALTER TABLE holidays
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_holidays_active ON holidays(is_active)
+  `);
   app.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(`API server listening on http://localhost:${port}`);
