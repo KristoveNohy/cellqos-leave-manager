@@ -2,7 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
-import { computeWorkingDays } from "../shared/date-utils";
+import { computeWorkingHours } from "../shared/date-utils";
 import { createAuditLog, createNotification } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import { canEditRequest } from "../shared/rbac";
@@ -13,6 +13,8 @@ interface UpdateLeaveRequestParams {
   type?: LeaveType;
   startDate?: string;
   endDate?: string;
+  startTime?: string | null;
+  endTime?: string | null;
   isHalfDayStart?: boolean;
   isHalfDayEnd?: boolean;
   reason?: string;
@@ -22,13 +24,26 @@ interface UpdateLeaveRequestParams {
 export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
   { auth: true, expose: true, method: "PATCH", path: "/leave-requests/:id" },
   async (req): Promise<LeaveRequest> => {
-    const { id, type, startDate, endDate, isHalfDayStart, isHalfDayEnd, reason, managerComment } = req;
+    const {
+      id,
+      type,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      isHalfDayStart,
+      isHalfDayEnd,
+      reason,
+      managerComment,
+    } = req;
     const auth = getAuthData()!;
     const before = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -75,7 +90,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       }
     }
     
-    let computedDays = before.computedDays;
+    let computedHours = before.computedDays;
     if (startDate || endDate || isHalfDayStart !== undefined || isHalfDayEnd !== undefined) {
       const holidayDates = new Set<string>();
       for await (const holiday of db.query<{ date: string }>`
@@ -86,7 +101,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         holidayDates.add(holiday.date);
       }
       
-      computedDays = computeWorkingDays(
+      computedHours = computeWorkingHours(
         newStartDate,
         newEndDate,
         isHalfDayStart ?? before.isHalfDayStart,
@@ -100,7 +115,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       await ensureAnnualLeaveBalance({
         userId: before.userId,
         startDate: newStartDate,
-        requestedDays: computedDays,
+        requestedHours: computedHours,
         requestId: id,
       });
     }
@@ -120,6 +135,14 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       updates.push(`end_date = $${values.length + 1}`);
       values.push(endDate);
     }
+    if (startTime !== undefined) {
+      updates.push(`start_time = $${values.length + 1}`);
+      values.push(startTime || null);
+    }
+    if (endTime !== undefined) {
+      updates.push(`end_time = $${values.length + 1}`);
+      values.push(endTime || null);
+    }
     if (isHalfDayStart !== undefined) {
       updates.push(`is_half_day_start = $${values.length + 1}`);
       values.push(isHalfDayStart);
@@ -136,9 +159,9 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       updates.push(`manager_comment = $${values.length + 1}`);
       values.push(managerComment || null);
     }
-    if (computedDays !== before.computedDays) {
+    if (computedHours !== before.computedDays) {
       updates.push(`computed_days = $${values.length + 1}`);
-      values.push(computedDays);
+      values.push(computedHours);
     }
     
     if (updates.length > 0) {
@@ -154,6 +177,8 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",

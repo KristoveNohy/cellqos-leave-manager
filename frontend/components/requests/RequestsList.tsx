@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatLeaveHours } from "@/lib/leaveFormat";
 import { Eye } from "lucide-react";
 import RequestDetailDialog from "./RequestDetailDialog";
 
@@ -68,7 +69,7 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
-                  {request.startDate} – {request.endDate} ({request.computedDays} dní)
+                  {request.startDate} – {request.endDate} ({formatLeaveHours(request.computedDays)})
                 </div>
                 
                 {request.reason && (
