@@ -29,6 +29,10 @@ export default function CalendarPage() {
   const [view, setView] = useState<View>("month");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [selectedRange, setSelectedRange] = useState<{
+    startDate: string;
+    endDate: string;
+  } | null>(null);
   
   const getViewUnit = (v: View) => {
     if (v === "agenda" || v === "work_week") return "month";
@@ -74,12 +78,38 @@ export default function CalendarPage() {
       className: colors[status as keyof typeof colors] || "bg-blue-500",
     };
   };
+
+  const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
+    const startMoment = moment(start);
+    const endMoment = moment(end);
+    const isAllDayRange =
+      startMoment.hour() === 0 &&
+      startMoment.minute() === 0 &&
+      endMoment.hour() === 0 &&
+      endMoment.minute() === 0 &&
+      endMoment.diff(startMoment, "days") >= 1;
+    const adjustedEnd = isAllDayRange ? endMoment.clone().subtract(1, "day") : endMoment;
+    const startDate = startMoment.format("YYYY-MM-DD");
+    const endDate = adjustedEnd.format("YYYY-MM-DD");
+
+    setSelectedEvent(null);
+    setSelectedRange({
+      startDate,
+      endDate: endDate === startDate ? startDate : endDate,
+    });
+    setShowCreateDialog(true);
+  };
   
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Tímový kalendár</h1>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        <Button
+          onClick={() => {
+            setSelectedRange(null);
+            setShowCreateDialog(true);
+          }}
+        >
           <Plus className="h-4 w-4 mr-2" />
           Nová žiadosť
         </Button>
@@ -99,6 +129,8 @@ export default function CalendarPage() {
             onNavigate={setDate}
             eventPropGetter={eventStyleGetter}
             onSelectEvent={(event) => setSelectedEvent(event.resource)}
+            selectable
+            onSelectSlot={handleSelectSlot}
             messages={{
               allDay: "Celý deň",
               previous: "Späť",
@@ -123,6 +155,8 @@ export default function CalendarPage() {
         <RequestFormDialog
           open={showCreateDialog}
           onClose={() => setShowCreateDialog(false)}
+          initialStartDate={selectedRange?.startDate}
+          initialEndDate={selectedRange?.endDate}
         />
       )}
       
