@@ -20,6 +20,8 @@ export interface User {
   name: string;
   role: UserRole;
   teamId: number | null;
+  birthDate: string | null;
+  hasChild: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

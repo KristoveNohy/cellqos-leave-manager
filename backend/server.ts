@@ -8,6 +8,7 @@ import { computeWorkingDays, parseDate } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
+import { computeAnnualLeaveAllowance } from "./shared/leave-balance";
 import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog, Notification } from "./shared/types";
 import { HttpError } from "./shared/http-error";
 
@@ -415,6 +416,8 @@ app.get("/users/me", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        birth_date::text as "birthDate",
+        has_child as "hasChild",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -434,31 +437,15 @@ app.get("/users/me", asyncHandler(async (req, res) => {
 app.get("/leave-balances/me", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const currentYear = new Date().getFullYear();
-  const balance = await queryRow<{ allowanceDays: number; year: number }>(
+  const user = await queryRow<{ birthDate: string | null; hasChild: boolean }>(
     `
-      SELECT allowance_days as "allowanceDays",
-        year
-      FROM leave_balances
-      WHERE user_id = $1
-        AND year = $2
+      SELECT birth_date::text as "birthDate",
+        has_child as "hasChild"
+      FROM users
+      WHERE id = $1
     `,
-    [auth.userID, currentYear]
+    [auth.userID]
   );
-  const fallbackBalance = balance
-    ? null
-    : await queryRow<{ allowanceDays: number; year: number }>(
-        `
-          SELECT allowance_days as "allowanceDays",
-            year
-          FROM leave_balances
-          WHERE user_id = $1
-          ORDER BY year DESC
-          LIMIT 1
-        `,
-        [auth.userID]
-      );
-  const activeBalance = balance ?? fallbackBalance;
-  const balanceYear = activeBalance?.year ?? currentYear;
   const booked = await queryRow<{ total: number }>(
     `
       SELECT COALESCE(SUM(computed_days), 0) as total
@@ -468,14 +455,18 @@ app.get("/leave-balances/me", asyncHandler(async (req, res) => {
         AND status IN ('PENDING', 'APPROVED')
         AND EXTRACT(YEAR FROM start_date) = $2
     `,
-    [auth.userID, balanceYear]
+    [auth.userID, currentYear]
   );
 
-  const allowanceDays = activeBalance?.allowanceDays ?? 0;
+  const allowanceDays = computeAnnualLeaveAllowance({
+    birthDate: user?.birthDate ?? null,
+    hasChild: user?.hasChild ?? false,
+    year: currentYear,
+  });
   const usedDays = Number(booked?.total ?? 0);
 
   res.json({
-    year: balanceYear,
+    year: currentYear,
     allowanceDays,
     usedDays,
     remainingDays: allowanceDays - usedDays,
@@ -490,6 +481,8 @@ app.get("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        birth_date::text as "birthDate",
+        has_child as "hasChild",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -504,11 +497,13 @@ app.get("/users", asyncHandler(async (req, res) => {
 app.post("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
-  const { email, name, role, teamId } = req.body as {
+  const { email, name, role, teamId, birthDate, hasChild } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
     teamId?: number | null;
+    birthDate?: string | null;
+    hasChild?: boolean;
   };
 
   if (!email || !name) {
@@ -523,10 +518,12 @@ app.post("/users", asyncHandler(async (req, res) => {
   try {
     await pool.query(
       `
-        INSERT INTO users (id, email, name, role, team_id, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+        INSERT INTO users (
+          id, email, name, role, team_id, birth_date, has_child, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       `,
-      [userId, email, name, userRole, teamId ?? null]
+      [userId, email, name, userRole, teamId ?? null, birthDate ?? null, hasChild ?? false]
     );
   } catch (error) {
     if (error instanceof Error && error.message.includes("duplicate key")) {
@@ -539,6 +536,8 @@ app.post("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        birth_date::text as "birthDate",
+        has_child as "hasChild",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -561,12 +560,14 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
   const { id } = req.params;
-  const { email, name, role, teamId, isActive } = req.body as {
+  const { email, name, role, teamId, isActive, birthDate, hasChild } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
     teamId?: number | null;
     isActive?: boolean;
+    birthDate?: string | null;
+    hasChild?: boolean;
   };
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [id]);
@@ -597,6 +598,14 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     updates.push(`team_id = $${values.length + 1}`);
     values.push(teamId ?? null);
   }
+  if (birthDate !== undefined) {
+    updates.push(`birth_date = $${values.length + 1}`);
+    values.push(birthDate);
+  }
+  if (hasChild !== undefined) {
+    updates.push(`has_child = $${values.length + 1}`);
+    values.push(hasChild);
+  }
   if (isActive !== undefined) {
     updates.push(`is_active = $${values.length + 1}`);
     values.push(isActive);
@@ -615,6 +624,8 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        birth_date::text as "birthDate",
+        has_child as "hasChild",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"

@@ -20,6 +20,8 @@ export const list = api(
       SELECT 
         id, email, name, role,
         team_id as "teamId",
+        birth_date::text as "birthDate",
+        has_child as "hasChild",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"

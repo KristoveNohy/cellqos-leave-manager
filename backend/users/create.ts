@@ -12,6 +12,8 @@ interface CreateUserRequest {
   name: string;
   role: UserRole;
   teamId?: number;
+  birthDate?: string | null;
+  hasChild?: boolean;
 }
 
 // Creates a new user (manager only)
@@ -23,13 +25,15 @@ export const create = api(
     validateEmail(req.email);
     
     await db.exec`
-      INSERT INTO users (id, email, name, role, team_id)
+      INSERT INTO users (id, email, name, role, team_id, birth_date, has_child)
       VALUES (
         ${req.id},
         ${req.email},
         ${req.name},
         ${req.role},
-        ${req.teamId || null}
+        ${req.teamId || null},
+        ${req.birthDate || null},
+        ${req.hasChild ?? false}
       )
     `;
     
@@ -37,6 +41,8 @@ export const create = api(
       SELECT 
         id, email, name, role,
         team_id as "teamId",
+        birth_date::text as "birthDate",
+        has_child as "hasChild",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"

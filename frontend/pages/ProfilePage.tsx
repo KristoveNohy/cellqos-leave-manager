@@ -7,6 +7,12 @@ export default function ProfilePage() {
   const { user } = useAuth();
   const backend = useBackend();
 
+  const userQuery = useQuery({
+    queryKey: ["me"],
+    enabled: Boolean(user),
+    queryFn: () => backend.users.me(),
+  });
+
   const balanceQuery = useQuery({
     queryKey: ["leave-balance", user?.id],
     enabled: Boolean(user),
@@ -16,6 +22,8 @@ export default function ProfilePage() {
   if (!user) {
     return null;
   }
+
+  const displayedUser = userQuery.data ?? user;
 
   return (
     <div className="space-y-6">
@@ -35,17 +43,27 @@ export default function ProfilePage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">Meno</span>
-              <span className="font-medium">{user.name}</span>
+              <span className="font-medium">{displayedUser?.name}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">Email</span>
-              <span className="font-medium">{user.email}</span>
+              <span className="font-medium">{displayedUser?.email}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">Rola</span>
               <span className="font-medium">
-                {user.role === "MANAGER" ? "Manažér" : "Zamestnanec"}
+                {displayedUser?.role === "MANAGER" ? "Manažér" : "Zamestnanec"}
               </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Dátum narodenia</span>
+              <span className="font-medium">
+                {displayedUser?.birthDate ? new Date(displayedUser.birthDate).toLocaleDateString() : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Dieťa</span>
+              <span className="font-medium">{displayedUser?.hasChild ? "Áno" : "Nie"}</span>
             </div>
           </div>
         </Card>

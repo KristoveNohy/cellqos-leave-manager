@@ -1,6 +1,47 @@
 import { APIError } from "encore.dev/api";
 import db from "../db";
 
+export function computeAnnualLeaveAllowance({
+  birthDate,
+  hasChild,
+  year,
+}: {
+  birthDate: string | null;
+  hasChild: boolean;
+  year: number;
+}): number {
+  if (hasChild) {
+    return 25;
+  }
+
+  if (!birthDate) {
+    return 20;
+  }
+
+  const birthYear = Number(birthDate.slice(0, 4));
+  const cutoffYear = year - 33;
+  return birthYear <= cutoffYear ? 25 : 20;
+}
+
+async function getAnnualLeaveAllowance(userId: string, year: number): Promise<number> {
+  const user = await db.queryRow<{ birthDate: string | null; hasChild: boolean }>`
+    SELECT birth_date::text as "birthDate",
+      has_child as "hasChild"
+    FROM users
+    WHERE id = ${userId}
+  `;
+
+  if (!user) {
+    return 0;
+  }
+
+  return computeAnnualLeaveAllowance({
+    birthDate: user.birthDate,
+    hasChild: user.hasChild,
+    year,
+  });
+}
+
 type AnnualLeaveBalanceCheck = {
   userId: string;
   startDate: string;
@@ -18,12 +59,8 @@ export async function ensureAnnualLeaveBalance({
     return;
   }
 
-  const balance = await db.queryRow<{ allowanceDays: number }>`
-    SELECT allowance_days as "allowanceDays"
-    FROM leave_balances
-    WHERE user_id = ${userId}
-      AND year = EXTRACT(YEAR FROM ${startDate}::date)
-  `;
+  const year = new Date(startDate).getFullYear();
+  const allowanceDays = await getAnnualLeaveAllowance(userId, year);
 
   const booked = requestId
     ? await db.queryRow<{ total: number }>`
@@ -44,7 +81,6 @@ export async function ensureAnnualLeaveBalance({
           AND EXTRACT(YEAR FROM start_date) = EXTRACT(YEAR FROM ${startDate}::date)
       `;
 
-  const allowanceDays = balance?.allowanceDays ?? 0;
   const bookedDays = Number(booked?.total ?? 0);
   const availableDays = allowanceDays - bookedDays;
 

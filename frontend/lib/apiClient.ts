@@ -73,7 +73,14 @@ export function createApiClient(token: string | null) {
     users: {
       list: () => apiRequest<{ users: any[] }>("/users", { token }),
       me: () => apiRequest<any>("/users/me", { token }),
-      create: (data: { email: string; name: string; role?: string; teamId?: number | null }) =>
+      create: (data: {
+        email: string;
+        name: string;
+        role?: string;
+        teamId?: number | null;
+        birthDate?: string | null;
+        hasChild?: boolean;
+      }) =>
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>
         apiRequest<any>(`/users/${data.id}`, { method: "PATCH", body: data, token }),
