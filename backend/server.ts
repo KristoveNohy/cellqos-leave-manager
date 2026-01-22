@@ -431,6 +431,57 @@ app.get("/users/me", asyncHandler(async (req, res) => {
   res.json(user);
 }));
 
+app.get("/leave-balances/me", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  const currentYear = new Date().getFullYear();
+  const balance = await queryRow<{ allowanceDays: number; year: number }>(
+    `
+      SELECT allowance_days as "allowanceDays",
+        year
+      FROM leave_balances
+      WHERE user_id = $1
+        AND year = $2
+    `,
+    [auth.userID, currentYear]
+  );
+  const fallbackBalance = balance
+    ? null
+    : await queryRow<{ allowanceDays: number; year: number }>(
+        `
+          SELECT allowance_days as "allowanceDays",
+            year
+          FROM leave_balances
+          WHERE user_id = $1
+          ORDER BY year DESC
+          LIMIT 1
+        `,
+        [auth.userID]
+      );
+  const activeBalance = balance ?? fallbackBalance;
+  const balanceYear = activeBalance?.year ?? currentYear;
+  const booked = await queryRow<{ total: number }>(
+    `
+      SELECT COALESCE(SUM(computed_days), 0) as total
+      FROM leave_requests
+      WHERE user_id = $1
+        AND type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = $2
+    `,
+    [auth.userID, balanceYear]
+  );
+
+  const allowanceDays = activeBalance?.allowanceDays ?? 0;
+  const usedDays = Number(booked?.total ?? 0);
+
+  res.json({
+    year: balanceYear,
+    allowanceDays,
+    usedDays,
+    remainingDays: allowanceDays - usedDays,
+  });
+}));
+
 app.get("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
