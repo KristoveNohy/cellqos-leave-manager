@@ -9,7 +9,19 @@ import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
 import { computeAnnualLeaveAllowance } from "./shared/leave-entitlement";
-import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog, Notification } from "./shared/types";
+import type {
+  LeaveRequest,
+  LeaveStatus,
+  LeaveType,
+  Team,
+  User,
+  Holiday,
+  UserRole,
+  AuditLog,
+  Notification,
+  VacationPolicy,
+  VacationAccrualPolicy,
+} from "./shared/types";
 import { HttpError } from "./shared/http-error";
 
 const app = express();
@@ -113,6 +125,31 @@ async function createEntityAuditLog(
       before ? JSON.stringify(before) : null,
       after ? JSON.stringify(after) : null,
     ]
+  );
+}
+
+async function getVacationPolicy(): Promise<VacationPolicy> {
+  const policy = await queryRow<{
+    accrualPolicy: VacationAccrualPolicy;
+    carryOverEnabled: boolean;
+    carryOverLimitDays: number;
+  }>(
+    `
+      SELECT
+        annual_leave_accrual_policy as "accrualPolicy",
+        carry_over_enabled as "carryOverEnabled",
+        carry_over_limit_days as "carryOverLimitDays"
+      FROM settings
+      LIMIT 1
+    `
+  );
+
+  return (
+    policy ?? {
+      accrualPolicy: "YEAR_START",
+      carryOverEnabled: false,
+      carryOverLimitDays: 0,
+    }
   );
 }
 
@@ -231,6 +268,7 @@ type DatabaseBackup = {
     leave_requests: Record<string, unknown>[];
     holidays: Record<string, unknown>[];
     leave_balances: Record<string, unknown>[];
+    settings: Record<string, unknown>[];
     audit_logs: Record<string, unknown>[];
     notifications: Record<string, unknown>[];
   };
@@ -2050,6 +2088,59 @@ app.post("/notifications/read-all", asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+app.get("/admin/vacation-policy", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+
+  const policy = await getVacationPolicy();
+  res.json({ policy });
+}));
+
+app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+
+  const before = await getVacationPolicy();
+  const payload = req.body as Partial<VacationPolicy>;
+  const accrualPolicy = payload.accrualPolicy ?? before.accrualPolicy;
+  const carryOverEnabled =
+    typeof payload.carryOverEnabled === "boolean" ? payload.carryOverEnabled : before.carryOverEnabled;
+  const carryOverLimitDays =
+    typeof payload.carryOverLimitDays === "number" ? payload.carryOverLimitDays : before.carryOverLimitDays;
+
+  if (!["YEAR_START", "PRO_RATA"].includes(accrualPolicy)) {
+    throw new HttpError(400, "Invalid accrual policy.");
+  }
+
+  if (Number.isNaN(carryOverLimitDays) || carryOverLimitDays < 0) {
+    throw new HttpError(400, "Carry-over limit must be a non-negative number.");
+  }
+
+  const updated = await queryRow<VacationPolicy>(
+    `
+      UPDATE settings
+      SET annual_leave_accrual_policy = $1,
+          carry_over_enabled = $2,
+          carry_over_limit_days = $3,
+          updated_at = NOW()
+      WHERE id = 1
+      RETURNING
+        annual_leave_accrual_policy as "accrualPolicy",
+        carry_over_enabled as "carryOverEnabled",
+        carry_over_limit_days as "carryOverLimitDays"
+    `,
+    [accrualPolicy, carryOverEnabled, carryOverLimitDays]
+  );
+
+  if (!updated) {
+    throw new HttpError(500, "Failed to update vacation policy.");
+  }
+
+  await createEntityAuditLog(auth.userID, "settings", 1, "UPDATE", before, updated);
+
+  res.json({ policy: updated });
+}));
+
 app.get("/admin/database/export", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
@@ -2060,6 +2151,7 @@ app.get("/admin/database/export", asyncHandler(async (req, res) => {
     leave_requests: await queryRows<Record<string, unknown>>("SELECT * FROM leave_requests ORDER BY id ASC"),
     holidays: await queryRows<Record<string, unknown>>("SELECT * FROM holidays ORDER BY id ASC"),
     leave_balances: await queryRows<Record<string, unknown>>("SELECT * FROM leave_balances ORDER BY id ASC"),
+    settings: await queryRows<Record<string, unknown>>("SELECT * FROM settings ORDER BY id ASC"),
     audit_logs: await queryRows<Record<string, unknown>>("SELECT * FROM audit_logs ORDER BY id ASC"),
     notifications: await queryRows<Record<string, unknown>>("SELECT * FROM notifications ORDER BY id ASC"),
   };
@@ -2104,6 +2196,7 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
     "leave_requests",
     "holidays",
     "leave_balances",
+    "settings",
     "audit_logs",
     "notifications",
   ] as const;
@@ -2121,7 +2214,7 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
   try {
     await client.query("BEGIN");
     await client.query(
-      "TRUNCATE teams, users, leave_requests, holidays, leave_balances, audit_logs, notifications RESTART IDENTITY CASCADE"
+      "TRUNCATE teams, users, leave_requests, holidays, leave_balances, settings, audit_logs, notifications RESTART IDENTITY CASCADE"
     );
 
     await insertRows(client, "teams", backup.tables.teams);
@@ -2129,6 +2222,7 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
     await insertRows(client, "holidays", backup.tables.holidays);
     await insertRows(client, "leave_balances", backup.tables.leave_balances);
     await insertRows(client, "leave_requests", backup.tables.leave_requests);
+    await insertRows(client, "settings", backup.tables.settings);
     await insertRows(client, "audit_logs", backup.tables.audit_logs);
     await insertRows(client, "notifications", backup.tables.notifications);
 

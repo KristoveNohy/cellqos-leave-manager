@@ -1,44 +1,154 @@
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import type { VacationAccrualPolicy } from "~backend/shared/types";
+import { useBackend } from "@/lib/backend";
+import { useToast } from "@/components/ui/use-toast";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type VacationPolicyFormValues = {
+  accrualPolicy: VacationAccrualPolicy;
+  carryOverEnabled: boolean;
+  carryOverLimitDays: string;
+};
 
 export default function VacationPolicyManagement() {
+  const backend = useBackend();
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery({
+    queryKey: ["vacation-policy"],
+    queryFn: () => backend.vacation_policy.get(),
+  });
+  const { register, handleSubmit, reset, setValue, watch } = useForm<VacationPolicyFormValues>({
+    defaultValues: {
+      accrualPolicy: "YEAR_START",
+      carryOverEnabled: false,
+      carryOverLimitDays: "0",
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (payload: {
+      accrualPolicy: VacationAccrualPolicy;
+      carryOverEnabled: boolean;
+      carryOverLimitDays: number;
+    }) => backend.vacation_policy.update(payload),
+    onSuccess: (response) => {
+      toast({ title: "Politika dovoleniek bola uložená." });
+      const policy = response.policy;
+      reset({
+        accrualPolicy: policy.accrualPolicy,
+        carryOverEnabled: policy.carryOverEnabled,
+        carryOverLimitDays: String(policy.carryOverLimitDays ?? 0),
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Uloženie zlyhalo",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (data?.policy) {
+      reset({
+        accrualPolicy: data.policy.accrualPolicy,
+        carryOverEnabled: data.policy.carryOverEnabled,
+        carryOverLimitDays: String(data.policy.carryOverLimitDays ?? 0),
+      });
+    }
+  }, [data, reset]);
+
+  if (isLoading) {
+    return <div className="text-center py-12">Načítava sa...</div>;
+  }
+
+  const carryOverEnabled = watch("carryOverEnabled");
+
+  const onSubmit = (values: VacationPolicyFormValues) => {
+    const carryOverLimitDays = values.carryOverEnabled
+      ? Number(values.carryOverLimitDays || 0)
+      : 0;
+
+    updateMutation.mutate({
+      accrualPolicy: values.accrualPolicy,
+      carryOverEnabled: values.carryOverEnabled,
+      carryOverLimitDays,
+    });
+  };
+
   return (
     <Card className="p-6 space-y-4">
       <div>
         <h2 className="text-xl font-semibold">Politiky dovoleniek</h2>
         <p className="text-sm text-muted-foreground">
-          Základné pravidlá pre čerpanie a prenos dovoleniek v systéme.
+          Nastavte firmu politiku pre nárokovanie a prenos dovoleniek.
         </p>
       </div>
-      <div className="space-y-3 text-sm">
-        <div>
-          <h3 className="font-medium">Accrual</h3>
-          <ul className="list-disc pl-5 text-muted-foreground">
-            <li>Mesačný: nárok sa pripisuje každý mesiac počas roka.</li>
-            <li>Ročný: celý nárok sa pripíše na začiatku roka.</li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="font-medium">Carry-over</h3>
-          <p className="text-muted-foreground">
-            Nevyčerpaná dovolenka sa môže preniesť do ďalšieho obdobia podľa
-            nastaveného limitu.
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="space-y-2">
+          <Label>Spôsob nároku</Label>
+          <Select
+            value={watch("accrualPolicy")}
+            onValueChange={(value) => setValue("accrualPolicy", value as VacationAccrualPolicy)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="YEAR_START">Ročný (celý nárok na začiatku roka)</SelectItem>
+              <SelectItem value="PRO_RATA">Pro-rata pri nástupe/odchode</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Pro-rata prepočíta nárok podľa počtu odpracovaných mesiacov v danom roku.
           </p>
         </div>
-        <div>
-          <h3 className="font-medium">Expiry</h3>
-          <p className="text-muted-foreground">
-            Prenesená dovolenka podlieha expiracii po uplynutí definovaného
-            termínu.
-          </p>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="carry-over-enabled"
+              checked={carryOverEnabled}
+              onCheckedChange={(value) => setValue("carryOverEnabled", Boolean(value))}
+            />
+            <Label htmlFor="carry-over-enabled">Povoliť prenos nevyčerpanej dovolenky</Label>
+          </div>
+          <div className="space-y-1 max-w-xs">
+            <Label htmlFor="carry-over-limit">Limit prenosu (dni)</Label>
+            <Input
+              id="carry-over-limit"
+              type="number"
+              min={0}
+              step="0.5"
+              disabled={!carryOverEnabled}
+              {...register("carryOverLimitDays")}
+            />
+            <p className="text-xs text-muted-foreground">
+              Nastavte maximálny počet dní, ktoré je možné preniesť do ďalšieho obdobia.
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="font-medium">Pro-rata pri nástupe/odchode</h3>
-          <p className="text-muted-foreground">
-            Nárok sa prepočítava pomerne podľa počtu odpracovaných mesiacov v
-            danom roku.
-          </p>
+
+        <div className="flex justify-end">
+          <Button type="submit" disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? "Ukladá sa..." : "Uložiť"}
+          </Button>
         </div>
-      </div>
+      </form>
     </Card>
   );
 }
