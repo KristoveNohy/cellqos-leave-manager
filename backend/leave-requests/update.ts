@@ -4,6 +4,7 @@ import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
 import { computeWorkingDays } from "../shared/date-utils";
 import { createAuditLog, createNotification } from "../shared/audit";
+import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import { canEditRequest } from "../shared/rbac";
 import type { LeaveRequest, LeaveType } from "../shared/types";
 
@@ -92,6 +93,16 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         isHalfDayEnd ?? before.isHalfDayEnd,
         holidayDates
       );
+    }
+
+    const effectiveType = type ?? before.type;
+    if (effectiveType === "ANNUAL_LEAVE") {
+      await ensureAnnualLeaveBalance({
+        userId: before.userId,
+        startDate: newStartDate,
+        requestedDays: computedDays,
+        requestId: id,
+      });
     }
     
     const updates: string[] = [];
