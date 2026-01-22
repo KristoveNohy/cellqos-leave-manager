@@ -660,6 +660,7 @@ app.get("/users", asyncHandler(async (req, res) => {
         birth_date::text as "birthDate",
         has_child as "hasChild",
         ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
+        NULL::double precision as "remainingLeaveDays",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -668,7 +669,35 @@ app.get("/users", asyncHandler(async (req, res) => {
     `
   );
 
-  res.json({ users });
+  const year = new Date().getFullYear();
+  const balanceRows = await queryRows<{ userId: string; total: number }>(
+    `
+      SELECT user_id as "userId",
+        COALESCE(SUM(computed_days), 0) as total
+      FROM leave_requests
+      WHERE type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = $1
+      GROUP BY user_id
+    `,
+    [year]
+  );
+  const bookedByUserId = new Map(
+    balanceRows.map((row) => [row.userId, Number(row.total ?? 0)])
+  );
+
+  const usersWithBalances = await Promise.all(
+    users.map(async (user) => {
+      const allowanceDays = await getAnnualLeaveAllowanceForUser(user.id, year);
+      const usedDays = bookedByUserId.get(user.id) ?? 0;
+      return {
+        ...user,
+        remainingLeaveDays: allowanceDays - usedDays,
+      };
+    })
+  );
+
+  res.json({ users: usersWithBalances });
 }));
 
 app.post("/users", asyncHandler(async (req, res) => {
@@ -1316,6 +1345,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   const query = `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
+        u.name as "userName",
         lr.start_date::text as "startDate",
         lr.end_date::text as "endDate",
         lr.is_half_day_start as "isHalfDayStart",
@@ -1334,7 +1364,48 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
     `;
 
   const requests = await queryRows<LeaveRequest>(query, values);
-  res.json({ requests });
+
+  const currentYear = new Date().getFullYear();
+  const bookedRows = await queryRows<{ userId: string; total: number }>(
+    `
+      SELECT user_id as "userId",
+        COALESCE(SUM(computed_days), 0) as total
+      FROM leave_requests
+      WHERE type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = $1
+      GROUP BY user_id
+    `,
+    [currentYear]
+  );
+  const bookedByUserId = new Map(
+    bookedRows.map((row) => [row.userId, Number(row.total ?? 0)])
+  );
+
+  const requestsWithBalance = await Promise.all(
+    requests.map(async (request) => {
+      if (request.type !== "ANNUAL_LEAVE") {
+        return {
+          ...request,
+          currentBalanceDays: null,
+          balanceAfterApprovalDays: null,
+        };
+      }
+
+      const allowanceDays = await getAnnualLeaveAllowanceForUser(request.userId, currentYear);
+      const bookedDays = bookedByUserId.get(request.userId) ?? 0;
+      const currentBalanceDays = allowanceDays - bookedDays;
+      const extraDays = request.status === "PENDING" ? request.computedDays : 0;
+
+      return {
+        ...request,
+        currentBalanceDays,
+        balanceAfterApprovalDays: currentBalanceDays - extraDays,
+      };
+    })
+  );
+
+  res.json({ requests: requestsWithBalance });
 }));
 
 app.post("/leave-requests", asyncHandler(async (req, res) => {

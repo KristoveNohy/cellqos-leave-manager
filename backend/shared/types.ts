@@ -28,6 +28,7 @@ export interface User {
   birthDate: string | null;
   hasChild: boolean;
   manualLeaveAllowanceDays: number | null;
+  remainingLeaveDays?: number | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -44,6 +45,7 @@ export interface Team {
 export interface LeaveRequest {
   id: number;
   userId: string;
+  userName?: string | null;
   type: LeaveType;
   startDate: string;
   endDate: string;
@@ -55,6 +57,8 @@ export interface LeaveRequest {
   approvedBy: string | null;
   approvedAt: Date | null;
   computedDays: number;
+  currentBalanceDays?: number | null;
+  balanceAfterApprovalDays?: number | null;
   attachmentUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
