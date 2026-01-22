@@ -2,7 +2,7 @@ import { api } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
-import { computeWorkingDays } from "../shared/date-utils";
+import { computeWorkingHours } from "../shared/date-utils";
 import { createAuditLog } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import type { LeaveRequest, LeaveType } from "../shared/types";
@@ -34,7 +34,7 @@ export const create = api(
       holidayDates.add(holiday.date);
     }
     
-    const computedDays = computeWorkingDays(
+    const computedHours = computeWorkingHours(
       req.startDate,
       req.endDate,
       req.isHalfDayStart || false,
@@ -46,7 +46,7 @@ export const create = api(
       await ensureAnnualLeaveBalance({
         userId,
         startDate: req.startDate,
-        requestedDays: computedDays,
+        requestedHours: computedHours,
       });
     }
     
@@ -64,7 +64,7 @@ export const create = api(
         ${req.isHalfDayStart || false},
         ${req.isHalfDayEnd || false},
         ${req.reason || null},
-        ${computedDays},
+        ${computedHours},
         'DRAFT',
         NOW(),
         NOW()

@@ -65,7 +65,7 @@ export const submit = api(
       await ensureAnnualLeaveBalance({
         userId: request.userId,
         startDate: request.startDate,
-        requestedDays: request.computedDays,
+        requestedHours: request.computedDays,
         requestId: request.id,
       });
     }

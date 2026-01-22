@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { useBackend } from "@/lib/backend";
+import { formatLeaveHours } from "@/lib/leaveFormat";
 import { Card } from "@/components/ui/card";
 
 export default function ProfilePage() {
@@ -71,7 +72,7 @@ export default function ProfilePage() {
         <Card className="p-6 space-y-4">
           <div>
             <h2 className="text-xl font-semibold">Dovolenka</h2>
-            <p className="text-sm text-muted-foreground">Prehľad dostupných dní.</p>
+            <p className="text-sm text-muted-foreground">Prehľad dostupného času.</p>
           </div>
           {balanceQuery.isLoading ? (
             <div className="text-sm text-muted-foreground">Načítava sa zostatok...</div>
@@ -85,15 +86,19 @@ export default function ProfilePage() {
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Nárok</span>
-                <span className="font-medium">{balanceQuery.data?.allowanceDays} dní</span>
+                <span className="font-medium">
+                  {formatLeaveHours(balanceQuery.data?.allowanceDays)}
+                </span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Použité / plánované</span>
-                <span className="font-medium">{balanceQuery.data?.usedDays} dní</span>
+                <span className="font-medium">{formatLeaveHours(balanceQuery.data?.usedDays)}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Zostatok</span>
-                <span className="font-medium">{balanceQuery.data?.remainingDays} dní</span>
+                <span className="font-medium">
+                  {formatLeaveHours(balanceQuery.data?.remainingDays)}
+                </span>
               </div>
             </div>
           )}

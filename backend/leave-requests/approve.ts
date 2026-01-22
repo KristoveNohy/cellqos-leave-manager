@@ -78,7 +78,7 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
       await ensureAnnualLeaveBalance({
         userId: request.userId,
         startDate: request.startDate,
-        requestedDays: request.computedDays,
+        requestedHours: request.computedDays,
         requestId: request.id,
       });
     }
