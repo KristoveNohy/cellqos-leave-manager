@@ -77,9 +77,12 @@ export default function Navigation() {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
-                <div className="text-sm text-muted-foreground">
+                <Link
+                  to="/profile"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
                   {user.name} ({user.role === "MANAGER" ? "Manažér" : "Zamestnanec"})
-                </div>
+                </Link>
                 <Button variant="outline" size="sm" onClick={logout}>
                   Odhlásiť
                 </Button>

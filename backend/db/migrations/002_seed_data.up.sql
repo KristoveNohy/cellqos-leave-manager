@@ -3,11 +3,11 @@ INSERT INTO teams (id, name, max_concurrent_leaves) VALUES
   (1, 'Engineering', 2);
 
 -- Insert demo users (IDs are stable for local development)
-INSERT INTO users (id, email, name, role, team_id) VALUES
-  ('user_manager_placeholder', 'manager@cellqos.com', 'Manager User', 'MANAGER', 1),
-  ('user_anna_placeholder', 'anna@cellqos.com', 'Anna Novakova', 'EMPLOYEE', 1),
-  ('user_peter_placeholder', 'peter@cellqos.com', 'Peter Horvath', 'EMPLOYEE', 1),
-  ('user_lucia_placeholder', 'lucia@cellqos.com', 'Lucia Kovacova', 'EMPLOYEE', 1);
+INSERT INTO users (id, email, name, role, team_id, birth_date, has_child) VALUES
+  ('user_manager_placeholder', 'manager@cellqos.com', 'Manager User', 'MANAGER', 1, '1985-03-10', true),
+  ('user_anna_placeholder', 'anna@cellqos.com', 'Anna Novakova', 'EMPLOYEE', 1, '1994-06-12', false),
+  ('user_peter_placeholder', 'peter@cellqos.com', 'Peter Horvath', 'EMPLOYEE', 1, '1991-11-03', true),
+  ('user_lucia_placeholder', 'lucia@cellqos.com', 'Lucia Kovacova', 'EMPLOYEE', 1, '1998-02-25', false);
 
 -- Insert Slovak holidays for 2024-2025
 INSERT INTO holidays (date, name, is_company_holiday) VALUES

@@ -2,6 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog, createNotification } from "../shared/audit";
+import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import { requireManager } from "../shared/rbac";
 import type { LeaveRequest } from "../shared/types";
 
@@ -71,6 +72,15 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
           );
         }
       }
+    }
+
+    if (request.type === "ANNUAL_LEAVE") {
+      await ensureAnnualLeaveBalance({
+        userId: request.userId,
+        startDate: request.startDate,
+        requestedDays: request.computedDays,
+        requestId: request.id,
+      });
     }
     
     const approverId = auth.userID;
