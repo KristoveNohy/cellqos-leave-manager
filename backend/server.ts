@@ -8,7 +8,7 @@ import { computeWorkingDays, parseDate } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
-import { computeAnnualLeaveAllowance } from "./shared/leave-balance";
+import { computeAnnualLeaveAllowance } from "./shared/leave-entitlement";
 import type { LeaveRequest, LeaveStatus, LeaveType, Team, User, Holiday, UserRole, AuditLog, Notification } from "./shared/types";
 import { HttpError } from "./shared/http-error";
 

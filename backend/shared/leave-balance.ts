@@ -1,27 +1,6 @@
 import { APIError } from "encore.dev/api";
 import db from "../db";
-
-export function computeAnnualLeaveAllowance({
-  birthDate,
-  hasChild,
-  year,
-}: {
-  birthDate: string | null;
-  hasChild: boolean;
-  year: number;
-}): number {
-  if (hasChild) {
-    return 25;
-  }
-
-  if (!birthDate) {
-    return 20;
-  }
-
-  const birthYear = Number(birthDate.slice(0, 4));
-  const cutoffYear = year - 33;
-  return birthYear <= cutoffYear ? 25 : 20;
-}
+import { computeAnnualLeaveAllowance } from "./leave-entitlement";
 
 async function getAnnualLeaveAllowance(userId: string, year: number): Promise<number> {
   const user = await db.queryRow<{ birthDate: string | null; hasChild: boolean }>`
