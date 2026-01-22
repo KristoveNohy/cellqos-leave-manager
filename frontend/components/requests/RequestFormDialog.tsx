@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import moment from "moment";
 import { useBackend } from "@/lib/backend";
 import { useAuth } from "@/lib/auth";
 import type { LeaveType } from "~backend/shared/types";
@@ -29,9 +30,17 @@ interface RequestFormDialogProps {
   open: boolean;
   onClose: () => void;
   request?: any;
+  initialStartDate?: string;
+  initialEndDate?: string;
 }
 
-export default function RequestFormDialog({ open, onClose, request }: RequestFormDialogProps) {
+export default function RequestFormDialog({
+  open,
+  onClose,
+  request,
+  initialStartDate,
+  initialEndDate,
+}: RequestFormDialogProps) {
   const backend = useBackend();
   const { user } = useAuth();
   const isManager = user?.role === "MANAGER";
@@ -40,8 +49,8 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
     defaultValues: {
       userId: user?.id ?? "",
       type: request?.type || "ANNUAL_LEAVE",
-      startDate: request?.startDate || "",
-      endDate: request?.endDate || "",
+      startDate: request?.startDate || initialStartDate || "",
+      endDate: request?.endDate || initialEndDate || "",
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
@@ -58,13 +67,13 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
     reset({
       userId: request?.userId || user?.id || "",
       type: request?.type || "ANNUAL_LEAVE",
-      startDate: request?.startDate || "",
-      endDate: request?.endDate || "",
+      startDate: request?.startDate || initialStartDate || "",
+      endDate: request?.endDate || initialEndDate || "",
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
     });
-  }, [request, reset, user?.id]);
+  }, [initialEndDate, initialStartDate, request, reset, user?.id]);
   
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -118,6 +127,42 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
   };
 
   const users = usersData?.users || [];
+  const startDate = watch("startDate");
+  const endDate = watch("endDate");
+
+  const { data: holidayRange } = useQuery({
+    queryKey: ["holiday-range", startDate, endDate],
+    queryFn: async () => {
+      if (!startDate || !endDate) {
+        return { holidays: [] };
+      }
+
+      const startMoment = moment(startDate, "YYYY-MM-DD", true);
+      const endMoment = moment(endDate, "YYYY-MM-DD", true);
+      if (!startMoment.isValid() || !endMoment.isValid()) {
+        return { holidays: [] };
+      }
+
+      const rangeStart = moment.min(startMoment, endMoment);
+      const rangeEnd = moment.max(startMoment, endMoment);
+      const years = Array.from(
+        { length: rangeEnd.year() - rangeStart.year() + 1 },
+        (_, index) => rangeStart.year() + index
+      );
+      const holidayResponses = await Promise.all(
+        years.map((year) => backend.holidays.list({ year }))
+      );
+      const holidays = holidayResponses.flatMap((response) => response.holidays || []);
+      const inRange = holidays.filter((holiday) => {
+        const holidayMoment = moment(holiday.date, "YYYY-MM-DD", true);
+        return holidayMoment.isValid() && holidayMoment.isBetween(rangeStart, rangeEnd, "day", "[]");
+      });
+
+      return { holidays: inRange };
+    },
+    enabled: Boolean(startDate && endDate),
+  });
+  const holidaysInRange = holidayRange?.holidays || [];
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -183,6 +228,15 @@ export default function RequestFormDialog({ open, onClose, request }: RequestFor
               <Input type="date" {...register("endDate")} required />
             </div>
           </div>
+          {holidaysInRange.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              V rozsahu sú sviatky:{" "}
+              {holidaysInRange
+                .map((holiday: any) => `${holiday.date} – ${holiday.name}`)
+                .join(", ")}{" "}
+              (nepočítajú sa do dovolenky).
+            </p>
+          )}
           
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center space-x-2">
