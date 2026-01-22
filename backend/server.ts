@@ -2120,6 +2120,13 @@ const port = Number(process.env.PORT ?? 4000);
 
 async function startServer() {
   await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+  await pool.query(`
+    ALTER TABLE holidays
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_holidays_active ON holidays(is_active)
+  `);
   app.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(`API server listening on http://localhost:${port}`);

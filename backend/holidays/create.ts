@@ -3,6 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { parseDate } from "../shared/date-utils";
 import { createAuditLog } from "../shared/audit";
+import { ensureHolidayActiveColumn } from "../shared/holiday-schema";
 import { requireManager } from "../shared/rbac";
 import type { Holiday } from "../shared/types";
 
@@ -19,6 +20,7 @@ export const create = api(
   async (req: CreateHolidayRequest): Promise<Holiday> => {
     const auth = getAuthData()!;
     requireManager(auth.role);
+    await ensureHolidayActiveColumn();
     parseDate(req.date);
 
     if (req.isActive !== undefined && typeof req.isActive !== "boolean") {

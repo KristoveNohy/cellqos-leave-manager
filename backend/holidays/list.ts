@@ -2,6 +2,7 @@ import { api, Query } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog } from "../shared/audit";
+import { ensureHolidayActiveColumn } from "../shared/holiday-schema";
 import { getSlovakHolidaySeeds } from "../shared/holiday-seeds";
 import type { Holiday } from "../shared/types";
 
@@ -19,6 +20,7 @@ export const list = api(
   { auth: true, expose: true, method: "GET", path: "/holidays" },
   async ({ year, includeInactive }: ListHolidaysParams): Promise<ListHolidaysResponse> => {
     const auth = getAuthData()!;
+    await ensureHolidayActiveColumn();
     const shouldIncludeInactive = includeInactive === true;
     const holidays: Holiday[] = [];
 
