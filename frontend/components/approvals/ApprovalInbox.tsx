@@ -209,9 +209,20 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                   </h3>
                   <Badge className="bg-yellow-500">ČAKÁ</Badge>
                 </div>
-                
-                <div className="text-sm text-muted-foreground">
-                  {request.startDate} – {request.endDate} ({request.computedDays} dní)
+
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <div>
+                    {request.startDate} – {request.endDate} ({request.computedDays} dní)
+                  </div>
+                  {request.userName && (
+                    <div>Žiadateľ: {request.userName}</div>
+                  )}
+                  {request.currentBalanceDays !== null && request.currentBalanceDays !== undefined && (
+                    <div>
+                      Zostatok: {request.currentBalanceDays} dní · Po schválení:{" "}
+                      {request.balanceAfterApprovalDays ?? "—"} dní
+                    </div>
+                  )}
                 </div>
                 
                 {request.reason && (

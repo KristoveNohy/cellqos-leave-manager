@@ -220,7 +220,7 @@ export default function UserManagement() {
             <TableHead>Nástup</TableHead>
             <TableHead>Narodenie</TableHead>
             <TableHead>Dieťa</TableHead>
-            <TableHead>Manuálny nárok</TableHead>
+            <TableHead>Zostatok dovolenky</TableHead>
             <TableHead>Stav</TableHead>
             <TableHead className="text-right">Akcie</TableHead>
           </TableRow>
@@ -245,7 +245,7 @@ export default function UserManagement() {
                   {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—"}
                 </TableCell>
                 <TableCell>{user.hasChild ? "Áno" : "Nie"}</TableCell>
-                <TableCell>{user.manualLeaveAllowanceDays ?? "—"}</TableCell>
+                <TableCell>{user.remainingLeaveDays ?? "—"}</TableCell>
                 <TableCell>
                   <Badge variant={user.isActive ? "default" : "destructive"}>
                     {user.isActive ? "Aktívny" : "Neaktívny"}
