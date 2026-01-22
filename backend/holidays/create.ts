@@ -10,6 +10,7 @@ interface CreateHolidayRequest {
   date: string;
   name: string;
   isCompanyHoliday?: boolean;
+  isActive?: boolean;
 }
 
 // Creates a new holiday (manager only)
@@ -19,14 +20,19 @@ export const create = api(
     const auth = getAuthData()!;
     requireManager(auth.role);
     parseDate(req.date);
+
+    if (req.isActive !== undefined && typeof req.isActive !== "boolean") {
+      throw APIError.invalidArgument("isActive must be a boolean");
+    }
     
     try {
       const result = await db.queryRow<{ id: number }>`
-        INSERT INTO holidays (date, name, is_company_holiday)
+        INSERT INTO holidays (date, name, is_company_holiday, is_active)
         VALUES (
           ${req.date},
           ${req.name},
-          ${req.isCompanyHoliday ?? true}
+          ${req.isCompanyHoliday ?? true},
+          ${req.isActive ?? true}
         )
         RETURNING id
       `;
@@ -35,6 +41,7 @@ export const create = api(
         SELECT 
           id, date::text as date, name,
           is_company_holiday as "isCompanyHoliday",
+          is_active as "isActive",
           created_at as "createdAt"
         FROM holidays
         WHERE id = ${result!.id}

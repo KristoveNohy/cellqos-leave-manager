@@ -94,6 +94,7 @@ model Holiday {
   date             DateTime @unique
   name             String
   isCompanyHoliday Boolean  @default(true) @map("is_company_holiday")
+  isActive         Boolean  @default(true) @map("is_active")
   createdAt        DateTime @default(now()) @map("created_at")
 
   @@map("holidays")
