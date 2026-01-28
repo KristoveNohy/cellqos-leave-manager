@@ -1475,7 +1475,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
         is_half_day_start, is_half_day_end,
         reason, computed_days, status,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT', NOW(), NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'DRAFT', NOW(), NOW())
       RETURNING id
     `,
     [
