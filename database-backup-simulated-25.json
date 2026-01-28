@@ -1,0 +1,355 @@
+{
+  "version": 1,
+  "exportedAt": "2026-01-22T15:05:00.000Z",
+  "tables": {
+    "teams": [
+      {
+        "id": "1",
+        "name": "Engineering",
+        "max_concurrent_leaves": 2,
+        "created_at": "2026-01-22T11:27:05.203Z",
+        "updated_at": "2026-01-22T11:27:05.203Z"
+      }
+    ],
+    "users": [
+      {
+        "id": "user_manager_placeholder",
+        "email": "manager@cellqos.com",
+        "name": "Manager User",
+        "role": "MANAGER",
+        "team_id": "1",
+        "is_active": true,
+        "password_hash": "$2a$06$/u6p5ti2wuJnD2teLTWF2.VviB2ORK1iGS39fyWkUI.KIodoPIiKq",
+        "magic_link_token_hash": null,
+        "magic_link_expires_at": null,
+        "created_at": "2026-01-22T11:27:05.221Z",
+        "updated_at": "2026-01-22T11:27:11.219Z",
+        "birth_date": "1985-04-18",
+        "has_child": true,
+        "employment_start_date": "2016-09-12",
+        "manual_leave_allowance_days": null
+      },
+      {
+        "id": "user_anna_placeholder",
+        "email": "anna@cellqos.com",
+        "name": "Anna Novakova",
+        "role": "EMPLOYEE",
+        "team_id": "1",
+        "is_active": true,
+        "password_hash": "$2a$06$/u6p5ti2wuJnD2teLTWF2.VviB2ORK1iGS39fyWkUI.KIodoPIiKq",
+        "magic_link_token_hash": null,
+        "magic_link_expires_at": null,
+        "created_at": "2026-01-22T11:27:05.231Z",
+        "updated_at": "2026-01-22T11:27:11.230Z",
+        "birth_date": "1992-08-14",
+        "has_child": true,
+        "employment_start_date": "2021-03-01",
+        "manual_leave_allowance_days": 24
+      },
+      {
+        "id": "user_peter_placeholder",
+        "email": "peter@cellqos.com",
+        "name": "Peter Horvath",
+        "role": "EMPLOYEE",
+        "team_id": "1",
+        "is_active": true,
+        "password_hash": "$2a$06$/u6p5ti2wuJnD2teLTWF2.VviB2ORK1iGS39fyWkUI.KIodoPIiKq",
+        "magic_link_token_hash": null,
+        "magic_link_expires_at": null,
+        "created_at": "2026-01-22T11:27:05.237Z",
+        "updated_at": "2026-01-22T11:27:11.236Z",
+        "birth_date": "1990-01-05",
+        "has_child": false,
+        "employment_start_date": "2023-09-15",
+        "manual_leave_allowance_days": 22
+      }
+    ],
+    "leave_requests": [
+      {
+        "id": "1",
+        "user_id": "user_anna_placeholder",
+        "type": "ANNUAL_LEAVE",
+        "start_date": "2026-01-29T00:00:00.000Z",
+        "end_date": "2026-02-02T00:00:00.000Z",
+        "is_half_day_start": false,
+        "is_half_day_end": false,
+        "status": "APPROVED",
+        "reason": "Lyžovačka",
+        "manager_comment": "Schválené",
+        "approved_by": "user_manager_placeholder",
+        "approved_at": "2026-01-22T09:10:00.000Z",
+        "computed_days": 3,
+        "attachment_url": null,
+        "created_at": "2026-01-22T08:50:00.000Z",
+        "updated_at": "2026-01-22T09:10:00.000Z"
+      },
+      {
+        "id": "2",
+        "user_id": "user_peter_placeholder",
+        "type": "HOME_OFFICE",
+        "start_date": "2026-01-23T00:00:00.000Z",
+        "end_date": "2026-01-23T00:00:00.000Z",
+        "is_half_day_start": true,
+        "is_half_day_end": false,
+        "status": "APPROVED",
+        "reason": "Servis doma",
+        "manager_comment": "OK",
+        "approved_by": "user_manager_placeholder",
+        "approved_at": "2026-01-22T10:05:00.000Z",
+        "computed_days": 0.5,
+        "attachment_url": null,
+        "created_at": "2026-01-22T09:55:00.000Z",
+        "updated_at": "2026-01-22T10:05:00.000Z"
+      },
+      {
+        "id": "3",
+        "user_id": "user_anna_placeholder",
+        "type": "SICK_LEAVE",
+        "start_date": "2026-02-11T00:00:00.000Z",
+        "end_date": "2026-02-12T00:00:00.000Z",
+        "is_half_day_start": false,
+        "is_half_day_end": false,
+        "status": "APPROVED",
+        "reason": "Chrípka",
+        "manager_comment": "",
+        "approved_by": "user_manager_placeholder",
+        "approved_at": "2026-02-11T07:45:00.000Z",
+        "computed_days": 2,
+        "attachment_url": null,
+        "created_at": "2026-02-11T07:30:00.000Z",
+        "updated_at": "2026-02-11T07:45:00.000Z"
+      },
+      {
+        "id": "4",
+        "user_id": "user_peter_placeholder",
+        "type": "UNPAID_LEAVE",
+        "start_date": "2026-02-17T00:00:00.000Z",
+        "end_date": "2026-02-18T00:00:00.000Z",
+        "is_half_day_start": false,
+        "is_half_day_end": true,
+        "status": "REJECTED",
+        "reason": "Osobné dôvody",
+        "manager_comment": "V tom termíne je už veľa absencií.",
+        "approved_by": "user_manager_placeholder",
+        "approved_at": "2026-02-10T12:15:00.000Z",
+        "computed_days": 1.5,
+        "attachment_url": null,
+        "created_at": "2026-02-10T11:40:00.000Z",
+        "updated_at": "2026-02-10T12:15:00.000Z"
+      },
+      {
+        "id": "5",
+        "user_id": "user_anna_placeholder",
+        "type": "HOME_OFFICE",
+        "start_date": "2026-02-20T00:00:00.000Z",
+        "end_date": "2026-02-20T00:00:00.000Z",
+        "is_half_day_start": false,
+        "is_half_day_end": false,
+        "status": "CANCELLED",
+        "reason": "Balík",
+        "manager_comment": null,
+        "approved_by": null,
+        "approved_at": null,
+        "computed_days": 1,
+        "attachment_url": null,
+        "created_at": "2026-02-14T08:20:00.000Z",
+        "updated_at": "2026-02-15T09:05:00.000Z"
+      },
+      {
+        "id": "6",
+        "user_id": "user_peter_placeholder",
+        "type": "ANNUAL_LEAVE",
+        "start_date": "2026-03-02T00:00:00.000Z",
+        "end_date": "2026-03-04T00:00:00.000Z",
+        "is_half_day_start": false,
+        "is_half_day_end": false,
+        "status": "PENDING",
+        "reason": "Jarný oddych",
+        "manager_comment": null,
+        "approved_by": null,
+        "approved_at": null,
+        "computed_days": 3,
+        "attachment_url": null,
+        "created_at": "2026-02-18T10:00:00.000Z",
+        "updated_at": "2026-02-18T10:00:00.000Z"
+      },
+      {
+        "id": "7",
+        "user_id": "user_anna_placeholder",
+        "type": "ANNUAL_LEAVE",
+        "start_date": "2026-03-10T00:00:00.000Z",
+        "end_date": "2026-03-12T00:00:00.000Z",
+        "is_half_day_start": true,
+        "is_half_day_end": false,
+        "status": "DRAFT",
+        "reason": "Plánovanie dovolenky",
+        "manager_comment": null,
+        "approved_by": null,
+        "approved_at": null,
+        "computed_days": 2.5,
+        "attachment_url": null,
+        "created_at": "2026-02-20T16:30:00.000Z",
+        "updated_at": "2026-02-20T16:30:00.000Z"
+      },
+      {
+        "id": "8",
+        "user_id": "user_peter_placeholder",
+        "type": "SICK_LEAVE",
+        "start_date": "2026-01-27T00:00:00.000Z",
+        "end_date": "2026-01-27T00:00:00.000Z",
+        "is_half_day_start": true,
+        "is_half_day_end": false,
+        "status": "APPROVED",
+        "reason": "Vyšetrenie",
+        "manager_comment": "Zapisujem ako poldeň",
+        "approved_by": "user_manager_placeholder",
+        "approved_at": "2026-01-27T07:20:00.000Z",
+        "computed_days": 0.5,
+        "attachment_url": null,
+        "created_at": "2026-01-27T07:05:00.000Z",
+        "updated_at": "2026-01-27T07:20:00.000Z"
+      },
+      {
+        "id": "9",
+        "user_id": "user_manager_placeholder",
+        "type": "ANNUAL_LEAVE",
+        "start_date": "2026-02-24T00:00:00.000Z",
+        "end_date": "2026-02-25T00:00:00.000Z",
+        "is_half_day_start": false,
+        "is_half_day_end": true,
+        "status": "APPROVED",
+        "reason": "Rodinné povinnosti",
+        "manager_comment": "Schválené",
+        "approved_by": "user_manager_placeholder",
+        "approved_at": "2026-01-30T13:30:00.000Z",
+        "computed_days": 1.5,
+        "attachment_url": null,
+        "created_at": "2026-01-30T13:10:00.000Z",
+        "updated_at": "2026-01-30T13:30:00.000Z"
+      }
+    ],
+    "holidays": [
+      {
+        "id": "1",
+        "date": "2026-01-01T00:00:00.000Z",
+        "name": "NOVY_ROK",
+        "is_company_holiday": true,
+        "created_at": "2026-01-02T09:00:00.000Z"
+      },
+      {
+        "id": "2",
+        "date": "2026-01-06T00:00:00.000Z",
+        "name": "TRAJA_KRALI",
+        "is_company_holiday": true,
+        "created_at": "2026-01-02T09:00:00.000Z"
+      },
+      {
+        "id": "3",
+        "date": "2026-02-05T00:00:00.000Z",
+        "name": "FOUNDATION_DAY",
+        "is_company_holiday": false,
+        "created_at": "2026-01-22T12:10:00.000Z"
+      }
+    ],
+    "leave_balances": [
+      {
+        "id": "1",
+        "user_id": "user_anna_placeholder",
+        "year": 2026,
+        "allowance_days": 24,
+        "used_days": 5,
+        "created_at": "2026-01-22T12:00:00.000Z",
+        "updated_at": "2026-02-11T08:00:00.000Z"
+      },
+      {
+        "id": "2",
+        "user_id": "user_peter_placeholder",
+        "year": 2026,
+        "allowance_days": 22,
+        "used_days": 2,
+        "created_at": "2026-01-22T12:00:00.000Z",
+        "updated_at": "2026-01-27T07:25:00.000Z"
+      },
+      {
+        "id": "3",
+        "user_id": "user_manager_placeholder",
+        "year": 2026,
+        "allowance_days": 25,
+        "used_days": 1.5,
+        "created_at": "2026-01-22T12:00:00.000Z",
+        "updated_at": "2026-01-30T13:35:00.000Z"
+      }
+    ],
+    "settings": [
+      {
+        "id": 1,
+        "show_team_calendar_for_employees": false,
+        "annual_leave_accrual_policy": "YEAR_START",
+        "carry_over_enabled": false,
+        "carry_over_limit_days": 0,
+        "updated_at": "2026-01-22T11:27:04.444Z"
+      }
+    ],
+    "audit_logs": [
+      {
+        "id": "1",
+        "actor_user_id": "user_manager_placeholder",
+        "entity_type": "leave_requests",
+        "entity_id": "1",
+        "action": "APPROVE",
+        "before_json": null,
+        "after_json": { "status": "APPROVED" },
+        "created_at": "2026-01-22T09:10:00.000Z"
+      },
+      {
+        "id": "2",
+        "actor_user_id": "user_manager_placeholder",
+        "entity_type": "leave_requests",
+        "entity_id": "4",
+        "action": "REJECT",
+        "before_json": null,
+        "after_json": { "status": "REJECTED" },
+        "created_at": "2026-02-10T12:15:00.000Z"
+      },
+      {
+        "id": "3",
+        "actor_user_id": "user_anna_placeholder",
+        "entity_type": "leave_requests",
+        "entity_id": "5",
+        "action": "CANCEL",
+        "before_json": null,
+        "after_json": { "status": "CANCELLED" },
+        "created_at": "2026-02-15T09:05:00.000Z"
+      }
+    ],
+    "notifications": [
+      {
+        "id": "1",
+        "user_id": "user_manager_placeholder",
+        "type": "REQUEST_SUBMITTED",
+        "payload_json": { "leaveRequestId": "6", "userId": "user_peter_placeholder" },
+        "sent_at": "2026-02-18T10:00:00.000Z",
+        "read_at": null,
+        "created_at": "2026-02-18T10:00:00.000Z"
+      },
+      {
+        "id": "2",
+        "user_id": "user_anna_placeholder",
+        "type": "REQUEST_APPROVED",
+        "payload_json": { "leaveRequestId": "1", "approvedBy": "user_manager_placeholder" },
+        "sent_at": "2026-01-22T09:10:00.000Z",
+        "read_at": "2026-01-22T10:00:00.000Z",
+        "created_at": "2026-01-22T09:10:00.000Z"
+      },
+      {
+        "id": "3",
+        "user_id": "user_peter_placeholder",
+        "type": "REQUEST_REJECTED",
+        "payload_json": { "leaveRequestId": "4", "approvedBy": "user_manager_placeholder" },
+        "sent_at": "2026-02-10T12:15:00.000Z",
+        "read_at": null,
+        "created_at": "2026-02-10T12:15:00.000Z"
+      }
+    ]
+  }
+}
