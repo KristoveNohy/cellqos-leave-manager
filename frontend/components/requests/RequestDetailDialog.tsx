@@ -37,18 +37,24 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   const isManager = user?.role === "MANAGER";
   const { toast } = useToast();
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const formatDateTime = (value?: string | null) => {
-    if (!value) {
+  const formatDateTime = (dateValue?: string | null, timeValue?: string | null) => {
+    if (!dateValue) {
       return "";
     }
 
-    const datePart = value.slice(0, 10);
-    const timePart = value.length >= 19 ? value.slice(11, 19) : "00:00:00";
+    const datePart = dateValue.slice(0, 10);
+    const timePart = timeValue
+      ? timeValue.length === 5
+        ? `${timeValue}:00`
+        : timeValue.slice(0, 8)
+      : dateValue.length >= 19
+        ? dateValue.slice(11, 19)
+        : "00:00:00";
 
-    return `${datePart} [${timePart}]`;
+    return `${datePart} ${timePart}`;
   };
-  const startDateLabel = formatDateTime(request.startDate);
-  const endDateLabel = formatDateTime(request.endDate);
+  const startDateLabel = formatDateTime(request.startDate, request.startTime);
+  const endDateLabel = formatDateTime(request.endDate, request.endTime);
   const startTimeLabel = request.startTime ? request.startTime.slice(0, 5) : null;
   const endTimeLabel = request.endTime ? request.endTime.slice(0, 5) : null;
   const timeRangeLabel =
@@ -164,8 +170,8 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   const formatHistoryEntry = (entry: AuditLogEntry) => {
     const before = entry.beforeJson ?? {};
     const after = entry.afterJson ?? {};
-    const startDate = formatDateTime(after.startDate ?? before.startDate);
-    const endDate = formatDateTime(after.endDate ?? before.endDate);
+    const startDate = formatDateTime(after.startDate ?? before.startDate, after.startTime ?? before.startTime);
+    const endDate = formatDateTime(after.endDate ?? before.endDate, after.endTime ?? before.endTime);
     const beforeStatus = before.status;
     const afterStatus = after.status;
     const statusChange =
