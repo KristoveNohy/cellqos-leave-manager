@@ -2,7 +2,7 @@ import { api } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog } from "../shared/audit";
-import { requireManager } from "../shared/rbac";
+import { requireAdmin } from "../shared/rbac";
 import type { Team } from "../shared/types";
 
 interface CreateTeamRequest {
@@ -10,12 +10,12 @@ interface CreateTeamRequest {
   maxConcurrentLeaves?: number;
 }
 
-// Creates a new team (manager only)
+// Creates a new team (admin only)
 export const create = api(
   { auth: true, expose: true, method: "POST", path: "/teams" },
   async (req: CreateTeamRequest): Promise<Team> => {
     const auth = getAuthData()!;
-    requireManager(auth.role);
+    requireAdmin(auth.role);
     const result = await db.queryRow<{ id: number }>`
       INSERT INTO teams (name, max_concurrent_leaves)
       VALUES (${req.name}, ${req.maxConcurrentLeaves || null})

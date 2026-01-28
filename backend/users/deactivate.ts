@@ -2,18 +2,18 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog } from "../shared/audit";
-import { requireManager } from "../shared/rbac";
+import { requireAdmin } from "../shared/rbac";
 
 interface DeactivateUserParams {
   id: string;
 }
 
-// Deactivates a user (soft delete, manager only)
+// Deactivates a user (soft delete, admin only)
 export const deactivate = api(
   { auth: true, expose: true, method: "DELETE", path: "/users/:id" },
   async ({ id }: DeactivateUserParams): Promise<void> => {
     const auth = getAuthData()!;
-    requireManager(auth.role);
+    requireAdmin(auth.role);
     const before = await db.queryRow`
       SELECT * FROM users WHERE id = ${id}
     `;

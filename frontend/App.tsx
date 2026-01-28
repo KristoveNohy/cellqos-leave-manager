@@ -54,7 +54,7 @@ export default function App() {
                 <Route
                   path="/team"
                   element={
-                    <RequireRole role="MANAGER">
+                    <RequireRole roles={["MANAGER", "ADMIN"]}>
                       <TeamPage />
                     </RequireRole>
                   }
@@ -62,7 +62,7 @@ export default function App() {
                 <Route
                   path="/approvals"
                   element={
-                    <RequireRole role="MANAGER">
+                    <RequireRole roles={["MANAGER", "ADMIN"]}>
                       <ApprovalsPage />
                     </RequireRole>
                   }
@@ -86,7 +86,7 @@ export default function App() {
                 <Route
                   path="/admin"
                   element={
-                    <RequireRole role="MANAGER">
+                    <RequireRole roles={["ADMIN"]}>
                       <AdminPage />
                     </RequireRole>
                   }
@@ -109,12 +109,12 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
-function RequireRole({ children, role }: { children: JSX.Element; role: UserRole }) {
+function RequireRole({ children, roles }: { children: JSX.Element; roles: UserRole[] }) {
   const { user } = useAuth();
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  if (user.role !== role) {
+  if (!roles.includes(user.role)) {
     return <Navigate to="/calendar" replace />;
   }
   return children;

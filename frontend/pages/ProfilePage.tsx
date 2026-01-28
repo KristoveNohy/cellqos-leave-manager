@@ -53,7 +53,11 @@ export default function ProfilePage() {
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">Rola</span>
               <span className="font-medium">
-                {displayedUser?.role === "MANAGER" ? "Manažér" : "Zamestnanec"}
+                {displayedUser?.role === "ADMIN"
+                  ? "Admin"
+                  : displayedUser?.role === "MANAGER"
+                    ? "Manažér"
+                    : "Zamestnanec"}
               </span>
             </div>
             <div className="flex justify-between gap-4">

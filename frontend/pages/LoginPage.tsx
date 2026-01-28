@@ -13,7 +13,7 @@ interface AuthResponse {
     id: string;
     email: string;
     name: string;
-    role: "EMPLOYEE" | "MANAGER";
+    role: "EMPLOYEE" | "MANAGER" | "ADMIN";
   };
 }
 

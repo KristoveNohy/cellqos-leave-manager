@@ -10,7 +10,7 @@ import RequestFormDialog from "@/components/requests/RequestFormDialog";
 export default function TeamPage() {
   const backend = useBackend();
   const { user } = useAuth();
-  const isManager = user?.role === "MANAGER";
+  const isManager = user?.role === "MANAGER" || user?.role === "ADMIN";
   const [activeTab, setActiveTab] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { data: teamsData } = useQuery({

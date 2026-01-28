@@ -5,7 +5,7 @@ import { validateDateRange, validateNotInPast } from "../shared/validation";
 import { computeWorkingHours } from "../shared/date-utils";
 import { createAuditLog, createNotification } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
-import { canEditRequest } from "../shared/rbac";
+import { canEditRequest, isAdmin, isManager } from "../shared/rbac";
 import type { LeaveRequest, LeaveType } from "../shared/types";
 
 interface UpdateLeaveRequestParams {
@@ -37,7 +37,9 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       managerComment,
     } = req;
     const auth = getAuthData()!;
-    const before = await db.queryRow<LeaveRequest>`
+    const isAdminUser = isAdmin(auth.role);
+    const isManagerUser = isManager(auth.role);
+    const before = await db.queryRow<LeaveRequest & { teamId: number | null }>`
       SELECT 
         id, user_id as "userId", type,
         start_date::text as "startDate",
@@ -52,8 +54,10 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
-        updated_at as "updatedAt"
+        updated_at as "updatedAt",
+        u.team_id as "teamId"
       FROM leave_requests
+      JOIN users u ON leave_requests.user_id = u.id
       WHERE id = ${id}
     `;
     
@@ -61,7 +65,20 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       throw APIError.notFound("Leave request not found");
     }
 
-    if (!canEditRequest(before.userId, before.status, auth.userID, auth.role)) {
+    let isSameTeam = before.userId === auth.userID;
+    if (isManagerUser && !isAdminUser && before.userId !== auth.userID) {
+      const viewer = await db.queryRow<{ teamId: number | null }>`
+        SELECT team_id as "teamId"
+        FROM users
+        WHERE id = ${auth.userID}
+      `;
+      isSameTeam = Boolean(viewer?.teamId && viewer.teamId === before.teamId);
+      if (!isSameTeam) {
+        throw APIError.permissionDenied("You are not allowed to edit this request");
+      }
+    }
+
+    if (!canEditRequest(before.userId, before.status, auth.userID, auth.role, isSameTeam)) {
       throw APIError.permissionDenied("You are not allowed to edit this request");
     }
     
@@ -210,7 +227,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       after
     );
 
-    if (auth.role === "MANAGER" && before.userId !== auth.userID) {
+    if ((isManagerUser || isAdminUser) && before.userId !== auth.userID) {
       await createNotification(
         before.userId,
         "REQUEST_UPDATED_BY_MANAGER",
