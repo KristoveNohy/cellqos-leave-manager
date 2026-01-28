@@ -6,6 +6,7 @@ interface AuthUser {
   email: string;
   name: string;
   role: UserRole;
+  mustChangePassword?: boolean;
 }
 
 interface AuthSession {

@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   EMPLOYEE
   MANAGER
+  ADMIN
 
   @@map("user_role")
 }
@@ -58,6 +59,7 @@ model User {
   manualLeaveAllowanceHours Float? @map("manual_leave_allowance_hours")
   isActive           Boolean  @default(true) @map("is_active")
   passwordHash       String?  @map("password_hash")
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
   magicLinkTokenHash String?  @map("magic_link_token_hash")
   magicLinkExpiresAt DateTime? @map("magic_link_expires_at")
   createdAt          DateTime @default(now()) @map("created_at")

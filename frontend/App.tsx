@@ -11,6 +11,7 @@ import LoginPage from "./pages/LoginPage";
 import MagicLinkPage from "./pages/MagicLinkPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
+import ForcePasswordChangeDialog from "./components/auth/ForcePasswordChangeDialog";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import type { UserRole } from "~backend/shared/types";
 
@@ -30,6 +31,7 @@ export default function App() {
         <BrowserRouter>
           <div className="min-h-screen bg-background">
             <Navigation />
+            <ForcePasswordChangeDialog />
             <main className="container mx-auto py-6 px-4">
               <Routes>
                 <Route path="/" element={<Navigate to="/calendar" replace />} />
@@ -54,7 +56,7 @@ export default function App() {
                 <Route
                   path="/team"
                   element={
-                    <RequireRole role="MANAGER">
+                    <RequireRole roles={["MANAGER", "ADMIN"]}>
                       <TeamPage />
                     </RequireRole>
                   }
@@ -62,7 +64,7 @@ export default function App() {
                 <Route
                   path="/approvals"
                   element={
-                    <RequireRole role="MANAGER">
+                    <RequireRole roles={["MANAGER", "ADMIN"]}>
                       <ApprovalsPage />
                     </RequireRole>
                   }
@@ -86,7 +88,7 @@ export default function App() {
                 <Route
                   path="/admin"
                   element={
-                    <RequireRole role="MANAGER">
+                    <RequireRole roles={["ADMIN"]}>
                       <AdminPage />
                     </RequireRole>
                   }
@@ -109,12 +111,12 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
-function RequireRole({ children, role }: { children: JSX.Element; role: UserRole }) {
+function RequireRole({ children, roles }: { children: JSX.Element; roles: UserRole[] }) {
   const { user } = useAuth();
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  if (user.role !== role) {
+  if (!roles.includes(user.role)) {
     return <Navigate to="/calendar" replace />;
   }
   return children;

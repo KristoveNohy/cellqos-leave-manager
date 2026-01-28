@@ -1,7 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
-import { requireManager } from "../shared/rbac";
+import { isAdmin, isManager, requireAdmin } from "../shared/rbac";
 import type { User } from "../shared/types";
 
 interface GetUserParams {
@@ -14,7 +14,25 @@ export const get = api(
   async ({ id }: GetUserParams): Promise<User> => {
     const auth = getAuthData()!;
     if (auth.userID !== id) {
-      requireManager(auth.role);
+      if (isAdmin(auth.role)) {
+        // ok
+      } else if (isManager(auth.role)) {
+        const viewer = await db.queryRow<{ teamId: number | null }>`
+          SELECT team_id as "teamId"
+          FROM users
+          WHERE id = ${auth.userID}
+        `;
+        const target = await db.queryRow<{ teamId: number | null }>`
+          SELECT team_id as "teamId"
+          FROM users
+          WHERE id = ${id}
+        `;
+        if (!viewer || !target || viewer.teamId === null || viewer.teamId !== target.teamId) {
+          requireAdmin(auth.role);
+        }
+      } else {
+        requireAdmin(auth.role);
+      }
     }
     const user = await db.queryRow<User>`
       SELECT 

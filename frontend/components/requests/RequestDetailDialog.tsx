@@ -34,7 +34,7 @@ interface RequestDetailDialogProps {
 export default function RequestDetailDialog({ request, open, onClose }: RequestDetailDialogProps) {
   const backend = useBackend();
   const { user } = useAuth();
-  const isManager = user?.role === "MANAGER";
+  const isManager = user?.role === "MANAGER" || user?.role === "ADMIN";
   const { toast } = useToast();
   const [showEditDialog, setShowEditDialog] = useState(false);
   const formatDateTime = (dateValue?: string | null, timeValue?: string | null) => {
@@ -144,7 +144,7 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
     BULK_REJECT: "Hromadné zamietnutie",
   };
 
-  const canViewHistory = Boolean(user?.role === "MANAGER" || request.userId === user?.id);
+  const canViewHistory = Boolean(user?.role === "MANAGER" || user?.role === "ADMIN" || request.userId === user?.id);
 
   const historyQuery = useQuery({
     queryKey: ["audit", request.id],

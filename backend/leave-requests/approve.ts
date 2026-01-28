@@ -3,7 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog, createNotification } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
-import { requireManager } from "../shared/rbac";
+import { isAdmin, isManager, requireManager } from "../shared/rbac";
 import type { LeaveRequest } from "../shared/types";
 
 interface ApproveLeaveRequestParams {
@@ -17,6 +17,8 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
   async (req): Promise<LeaveRequest> => {
     const { id, comment, bulk } = req;
     const auth = getAuthData()!;
+    const isAdminUser = isAdmin(auth.role);
+    const isManagerUser = isManager(auth.role);
     requireManager(auth.role);
     const request = await db.queryRow<LeaveRequest & { teamId: number | null }>`
       SELECT 
@@ -42,6 +44,17 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
     
     if (!request) {
       throw APIError.notFound("Leave request not found");
+    }
+
+    if (isManagerUser && !isAdminUser) {
+      const viewer = await db.queryRow<{ teamId: number | null }>`
+        SELECT team_id as "teamId"
+        FROM users
+        WHERE id = ${auth.userID}
+      `;
+      if (!viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+        throw APIError.permissionDenied("Cannot approve another team's request");
+      }
     }
     
     if (request.status !== "PENDING") {

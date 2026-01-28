@@ -43,6 +43,10 @@ function toQuery(params: Record<string, string | number | undefined>) {
 
 export function createApiClient(token: string | null) {
   return {
+    auth: {
+      changePassword: (data: { currentPassword: string; newPassword: string }) =>
+        apiRequest<{ ok: true }>("/auth/change-password", { method: "POST", body: data, token }),
+    },
     audit: {
       list: (params: { entityType?: string; entityId?: string; limit?: number }) =>
         apiRequest<{ logs: any[] }>(`/audit${toQuery(params)}`, { token }),

@@ -15,6 +15,7 @@ interface MagicLinkVerifyResponse {
     email: string;
     name: string;
     role: UserRole;
+    mustChangePassword: boolean;
   };
 }
 
@@ -28,8 +29,9 @@ export const verifyMagicLink = api(
       email: string;
       name: string;
       role: UserRole;
+      mustChangePassword: boolean;
     }>`
-      SELECT id, email, name, role
+      SELECT id, email, name, role, must_change_password as "mustChangePassword"
       FROM users
       WHERE magic_link_token_hash = ${tokenHash}
         AND magic_link_expires_at IS NOT NULL

@@ -4,7 +4,7 @@ import db from "../db";
 import { parseDate } from "../shared/date-utils";
 import { createAuditLog } from "../shared/audit";
 import { ensureHolidayActiveColumn } from "../shared/holiday-schema";
-import { requireManager } from "../shared/rbac";
+import { requireAdmin } from "../shared/rbac";
 import type { Holiday } from "../shared/types";
 
 interface CreateHolidayRequest {
@@ -14,12 +14,12 @@ interface CreateHolidayRequest {
   isActive?: boolean;
 }
 
-// Creates a new holiday (manager only)
+// Creates a new holiday (admin only)
 export const create = api(
   { auth: true, expose: true, method: "POST", path: "/holidays" },
   async (req: CreateHolidayRequest): Promise<Holiday> => {
     const auth = getAuthData()!;
-    requireManager(auth.role);
+    requireAdmin(auth.role);
     await ensureHolidayActiveColumn();
     parseDate(req.date);
 
