@@ -26,18 +26,14 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     return 0;
   }
 
-  const currentYear = new Date().getFullYear();
-  if (user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined && year === currentYear) {
-    const booked = await db.queryRow<{ total: number }>`
-      SELECT COALESCE(SUM(computed_hours), 0) as total
-      FROM leave_requests
-      WHERE user_id = ${userId}
-        AND type = 'ANNUAL_LEAVE'
-        AND status IN ('PENDING', 'APPROVED')
-        AND EXTRACT(YEAR FROM start_date) = ${year}
-    `;
-    const usedHours = Number(booked?.total ?? 0);
-    return usedHours + user.manualLeaveAllowanceHours;
+  const overrideBalance = await db.queryRow<{ allowanceHours: number }>`
+    SELECT allowance_hours as "allowanceHours"
+    FROM leave_balances
+    WHERE user_id = ${userId}
+      AND year = ${year}
+  `;
+  if (overrideBalance) {
+    return Number(overrideBalance.allowanceHours ?? 0);
   }
 
   const policy = await db.queryRow<{
@@ -67,14 +63,22 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
   }
 
   const previousYear = year - 1;
-  const previousAllowanceHours = computeAnnualLeaveAllowanceHours({
-    birthDate: user.birthDate,
-    hasChild: user.hasChild,
-    year: previousYear,
-    employmentStartDate: user.employmentStartDate,
-    manualAllowanceHours: user.manualLeaveAllowanceHours,
-    accrualPolicy,
-  });
+  const previousBalance = await db.queryRow<{ allowanceHours: number }>`
+    SELECT allowance_hours as "allowanceHours"
+    FROM leave_balances
+    WHERE user_id = ${userId}
+      AND year = ${previousYear}
+  `;
+  const previousAllowanceHours = previousBalance
+    ? Number(previousBalance.allowanceHours ?? 0)
+    : computeAnnualLeaveAllowanceHours({
+        birthDate: user.birthDate,
+        hasChild: user.hasChild,
+        year: previousYear,
+        employmentStartDate: user.employmentStartDate,
+        manualAllowanceHours: null,
+        accrualPolicy,
+      });
 
   const previousUsed = await db.queryRow<{ total: number }>`
     SELECT COALESCE(SUM(computed_hours), 0) as total

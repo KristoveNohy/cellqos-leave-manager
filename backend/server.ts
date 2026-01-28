@@ -247,21 +247,17 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number)
     return 0;
   }
 
-  const currentYear = new Date().getFullYear();
-  if (user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined && year === currentYear) {
-    const booked = await queryRow<{ total: number }>(
-      `
-        SELECT COALESCE(SUM(computed_hours), 0) as total
-        FROM leave_requests
-        WHERE user_id = $1
-          AND type = 'ANNUAL_LEAVE'
-          AND status IN ('PENDING', 'APPROVED')
-          AND EXTRACT(YEAR FROM start_date) = $2
-      `,
-      [userId, year]
-    );
-    const usedHours = Number(booked?.total ?? 0);
-    return usedHours + user.manualLeaveAllowanceHours;
+  const overrideBalance = await queryRow<{ allowanceHours: number }>(
+    `
+      SELECT allowance_hours as "allowanceHours"
+      FROM leave_balances
+      WHERE user_id = $1
+        AND year = $2
+    `,
+    [userId, year]
+  );
+  if (overrideBalance) {
+    return Number(overrideBalance.allowanceHours ?? 0);
   }
 
   const policy = await getVacationPolicy();
@@ -280,14 +276,25 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number)
   }
 
   const previousYear = year - 1;
-  const previousAllowanceHours = computeAnnualLeaveAllowanceHours({
-    birthDate: user.birthDate,
-    hasChild: user.hasChild,
-    year: previousYear,
-    employmentStartDate: user.employmentStartDate,
-    manualAllowanceHours: user.manualLeaveAllowanceHours,
-    accrualPolicy: policy.accrualPolicy,
-  });
+  const previousBalance = await queryRow<{ allowanceHours: number }>(
+    `
+      SELECT allowance_hours as "allowanceHours"
+      FROM leave_balances
+      WHERE user_id = $1
+        AND year = $2
+    `,
+    [userId, previousYear]
+  );
+  const previousAllowanceHours = previousBalance
+    ? Number(previousBalance.allowanceHours ?? 0)
+    : computeAnnualLeaveAllowanceHours({
+        birthDate: user.birthDate,
+        hasChild: user.hasChild,
+        year: previousYear,
+        employmentStartDate: user.employmentStartDate,
+        manualAllowanceHours: null,
+        accrualPolicy: policy.accrualPolicy,
+      });
 
   const previousUsed = await queryRow<{ total: number }>(
     `
@@ -407,6 +414,74 @@ async function createNotification(
       VALUES ($1, $2, $3)
     `,
     [userId, type, JSON.stringify(payload)]
+  );
+}
+
+async function applyLeaveBalanceOverride(
+  userId: string,
+  overrideHours: number,
+  actorUserId: string
+): Promise<void> {
+  const currentYear = new Date().getFullYear();
+  const booked = await queryRow<{ total: number }>(
+    `
+      SELECT COALESCE(SUM(computed_hours), 0) as total
+      FROM leave_requests
+      WHERE user_id = $1
+        AND type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = $2
+    `,
+    [userId, currentYear]
+  );
+  const usedHours = Number(booked?.total ?? 0);
+  const allowanceBefore = await getAnnualLeaveAllowanceHoursForUser(userId, currentYear);
+
+  await pool.query(
+    `
+      INSERT INTO leave_balances (user_id, year, allowance_hours, used_hours, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
+      ON CONFLICT (user_id, year)
+      DO UPDATE SET allowance_hours = EXCLUDED.allowance_hours,
+        used_hours = EXCLUDED.used_hours,
+        updated_at = NOW()
+    `,
+    [userId, currentYear, usedHours + overrideHours, usedHours]
+  );
+
+  const allowanceAfter = usedHours + overrideHours;
+  const remainingBefore = allowanceBefore - usedHours;
+  const remainingAfter = allowanceAfter - usedHours;
+
+  await createEntityAuditLog(
+    actorUserId,
+    "leave_balances",
+    `${userId}-${currentYear}`,
+    "OVERRIDE",
+    {
+      userId,
+      year: currentYear,
+      remainingHours: remainingBefore,
+    },
+    {
+      userId,
+      year: currentYear,
+      remainingHours: remainingAfter,
+      overrideHours,
+    }
+  );
+
+  await createNotification(
+    actorUserId,
+    "leave_balance_override",
+    {
+      userId,
+      year: currentYear,
+      remainingBefore,
+      remainingAfter,
+      overrideHours,
+    },
+    `leave-balance-override-${userId}-${currentYear}-${overrideHours}`
   );
 }
 
@@ -756,11 +831,6 @@ app.post("/users", asyncHandler(async (req, res) => {
       values.splice(5, 0, employmentStartDate ?? null);
     }
 
-    if (columnSupport.manualLeaveAllowanceHours) {
-      columns.splice(columnSupport.employmentStartDate ? 7 : 6, 0, "manual_leave_allowance_hours");
-      values.splice(columnSupport.employmentStartDate ? 7 : 6, 0, manualLeaveAllowanceHours ?? null);
-    }
-
     const placeholders: string[] = values.map((_value, index) => `$${index + 1}`);
     placeholders.push("NOW()", "NOW()");
 
@@ -801,6 +871,10 @@ app.post("/users", asyncHandler(async (req, res) => {
 
   await createEntityAuditLog(auth.userID, "users", userId, "CREATE", null, user as unknown as Record<string, unknown>);
 
+  if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
+    await applyLeaveBalanceOverride(userId, manualLeaveAllowanceHours, auth.userID);
+  }
+
   res.json(user);
 }));
 
@@ -825,21 +899,6 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   if (!before) {
     throw new HttpError(404, "User not found");
   }
-  const currentYear = new Date().getFullYear();
-  const booked = await queryRow<{ total: number }>(
-    `
-      SELECT COALESCE(SUM(computed_hours), 0) as total
-      FROM leave_requests
-      WHERE user_id = $1
-        AND type = 'ANNUAL_LEAVE'
-        AND status IN ('PENDING', 'APPROVED')
-        AND EXTRACT(YEAR FROM start_date) = $2
-    `,
-    [id, currentYear]
-  );
-  const usedHours = Number(booked?.total ?? 0);
-  const allowanceBefore = await getAnnualLeaveAllowanceHoursForUser(id, currentYear);
-
   if (email !== undefined) {
     validateEmail(email);
   }
@@ -875,12 +934,10 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     updates.push(`has_child = $${values.length + 1}`);
     values.push(hasChild);
   }
-  if (columnSupport.manualLeaveAllowanceHours && manualLeaveAllowanceHours !== undefined) {
+  if (manualLeaveAllowanceHours !== undefined) {
     if (manualLeaveAllowanceHours !== null && (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0)) {
       throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
     }
-    updates.push(`manual_leave_allowance_hours = $${values.length + 1}`);
-    values.push(manualLeaveAllowanceHours);
   }
   if (isActive !== undefined) {
     updates.push(`is_active = $${values.length + 1}`);
@@ -920,38 +977,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   await createEntityAuditLog(auth.userID, "users", id, "UPDATE", before, user as unknown as Record<string, unknown>);
 
   if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
-    const allowanceAfter = await getAnnualLeaveAllowanceHoursForUser(id, currentYear);
-    const remainingBefore = allowanceBefore - usedHours;
-    const remainingAfter = allowanceAfter - usedHours;
-    await createEntityAuditLog(
-      auth.userID,
-      "leave_balances",
-      `${id}-${currentYear}`,
-      "OVERRIDE",
-      {
-        userId: id,
-        year: currentYear,
-        remainingHours: remainingBefore,
-      },
-      {
-        userId: id,
-        year: currentYear,
-        remainingHours: remainingAfter,
-        overrideHours: manualLeaveAllowanceHours,
-      }
-    );
-    await createNotification(
-      auth.userID,
-      "leave_balance_override",
-      {
-        userId: id,
-        year: currentYear,
-        remainingBefore: remainingBefore,
-        remainingAfter: remainingAfter,
-        overrideHours: manualLeaveAllowanceHours,
-      },
-      `leave-balance-override-${id}-${currentYear}-${manualLeaveAllowanceHours}`
-    );
+    await applyLeaveBalanceOverride(id, manualLeaveAllowanceHours, auth.userID);
   }
 
   res.json(user);
