@@ -351,7 +351,7 @@ export default function UserManagement() {
                 <Input id="user-start-date" type="date" {...register("employmentStartDate")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="user-manual-allowance">Nárok na dovolenku (hodiny)</Label>
+                <Label htmlFor="user-manual-allowance">Zostatok dovolenky (hodiny)</Label>
                 <Input
                   id="user-manual-allowance"
                   type="number"
@@ -361,7 +361,7 @@ export default function UserManagement() {
                   {...register("manualLeaveAllowanceHours")}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Ak je vyplnené, nahradí systémový nárok pre tohto používateľa.
+                  Prepíše aktuálny zostatok dovolenky pre tento rok na zadanú hodnotu.
                 </p>
               </div>
             </div>

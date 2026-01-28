@@ -26,6 +26,20 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     return 0;
   }
 
+  const currentYear = new Date().getFullYear();
+  if (user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined && year === currentYear) {
+    const booked = await db.queryRow<{ total: number }>`
+      SELECT COALESCE(SUM(computed_hours), 0) as total
+      FROM leave_requests
+      WHERE user_id = ${userId}
+        AND type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = ${year}
+    `;
+    const usedHours = Number(booked?.total ?? 0);
+    return usedHours + user.manualLeaveAllowanceHours;
+  }
+
   const policy = await db.queryRow<{
     accrualPolicy: "YEAR_START" | "PRO_RATA";
     carryOverEnabled: boolean;
@@ -44,7 +58,7 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     hasChild: user.hasChild,
     year,
     employmentStartDate: user.employmentStartDate,
-    manualAllowanceHours: user.manualLeaveAllowanceHours,
+    manualAllowanceHours: null,
     accrualPolicy,
   });
 

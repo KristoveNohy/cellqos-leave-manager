@@ -247,6 +247,23 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number)
     return 0;
   }
 
+  const currentYear = new Date().getFullYear();
+  if (user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined && year === currentYear) {
+    const booked = await queryRow<{ total: number }>(
+      `
+        SELECT COALESCE(SUM(computed_hours), 0) as total
+        FROM leave_requests
+        WHERE user_id = $1
+          AND type = 'ANNUAL_LEAVE'
+          AND status IN ('PENDING', 'APPROVED')
+          AND EXTRACT(YEAR FROM start_date) = $2
+      `,
+      [userId, year]
+    );
+    const usedHours = Number(booked?.total ?? 0);
+    return usedHours + user.manualLeaveAllowanceHours;
+  }
+
   const policy = await getVacationPolicy();
 
   const baseAllowanceHours = computeAnnualLeaveAllowanceHours({
@@ -254,7 +271,7 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number)
     hasChild: user.hasChild,
     year,
     employmentStartDate: user.employmentStartDate,
-    manualAllowanceHours: user.manualLeaveAllowanceHours,
+    manualAllowanceHours: null,
     accrualPolicy: policy.accrualPolicy,
   });
 
@@ -808,6 +825,20 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   if (!before) {
     throw new HttpError(404, "User not found");
   }
+  const currentYear = new Date().getFullYear();
+  const booked = await queryRow<{ total: number }>(
+    `
+      SELECT COALESCE(SUM(computed_hours), 0) as total
+      FROM leave_requests
+      WHERE user_id = $1
+        AND type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = $2
+    `,
+    [id, currentYear]
+  );
+  const usedHours = Number(booked?.total ?? 0);
+  const allowanceBefore = await getAnnualLeaveAllowanceHoursForUser(id, currentYear);
 
   if (email !== undefined) {
     validateEmail(email);
@@ -887,6 +918,41 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   }
 
   await createEntityAuditLog(auth.userID, "users", id, "UPDATE", before, user as unknown as Record<string, unknown>);
+
+  if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
+    const allowanceAfter = await getAnnualLeaveAllowanceHoursForUser(id, currentYear);
+    const remainingBefore = allowanceBefore - usedHours;
+    const remainingAfter = allowanceAfter - usedHours;
+    await createEntityAuditLog(
+      auth.userID,
+      "leave_balances",
+      `${id}-${currentYear}`,
+      "OVERRIDE",
+      {
+        userId: id,
+        year: currentYear,
+        remainingHours: remainingBefore,
+      },
+      {
+        userId: id,
+        year: currentYear,
+        remainingHours: remainingAfter,
+        overrideHours: manualLeaveAllowanceHours,
+      }
+    );
+    await createNotification(
+      auth.userID,
+      "leave_balance_override",
+      {
+        userId: id,
+        year: currentYear,
+        remainingBefore: remainingBefore,
+        remainingAfter: remainingAfter,
+        overrideHours: manualLeaveAllowanceHours,
+      },
+      `leave-balance-override-${id}-${currentYear}-${manualLeaveAllowanceHours}`
+    );
+  }
 
   res.json(user);
 }));
