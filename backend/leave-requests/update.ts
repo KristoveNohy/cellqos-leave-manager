@@ -49,7 +49,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -90,8 +90,15 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       }
     }
     
-    let computedHours = before.computedDays;
-    if (startDate || endDate || isHalfDayStart !== undefined || isHalfDayEnd !== undefined) {
+    let computedHours = before.computedHours;
+    if (
+      startDate ||
+      endDate ||
+      isHalfDayStart !== undefined ||
+      isHalfDayEnd !== undefined ||
+      startTime !== undefined ||
+      endTime !== undefined
+    ) {
       const holidayDates = new Set<string>();
       for await (const holiday of db.query<{ date: string }>`
         SELECT date::text as date FROM holidays
@@ -106,7 +113,9 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         newEndDate,
         isHalfDayStart ?? before.isHalfDayStart,
         isHalfDayEnd ?? before.isHalfDayEnd,
-        holidayDates
+        holidayDates,
+        startTime ?? before.startTime,
+        endTime ?? before.endTime
       );
     }
 
@@ -159,8 +168,8 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       updates.push(`manager_comment = $${values.length + 1}`);
       values.push(managerComment || null);
     }
-    if (computedHours !== before.computedDays) {
-      updates.push(`computed_days = $${values.length + 1}`);
+    if (computedHours !== before.computedHours) {
+      updates.push(`computed_hours = $${values.length + 1}`);
       values.push(computedHours);
     }
     
@@ -184,7 +193,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"

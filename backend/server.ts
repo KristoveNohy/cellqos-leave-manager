@@ -4,14 +4,14 @@ import cors from "cors";
 import { Pool, type PoolClient } from "pg";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
-import { computeWorkingHours, HOURS_PER_WORKDAY, parseDate } from "./shared/date-utils";
+import { computeWorkingHours, parseDate } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
 import {
-  computeAnnualLeaveAllowance,
-  computeCarryOverDays,
-  getAnnualLeaveGroupAllowance,
+  computeAnnualLeaveAllowanceHours,
+  computeCarryOverHours,
+  getAnnualLeaveGroupAllowanceHours,
 } from "./shared/leave-entitlement";
 import type {
   LeaveRequest,
@@ -136,22 +136,22 @@ async function getVacationPolicy(): Promise<VacationPolicy> {
   const policySupport = await getVacationPolicySupport();
   if (!policySupport.hasPolicyColumns) {
     return {
-      accrualPolicy: "YEAR_START",
-      carryOverEnabled: false,
-      carryOverLimitDays: 0,
+      accrualPolicy: "PRO_RATA",
+      carryOverEnabled: true,
+      carryOverLimitHours: 0,
     };
   }
 
   const policy = await queryRow<{
     accrualPolicy: VacationAccrualPolicy;
     carryOverEnabled: boolean;
-    carryOverLimitDays: number;
+    carryOverLimitHours: number;
   }>(
     `
       SELECT
         annual_leave_accrual_policy as "accrualPolicy",
         carry_over_enabled as "carryOverEnabled",
-        carry_over_limit_days as "carryOverLimitDays"
+        carry_over_limit_hours as "carryOverLimitHours"
       FROM settings
       LIMIT 1
     `
@@ -159,16 +159,16 @@ async function getVacationPolicy(): Promise<VacationPolicy> {
 
   return (
     policy ?? {
-      accrualPolicy: "YEAR_START",
-      carryOverEnabled: false,
-      carryOverLimitDays: 0,
+      accrualPolicy: "PRO_RATA",
+      carryOverEnabled: true,
+      carryOverLimitHours: 0,
     }
   );
 }
 
 type UserColumnSupport = {
   employmentStartDate: boolean;
-  manualLeaveAllowanceDays: boolean;
+  manualLeaveAllowanceHours: boolean;
 };
 
 type VacationPolicyColumnSupport = {
@@ -201,42 +201,42 @@ async function columnExists(table: string, column: string): Promise<boolean> {
 }
 
 async function getUserColumnSupport(): Promise<UserColumnSupport> {
-  const [employmentStartDate, manualLeaveAllowanceDays] = await Promise.all([
+  const [employmentStartDate, manualLeaveAllowanceHours] = await Promise.all([
     columnExists("users", "employment_start_date"),
-    columnExists("users", "manual_leave_allowance_days"),
+    columnExists("users", "manual_leave_allowance_hours"),
   ]);
 
   return {
     employmentStartDate,
-    manualLeaveAllowanceDays,
+    manualLeaveAllowanceHours,
   };
 }
 
 async function getVacationPolicySupport(): Promise<VacationPolicyColumnSupport> {
-  const [accrualPolicy, carryOverEnabled, carryOverLimitDays] = await Promise.all([
+  const [accrualPolicy, carryOverEnabled, carryOverLimitHours] = await Promise.all([
     columnExists("settings", "annual_leave_accrual_policy"),
     columnExists("settings", "carry_over_enabled"),
-    columnExists("settings", "carry_over_limit_days"),
+    columnExists("settings", "carry_over_limit_hours"),
   ]);
 
   return {
-    hasPolicyColumns: accrualPolicy && carryOverEnabled && carryOverLimitDays,
+    hasPolicyColumns: accrualPolicy && carryOverEnabled && carryOverLimitHours,
   };
 }
 
-async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Promise<number> {
+async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number): Promise<number> {
   const columnSupport = await getUserColumnSupport();
   const user = await queryRow<{
     birthDate: string | null;
     hasChild: boolean;
     employmentStartDate: string | null;
-    manualLeaveAllowanceDays: number | null;
+    manualLeaveAllowanceHours: number | null;
   }>(
     `
       SELECT birth_date::text as "birthDate",
         has_child as "hasChild",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
-        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays"
+        ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours"
       FROM users
       WHERE id = $1
     `,
@@ -249,32 +249,32 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
 
   const policy = await getVacationPolicy();
 
-  const baseAllowanceDays = computeAnnualLeaveAllowance({
+  const baseAllowanceHours = computeAnnualLeaveAllowanceHours({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
     employmentStartDate: user.employmentStartDate,
-    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    manualAllowanceHours: user.manualLeaveAllowanceHours,
     accrualPolicy: policy.accrualPolicy,
   });
 
   if (!policy.carryOverEnabled) {
-    return baseAllowanceDays * HOURS_PER_WORKDAY;
+    return baseAllowanceHours;
   }
 
   const previousYear = year - 1;
-  const previousAllowanceDays = computeAnnualLeaveAllowance({
+  const previousAllowanceHours = computeAnnualLeaveAllowanceHours({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year: previousYear,
     employmentStartDate: user.employmentStartDate,
-    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    manualAllowanceHours: user.manualLeaveAllowanceHours,
     accrualPolicy: policy.accrualPolicy,
   });
 
   const previousUsed = await queryRow<{ total: number }>(
     `
-      SELECT COALESCE(SUM(computed_days), 0) as total
+      SELECT COALESCE(SUM(computed_hours), 0) as total
       FROM leave_requests
       WHERE user_id = $1
         AND type = 'ANNUAL_LEAVE'
@@ -284,19 +284,19 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
     [userId, previousYear]
   );
 
-  const carryOverLimit = getAnnualLeaveGroupAllowance({
+  const carryOverLimitHours = getAnnualLeaveGroupAllowanceHours({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
   });
 
-  const carryOverDays = computeCarryOverDays({
-    previousAllowance: previousAllowanceDays,
-    previousUsed: Number(previousUsed?.total ?? 0) / HOURS_PER_WORKDAY,
-    carryOverLimit,
+  const carryOverHours = computeCarryOverHours({
+    previousAllowance: previousAllowanceHours,
+    previousUsed: Number(previousUsed?.total ?? 0),
+    carryOverLimit: carryOverLimitHours,
   });
 
-  return (baseAllowanceDays + carryOverDays) * HOURS_PER_WORKDAY;
+  return baseAllowanceHours + carryOverHours;
 }
 
 function parseBooleanFlag(value: unknown): boolean {
@@ -604,7 +604,7 @@ app.get("/users/me", asyncHandler(async (req, res) => {
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
+        ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -626,7 +626,7 @@ app.get("/leave-balances/me", asyncHandler(async (req, res) => {
   const currentYear = new Date().getFullYear();
   const booked = await queryRow<{ total: number }>(
     `
-      SELECT COALESCE(SUM(computed_days), 0) as total
+      SELECT COALESCE(SUM(computed_hours), 0) as total
       FROM leave_requests
       WHERE user_id = $1
         AND type = 'ANNUAL_LEAVE'
@@ -636,14 +636,14 @@ app.get("/leave-balances/me", asyncHandler(async (req, res) => {
     [auth.userID, currentYear]
   );
 
-  const allowanceDays = await getAnnualLeaveAllowanceForUser(auth.userID, currentYear);
-  const usedDays = Number(booked?.total ?? 0);
+  const allowanceHours = await getAnnualLeaveAllowanceHoursForUser(auth.userID, currentYear);
+  const usedHours = Number(booked?.total ?? 0);
 
   res.json({
     year: currentYear,
-    allowanceDays,
-    usedDays,
-    remainingDays: allowanceDays - usedDays,
+    allowanceHours,
+    usedHours,
+    remainingHours: allowanceHours - usedHours,
   });
 }));
 
@@ -659,8 +659,8 @@ app.get("/users", asyncHandler(async (req, res) => {
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
-        NULL::double precision as "remainingLeaveDays",
+        ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
+        NULL::double precision as "remainingLeaveHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -673,7 +673,7 @@ app.get("/users", asyncHandler(async (req, res) => {
   const balanceRows = await queryRows<{ userId: string; total: number }>(
     `
       SELECT user_id as "userId",
-        COALESCE(SUM(computed_days), 0) as total
+        COALESCE(SUM(computed_hours), 0) as total
       FROM leave_requests
       WHERE type = 'ANNUAL_LEAVE'
         AND status IN ('PENDING', 'APPROVED')
@@ -688,11 +688,11 @@ app.get("/users", asyncHandler(async (req, res) => {
 
   const usersWithBalances = await Promise.all(
     users.map(async (user) => {
-      const allowanceDays = await getAnnualLeaveAllowanceForUser(user.id, year);
-      const usedDays = bookedByUserId.get(user.id) ?? 0;
+      const allowanceHours = await getAnnualLeaveAllowanceHoursForUser(user.id, year);
+      const usedHours = bookedByUserId.get(user.id) ?? 0;
       return {
         ...user,
-        remainingLeaveDays: allowanceDays - usedDays,
+        remainingLeaveHours: allowanceHours - usedHours,
       };
     })
   );
@@ -704,7 +704,7 @@ app.post("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireManager(auth.role);
   const columnSupport = await getUserColumnSupport();
-  const { email, name, role, teamId, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceDays } = req.body as {
+  const { email, name, role, teamId, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceHours } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
@@ -712,7 +712,7 @@ app.post("/users", asyncHandler(async (req, res) => {
     birthDate?: string | null;
     hasChild?: boolean;
     employmentStartDate?: string | null;
-    manualLeaveAllowanceDays?: number | null;
+    manualLeaveAllowanceHours?: number | null;
   };
 
   if (!email || !name) {
@@ -724,8 +724,8 @@ app.post("/users", asyncHandler(async (req, res) => {
   const userId = randomUUID();
   const userRole: UserRole = role ?? "EMPLOYEE";
 
-  if (manualLeaveAllowanceDays !== undefined && manualLeaveAllowanceDays !== null) {
-    if (Number.isNaN(manualLeaveAllowanceDays) || manualLeaveAllowanceDays < 0) {
+  if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
+    if (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0) {
       throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
     }
   }
@@ -739,9 +739,9 @@ app.post("/users", asyncHandler(async (req, res) => {
       values.splice(5, 0, employmentStartDate ?? null);
     }
 
-    if (columnSupport.manualLeaveAllowanceDays) {
-      columns.splice(columnSupport.employmentStartDate ? 7 : 6, 0, "manual_leave_allowance_days");
-      values.splice(columnSupport.employmentStartDate ? 7 : 6, 0, manualLeaveAllowanceDays ?? null);
+    if (columnSupport.manualLeaveAllowanceHours) {
+      columns.splice(columnSupport.employmentStartDate ? 7 : 6, 0, "manual_leave_allowance_hours");
+      values.splice(columnSupport.employmentStartDate ? 7 : 6, 0, manualLeaveAllowanceHours ?? null);
     }
 
     const placeholders: string[] = values.map((_value, index) => `$${index + 1}`);
@@ -768,7 +768,7 @@ app.post("/users", asyncHandler(async (req, res) => {
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
+        ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -792,7 +792,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   requireManager(auth.role);
   const { id } = req.params;
   const columnSupport = await getUserColumnSupport();
-  const { email, name, role, teamId, isActive, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceDays } = req.body as {
+  const { email, name, role, teamId, isActive, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceHours } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
@@ -801,7 +801,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     birthDate?: string | null;
     hasChild?: boolean;
     employmentStartDate?: string | null;
-    manualLeaveAllowanceDays?: number | null;
+    manualLeaveAllowanceHours?: number | null;
   };
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [id]);
@@ -844,12 +844,12 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     updates.push(`has_child = $${values.length + 1}`);
     values.push(hasChild);
   }
-  if (columnSupport.manualLeaveAllowanceDays && manualLeaveAllowanceDays !== undefined) {
-    if (manualLeaveAllowanceDays !== null && (Number.isNaN(manualLeaveAllowanceDays) || manualLeaveAllowanceDays < 0)) {
+  if (columnSupport.manualLeaveAllowanceHours && manualLeaveAllowanceHours !== undefined) {
+    if (manualLeaveAllowanceHours !== null && (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0)) {
       throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
     }
-    updates.push(`manual_leave_allowance_days = $${values.length + 1}`);
-    values.push(manualLeaveAllowanceDays);
+    updates.push(`manual_leave_allowance_hours = $${values.length + 1}`);
+    values.push(manualLeaveAllowanceHours);
   }
   if (isActive !== undefined) {
     updates.push(`is_active = $${values.length + 1}`);
@@ -872,7 +872,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
-        ${columnSupport.manualLeaveAllowanceDays ? `manual_leave_allowance_days` : "NULL"} as "manualLeaveAllowanceDays",
+        ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1355,7 +1355,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
-        lr.computed_days as "computedDays",
+        lr.computed_hours as "computedHours",
         lr.attachment_url as "attachmentUrl",
         lr.created_at as "createdAt",
         lr.updated_at as "updatedAt"
@@ -1371,7 +1371,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   const bookedRows = await queryRows<{ userId: string; total: number }>(
     `
       SELECT user_id as "userId",
-        COALESCE(SUM(computed_days), 0) as total
+        COALESCE(SUM(computed_hours), 0) as total
       FROM leave_requests
       WHERE type = 'ANNUAL_LEAVE'
         AND status IN ('PENDING', 'APPROVED')
@@ -1389,20 +1389,20 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
       if (request.type !== "ANNUAL_LEAVE") {
         return {
           ...request,
-          currentBalanceDays: null,
-          balanceAfterApprovalDays: null,
+          currentBalanceHours: null,
+          balanceAfterApprovalHours: null,
         };
       }
 
-      const allowanceDays = await getAnnualLeaveAllowanceForUser(request.userId, currentYear);
-      const bookedDays = bookedByUserId.get(request.userId) ?? 0;
-      const currentBalanceDays = allowanceDays - bookedDays;
-      const extraDays = request.status === "PENDING" ? request.computedDays : 0;
+      const allowanceHours = await getAnnualLeaveAllowanceHoursForUser(request.userId, currentYear);
+      const bookedHours = bookedByUserId.get(request.userId) ?? 0;
+      const currentBalanceHours = allowanceHours - bookedHours;
+      const extraHours = request.status === "PENDING" ? request.computedHours : 0;
 
       return {
         ...request,
-        currentBalanceDays,
-        balanceAfterApprovalDays: currentBalanceDays - extraDays,
+        currentBalanceHours,
+        balanceAfterApprovalHours: currentBalanceHours - extraHours,
       };
     })
   );
@@ -1460,12 +1460,14 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   );
 
   const holidayDates = new Set(holidayRows.map((h) => h.date));
-  const computedDays = computeWorkingHours(
+  const computedHours = computeWorkingHours(
     startDate,
     endDate,
     isHalfDayStart ?? false,
     isHalfDayEnd ?? false,
-    holidayDates
+    holidayDates,
+    startTime ?? null,
+    endTime ?? null
   );
 
   const result = await queryRow<{ id: number }>(
@@ -1473,7 +1475,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
       INSERT INTO leave_requests (
         user_id, type, start_date, end_date, start_time, end_time,
         is_half_day_start, is_half_day_end,
-        reason, computed_days, status,
+        reason, computed_hours, status,
         created_at, updated_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'DRAFT', NOW(), NOW())
       RETURNING id
@@ -1488,7 +1490,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
       isHalfDayStart ?? false,
       isHalfDayEnd ?? false,
       reason ?? null,
-      computedDays,
+      computedHours,
     ]
   );
 
@@ -1505,7 +1507,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1565,7 +1567,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1608,8 +1610,15 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     }
   }
 
-  let computedDays = before.computedDays;
-  if (startDate || endDate || isHalfDayStart !== undefined || isHalfDayEnd !== undefined) {
+  let computedHours = before.computedHours;
+  if (
+    startDate ||
+    endDate ||
+    isHalfDayStart !== undefined ||
+    isHalfDayEnd !== undefined ||
+    startTime !== undefined ||
+    endTime !== undefined
+  ) {
     const holidayRows = await queryRows<{ date: string }>(
       `
         SELECT date::text as date FROM holidays
@@ -1620,12 +1629,14 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     );
 
     const holidayDates = new Set(holidayRows.map((h) => h.date));
-    computedDays = computeWorkingHours(
+    computedHours = computeWorkingHours(
       newStartDate,
       newEndDate,
       isHalfDayStart ?? before.isHalfDayStart,
       isHalfDayEnd ?? before.isHalfDayEnd,
-      holidayDates
+      holidayDates,
+      startTime ?? before.startTime,
+      endTime ?? before.endTime
     );
   }
 
@@ -1668,9 +1679,9 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     updates.push(`manager_comment = $${values.length + 1}`);
     values.push(managerComment || null);
   }
-  if (computedDays !== before.computedDays) {
-    updates.push(`computed_days = $${values.length + 1}`);
-    values.push(computedDays);
+  if (computedHours !== before.computedHours) {
+    updates.push(`computed_hours = $${values.length + 1}`);
+    values.push(computedHours);
   }
 
   if (updates.length > 0) {
@@ -1692,7 +1703,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1750,7 +1761,7 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1794,7 +1805,7 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1848,7 +1859,7 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1919,7 +1930,7 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
-        lr.computed_days as "computedDays",
+        lr.computed_hours as "computedHours",
         lr.attachment_url as "attachmentUrl",
         lr.created_at as "createdAt",
         lr.updated_at as "updatedAt",
@@ -1994,7 +2005,7 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -2042,7 +2053,7 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -2085,7 +2096,7 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -2131,7 +2142,7 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -2168,7 +2179,7 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -2282,7 +2293,7 @@ app.get("/calendar", asyncHandler(async (req, res) => {
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
-        lr.computed_days as "computedDays",
+        lr.computed_hours as "computedHours",
         lr.attachment_url as "attachmentUrl",
         lr.created_at as "createdAt",
         lr.updated_at as "updatedAt",
@@ -2432,14 +2443,14 @@ app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
   const accrualPolicy = payload.accrualPolicy ?? before.accrualPolicy;
   const carryOverEnabled =
     typeof payload.carryOverEnabled === "boolean" ? payload.carryOverEnabled : before.carryOverEnabled;
-  const carryOverLimitDays =
-    typeof payload.carryOverLimitDays === "number" ? payload.carryOverLimitDays : before.carryOverLimitDays;
+  const carryOverLimitHours =
+    typeof payload.carryOverLimitHours === "number" ? payload.carryOverLimitHours : before.carryOverLimitHours;
 
   if (!["YEAR_START", "PRO_RATA"].includes(accrualPolicy)) {
     throw new HttpError(400, "Invalid accrual policy.");
   }
 
-  if (Number.isNaN(carryOverLimitDays) || carryOverLimitDays < 0) {
+  if (Number.isNaN(carryOverLimitHours) || carryOverLimitHours < 0) {
     throw new HttpError(400, "Carry-over limit must be a non-negative number.");
   }
 
@@ -2448,15 +2459,15 @@ app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
       UPDATE settings
       SET annual_leave_accrual_policy = $1,
           carry_over_enabled = $2,
-          carry_over_limit_days = $3,
+          carry_over_limit_hours = $3,
           updated_at = NOW()
       WHERE id = 1
       RETURNING
         annual_leave_accrual_policy as "accrualPolicy",
         carry_over_enabled as "carryOverEnabled",
-        carry_over_limit_days as "carryOverLimitDays"
+        carry_over_limit_hours as "carryOverLimitHours"
     `,
-    [accrualPolicy, carryOverEnabled, carryOverLimitDays]
+    [accrualPolicy, carryOverEnabled, carryOverLimitHours]
   );
 
   if (!updated) {

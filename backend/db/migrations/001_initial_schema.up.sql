@@ -27,7 +27,7 @@ CREATE TABLE users (
   employment_start_date DATE,
   birth_date DATE,
   has_child BOOLEAN NOT NULL DEFAULT FALSE,
-  manual_leave_allowance_days DOUBLE PRECISION,
+  manual_leave_allowance_hours DOUBLE PRECISION,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -47,7 +47,7 @@ CREATE TABLE leave_requests (
   manager_comment TEXT,
   approved_by TEXT REFERENCES users(id),
   approved_at TIMESTAMP,
-  computed_days DOUBLE PRECISION NOT NULL DEFAULT 0,
+  computed_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
   attachment_url TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -69,8 +69,8 @@ CREATE TABLE leave_balances (
   id BIGSERIAL PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
   year INTEGER NOT NULL,
-  allowance_days DOUBLE PRECISION NOT NULL DEFAULT 0,
-  used_days DOUBLE PRECISION NOT NULL DEFAULT 0,
+  allowance_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
+  used_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   
