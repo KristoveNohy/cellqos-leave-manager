@@ -1475,7 +1475,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
         is_half_day_start, is_half_day_end,
         reason, computed_days, status,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT', NOW(), NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'DRAFT', NOW(), NOW())
       RETURNING id
     `,
     [
@@ -2603,6 +2603,11 @@ const port = Number(process.env.PORT ?? 4000);
 
 async function startServer() {
   await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+  await pool.query(`
+    ALTER TABLE leave_requests
+    ADD COLUMN IF NOT EXISTS start_time TIME,
+    ADD COLUMN IF NOT EXISTS end_time TIME
+  `);
   await pool.query(`
     ALTER TABLE holidays
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
