@@ -55,7 +55,7 @@ model User {
   employmentStartDate DateTime? @map("employment_start_date") @db.Date
   birthDate          DateTime? @map("birth_date") @db.Date
   hasChild           Boolean  @default(false) @map("has_child")
-  manualLeaveAllowanceDays Float? @map("manual_leave_allowance_days")
+  manualLeaveAllowanceHours Float? @map("manual_leave_allowance_hours")
   isActive           Boolean  @default(true) @map("is_active")
   passwordHash       String?  @map("password_hash")
   magicLinkTokenHash String?  @map("magic_link_token_hash")
@@ -87,7 +87,7 @@ model LeaveRequest {
   approvedBy     String?     @map("approved_by")
   approver       User?       @relation("UserApprovals", fields: [approvedBy], references: [id])
   approvedAt     DateTime?   @map("approved_at")
-  computedDays   Float       @default(0) @map("computed_days")
+  computedHours  Float       @default(0) @map("computed_hours")
   attachmentUrl  String?     @map("attachment_url")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
@@ -111,8 +111,8 @@ model LeaveBalance {
   userId        String   @map("user_id")
   user          User     @relation(fields: [userId], references: [id])
   year          Int
-  allowanceDays Float    @default(0) @map("allowance_days")
-  usedDays      Float    @default(0) @map("used_days")
+  allowanceHours Float    @default(0) @map("allowance_hours")
+  usedHours      Float    @default(0) @map("used_hours")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -152,7 +152,7 @@ model Setting {
   showTeamCalendarForEmployees Boolean  @default(false) @map("show_team_calendar_for_employees")
   annualLeaveAccrualPolicy   String   @default("YEAR_START") @map("annual_leave_accrual_policy")
   carryOverEnabled           Boolean  @default(false) @map("carry_over_enabled")
-  carryOverLimitDays         Float    @default(0) @map("carry_over_limit_days")
+  carryOverLimitHours         Float    @default(0) @map("carry_over_limit_hours")
   updatedAt                  DateTime @default(now()) @map("updated_at")
 
   @@map("settings")

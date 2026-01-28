@@ -69,7 +69,7 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
                 </div>
                 
                 <div className="text-sm text-muted-foreground">
-                  {request.startDate} – {request.endDate} ({formatLeaveHours(request.computedDays)})
+                  {request.startDate} – {request.endDate} ({formatLeaveHours(request.computedHours)})
                 </div>
                 
                 {request.reason && (
