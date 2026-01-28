@@ -1,30 +1,43 @@
 import { APIError } from "encore.dev/api";
 import db from "../db";
 import {
-  computeAnnualLeaveAllowance,
-  computeCarryOverDays,
-  getAnnualLeaveGroupAllowance,
+  computeAnnualLeaveAllowanceHours,
+  computeCarryOverHours,
+  getAnnualLeaveGroupAllowanceHours,
 } from "./leave-entitlement";
-import { HOURS_PER_WORKDAY } from "./date-utils";
 import { formatLeaveHours } from "./leave-format";
 
-export async function getAnnualLeaveAllowance(userId: string, year: number): Promise<number> {
+export async function getAnnualLeaveAllowanceHours(userId: string, year: number): Promise<number> {
   const user = await db.queryRow<{
     birthDate: string | null;
     hasChild: boolean;
     employmentStartDate: string | null;
-    manualLeaveAllowanceDays: number | null;
+    manualLeaveAllowanceHours: number | null;
   }>`
     SELECT birth_date::text as "birthDate",
       has_child as "hasChild",
       employment_start_date::text as "employmentStartDate",
-      manual_leave_allowance_days as "manualLeaveAllowanceDays"
+      manual_leave_allowance_hours as "manualLeaveAllowanceHours"
     FROM users
     WHERE id = ${userId}
   `;
 
   if (!user) {
     return 0;
+  }
+
+  const currentYear = new Date().getFullYear();
+  if (user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined && year === currentYear) {
+    const booked = await db.queryRow<{ total: number }>`
+      SELECT COALESCE(SUM(computed_hours), 0) as total
+      FROM leave_requests
+      WHERE user_id = ${userId}
+        AND type = 'ANNUAL_LEAVE'
+        AND status IN ('PENDING', 'APPROVED')
+        AND EXTRACT(YEAR FROM start_date) = ${year}
+    `;
+    const usedHours = Number(booked?.total ?? 0);
+    return usedHours + user.manualLeaveAllowanceHours;
   }
 
   const policy = await db.queryRow<{
@@ -40,31 +53,31 @@ export async function getAnnualLeaveAllowance(userId: string, year: number): Pro
   const accrualPolicy = policy?.accrualPolicy ?? "YEAR_START";
   const carryOverEnabled = policy?.carryOverEnabled ?? false;
 
-  const baseAllowanceDays = computeAnnualLeaveAllowance({
+  const baseAllowanceHours = computeAnnualLeaveAllowanceHours({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
     employmentStartDate: user.employmentStartDate,
-    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    manualAllowanceHours: null,
     accrualPolicy,
   });
 
   if (!carryOverEnabled) {
-    return baseAllowanceDays * HOURS_PER_WORKDAY;
+    return baseAllowanceHours;
   }
 
   const previousYear = year - 1;
-  const previousAllowanceDays = computeAnnualLeaveAllowance({
+  const previousAllowanceHours = computeAnnualLeaveAllowanceHours({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year: previousYear,
     employmentStartDate: user.employmentStartDate,
-    manualAllowanceDays: user.manualLeaveAllowanceDays,
+    manualAllowanceHours: user.manualLeaveAllowanceHours,
     accrualPolicy,
   });
 
   const previousUsed = await db.queryRow<{ total: number }>`
-    SELECT COALESCE(SUM(computed_days), 0) as total
+    SELECT COALESCE(SUM(computed_hours), 0) as total
     FROM leave_requests
     WHERE user_id = ${userId}
       AND type = 'ANNUAL_LEAVE'
@@ -72,19 +85,19 @@ export async function getAnnualLeaveAllowance(userId: string, year: number): Pro
       AND EXTRACT(YEAR FROM start_date) = ${previousYear}
   `;
 
-  const carryOverLimit = getAnnualLeaveGroupAllowance({
+  const carryOverLimitHours = getAnnualLeaveGroupAllowanceHours({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
   });
 
-  const carryOverDays = computeCarryOverDays({
-    previousAllowance: previousAllowanceDays,
-    previousUsed: Number(previousUsed?.total ?? 0) / HOURS_PER_WORKDAY,
-    carryOverLimit,
+  const carryOverHours = computeCarryOverHours({
+    previousAllowance: previousAllowanceHours,
+    previousUsed: Number(previousUsed?.total ?? 0),
+    carryOverLimit: carryOverLimitHours,
   });
 
-  return (baseAllowanceDays + carryOverDays) * HOURS_PER_WORKDAY;
+  return baseAllowanceHours + carryOverHours;
 }
 
 type AnnualLeaveBalanceCheck = {
@@ -105,11 +118,11 @@ export async function ensureAnnualLeaveBalance({
   }
 
   const year = new Date(startDate).getFullYear();
-  const allowanceHours = await getAnnualLeaveAllowance(userId, year);
+  const allowanceHours = await getAnnualLeaveAllowanceHours(userId, year);
 
   const booked = requestId
     ? await db.queryRow<{ total: number }>`
-        SELECT COALESCE(SUM(computed_days), 0) as total
+        SELECT COALESCE(SUM(computed_hours), 0) as total
         FROM leave_requests
         WHERE user_id = ${userId}
           AND type = 'ANNUAL_LEAVE'
@@ -118,7 +131,7 @@ export async function ensureAnnualLeaveBalance({
           AND id != ${requestId}
       `
     : await db.queryRow<{ total: number }>`
-        SELECT COALESCE(SUM(computed_days), 0) as total
+        SELECT COALESCE(SUM(computed_hours), 0) as total
         FROM leave_requests
         WHERE user_id = ${userId}
           AND type = 'ANNUAL_LEAVE'
