@@ -41,7 +41,9 @@ export const create = api(
       req.endDate,
       req.isHalfDayStart || false,
       req.isHalfDayEnd || false,
-      holidayDates
+      holidayDates,
+      req.startTime || null,
+      req.endTime || null
     );
 
     if (req.type === "ANNUAL_LEAVE") {

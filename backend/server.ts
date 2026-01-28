@@ -1465,7 +1465,9 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     endDate,
     isHalfDayStart ?? false,
     isHalfDayEnd ?? false,
-    holidayDates
+    holidayDates,
+    startTime ?? null,
+    endTime ?? null
   );
 
   const result = await queryRow<{ id: number }>(
@@ -1609,7 +1611,14 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   }
 
   let computedHours = before.computedHours;
-  if (startDate || endDate || isHalfDayStart !== undefined || isHalfDayEnd !== undefined) {
+  if (
+    startDate ||
+    endDate ||
+    isHalfDayStart !== undefined ||
+    isHalfDayEnd !== undefined ||
+    startTime !== undefined ||
+    endTime !== undefined
+  ) {
     const holidayRows = await queryRows<{ date: string }>(
       `
         SELECT date::text as date FROM holidays
@@ -1625,7 +1634,9 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
       newEndDate,
       isHalfDayStart ?? before.isHalfDayStart,
       isHalfDayEnd ?? before.isHalfDayEnd,
-      holidayDates
+      holidayDates,
+      startTime ?? before.startTime,
+      endTime ?? before.endTime
     );
   }
 

@@ -31,15 +31,44 @@ export function addDays(date: Date, days: number): Date {
 
 export const HOURS_PER_WORKDAY = 8;
 
+function parseTimeToMinutes(time: string): number | null {
+  const parts = time.split(":");
+  if (parts.length < 2) {
+    return null;
+  }
+  const hours = Number(parts[0]);
+  const minutes = Number(parts[1]);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
 export function computeWorkingHours(
   startDate: string,
   endDate: string,
   isHalfDayStart: boolean,
   isHalfDayEnd: boolean,
-  holidays: Set<string>
+  holidays: Set<string>,
+  startTime?: string | null,
+  endTime?: string | null
 ): number {
   const start = parseDate(startDate);
   const end = parseDate(endDate);
+
+  if (startDate === endDate && startTime && endTime) {
+    if (isWeekend(start) || isHoliday(start, holidays)) {
+      return 0;
+    }
+
+    const startMinutes = parseTimeToMinutes(startTime);
+    const endMinutes = parseTimeToMinutes(endTime);
+    if (startMinutes === null || endMinutes === null) {
+      return 0;
+    }
+    const diffMinutes = Math.max(0, endMinutes - startMinutes);
+    return Math.max(0, Math.round((diffMinutes / 60) * 100) / 100);
+  }
   
   let workingDays = 0;
   let currentDate = new Date(start);

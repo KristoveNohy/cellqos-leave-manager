@@ -91,7 +91,14 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     }
     
     let computedHours = before.computedHours;
-    if (startDate || endDate || isHalfDayStart !== undefined || isHalfDayEnd !== undefined) {
+    if (
+      startDate ||
+      endDate ||
+      isHalfDayStart !== undefined ||
+      isHalfDayEnd !== undefined ||
+      startTime !== undefined ||
+      endTime !== undefined
+    ) {
       const holidayDates = new Set<string>();
       for await (const holiday of db.query<{ date: string }>`
         SELECT date::text as date FROM holidays
@@ -106,7 +113,9 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         newEndDate,
         isHalfDayStart ?? before.isHalfDayStart,
         isHalfDayEnd ?? before.isHalfDayEnd,
-        holidayDates
+        holidayDates,
+        startTime ?? before.startTime,
+        endTime ?? before.endTime
       );
     }
 
