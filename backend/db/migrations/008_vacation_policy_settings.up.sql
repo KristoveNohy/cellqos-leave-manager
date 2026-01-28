@@ -1,4 +1,4 @@
 ALTER TABLE settings
-  ADD COLUMN annual_leave_accrual_policy TEXT NOT NULL DEFAULT 'YEAR_START',
-  ADD COLUMN carry_over_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN annual_leave_accrual_policy TEXT NOT NULL DEFAULT 'PRO_RATA',
+  ADD COLUMN carry_over_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   ADD COLUMN carry_over_limit_hours DOUBLE PRECISION NOT NULL DEFAULT 0;

@@ -30,8 +30,8 @@ export default function VacationPolicyManagement() {
   });
   const { handleSubmit, reset, setValue, watch } = useForm<VacationPolicyFormValues>({
     defaultValues: {
-      accrualPolicy: "YEAR_START",
-      carryOverEnabled: false,
+      accrualPolicy: "PRO_RATA",
+      carryOverEnabled: true,
     },
   });
 

@@ -136,8 +136,8 @@ async function getVacationPolicy(): Promise<VacationPolicy> {
   const policySupport = await getVacationPolicySupport();
   if (!policySupport.hasPolicyColumns) {
     return {
-      accrualPolicy: "YEAR_START",
-      carryOverEnabled: false,
+      accrualPolicy: "PRO_RATA",
+      carryOverEnabled: true,
       carryOverLimitHours: 0,
     };
   }
@@ -159,8 +159,8 @@ async function getVacationPolicy(): Promise<VacationPolicy> {
 
   return (
     policy ?? {
-      accrualPolicy: "YEAR_START",
-      carryOverEnabled: false,
+      accrualPolicy: "PRO_RATA",
+      carryOverEnabled: true,
       carryOverLimitHours: 0,
     }
   );

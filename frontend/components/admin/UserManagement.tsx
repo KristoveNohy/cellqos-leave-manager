@@ -351,7 +351,7 @@ export default function UserManagement() {
                 <Input id="user-start-date" type="date" {...register("employmentStartDate")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="user-manual-allowance">Manuálny nárok (hodiny)</Label>
+                <Label htmlFor="user-manual-allowance">Nárok na dovolenku (hodiny)</Label>
                 <Input
                   id="user-manual-allowance"
                   type="number"
@@ -360,6 +360,9 @@ export default function UserManagement() {
                   placeholder="Napr. 160"
                   {...register("manualLeaveAllowanceHours")}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Ak je vyplnené, nahradí systémový nárok pre tohto používateľa.
+                </p>
               </div>
             </div>
             <div className="flex justify-end gap-2">
