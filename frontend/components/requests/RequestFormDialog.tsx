@@ -45,14 +45,16 @@ export default function RequestFormDialog({
   const { user } = useAuth();
   const isManager = user?.role === "MANAGER";
   const { toast } = useToast();
+  const defaultStartTime = request ? request.startTime || "" : "08:00";
+  const defaultEndTime = request ? request.endTime || "" : "16:00";
   const { register, handleSubmit, setValue, watch, reset } = useForm({
     defaultValues: {
       userId: user?.id ?? "",
       type: request?.type || "ANNUAL_LEAVE",
       startDate: request?.startDate || initialStartDate || "",
       endDate: request?.endDate || initialEndDate || "",
-      startTime: request?.startTime || "",
-      endTime: request?.endTime || "",
+      startTime: defaultStartTime,
+      endTime: defaultEndTime,
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
@@ -71,13 +73,13 @@ export default function RequestFormDialog({
       type: request?.type || "ANNUAL_LEAVE",
       startDate: request?.startDate || initialStartDate || "",
       endDate: request?.endDate || initialEndDate || "",
-      startTime: request?.startTime || "",
-      endTime: request?.endTime || "",
+      startTime: defaultStartTime,
+      endTime: defaultEndTime,
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
     });
-  }, [initialEndDate, initialStartDate, request, reset, user?.id]);
+  }, [defaultEndTime, defaultStartTime, initialEndDate, initialStartDate, request, reset, user?.id]);
   
   const createMutation = useMutation({
     mutationFn: async (data: any) => {

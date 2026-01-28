@@ -224,7 +224,7 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
             <div className="text-sm text-muted-foreground mb-1">Trvanie</div>
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{formatLeaveHours(request.computedDays)} pracovného času</span>
+              <span>{formatLeaveHours(request.computedHours)} pracovného času</span>
             </div>
           </div>
           
