@@ -1,6 +1,7 @@
 import { api } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
+import { isAdmin } from "../shared/rbac";
 import type { Notification } from "../shared/types";
 
 interface ListNotificationsResponse {
@@ -32,6 +33,9 @@ export const list = api(
     const notifications: Notification[] = [];
     const supportsDedupeKey = await hasNotificationsDedupeKey();
     const dedupeSelect = supportsDedupeKey ? `, dedupe_key as "dedupeKey"` : "";
+    const isAdminUser = isAdmin(auth.role);
+    const whereClause = isAdminUser ? "" : "WHERE user_id = $1";
+    const params = isAdminUser ? [] : [auth.userID];
 
     for await (const row of db.rawQuery<Notification>(
       `
@@ -45,11 +49,11 @@ export const list = api(
           created_at as "createdAt"
           ${dedupeSelect}
         FROM notifications
-        WHERE user_id = $1
+        ${whereClause}
         ORDER BY (read_at IS NULL) DESC, created_at DESC
         LIMIT 50
       `,
-      auth.userID
+      ...params
     )) {
       notifications.push(row);
     }

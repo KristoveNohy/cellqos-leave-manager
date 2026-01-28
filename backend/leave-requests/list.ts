@@ -1,6 +1,7 @@
 import { api, APIError, Query } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
+import { isAdmin, isManager } from "../shared/rbac";
 import type { LeaveRequest, LeaveStatus, LeaveType } from "../shared/types";
 
 interface ListLeaveRequestsParams {
@@ -21,21 +22,50 @@ export const list = api(
   { auth: true, expose: true, method: "GET", path: "/leave-requests" },
   async (params: ListLeaveRequestsParams): Promise<ListLeaveRequestsResponse> => {
     const auth = getAuthData()!;
-    const isManager = auth.role === "MANAGER";
+    const isAdminUser = isAdmin(auth.role);
+    const isManagerUser = isManager(auth.role);
+    let viewerTeamId: number | null = null;
+    if (isManagerUser && !isAdminUser) {
+      const viewer = await db.queryRow<{ teamId: number | null }>`
+        SELECT team_id as "teamId"
+        FROM users
+        WHERE id = ${auth.userID}
+      `;
+      viewerTeamId = viewer?.teamId ?? null;
+    }
     const conditions: string[] = ["1=1"];
     const values: any[] = [];
     
     if (params.userId) {
-      if (!isManager && params.userId !== auth.userID) {
+      if (!isManagerUser && !isAdminUser && params.userId !== auth.userID) {
         throw APIError.permissionDenied("Not allowed to view other users' requests");
+      }
+      if (isManagerUser && !isAdminUser && params.userId !== auth.userID) {
+        const target = await db.queryRow<{ teamId: number | null }>`
+          SELECT team_id as "teamId"
+          FROM users
+          WHERE id = ${params.userId}
+        `;
+        if (!target || viewerTeamId === null || target.teamId !== viewerTeamId) {
+          throw APIError.permissionDenied("Not allowed to view other teams' requests");
+        }
       }
       conditions.push(`lr.user_id = $${values.length + 1}`);
       values.push(params.userId);
     }
 
-    if (!isManager && !params.userId) {
+    if (!isManagerUser && !isAdminUser && !params.userId) {
       conditions.push(`lr.user_id = $${values.length + 1}`);
       values.push(auth.userID);
+    }
+
+    if (isManagerUser && !isAdminUser && !params.userId) {
+      if (viewerTeamId === null) {
+        conditions.push("1=0");
+      } else {
+        conditions.push(`u.team_id = $${values.length + 1}`);
+        values.push(viewerTeamId);
+      }
     }
     
     if (params.status) {
@@ -59,6 +89,9 @@ export const list = api(
     }
     
     if (params.teamId) {
+      if (isManagerUser && !isAdminUser && params.teamId !== viewerTeamId) {
+        throw APIError.permissionDenied("Not allowed to view other teams' requests");
+      }
       conditions.push(`u.team_id = $${values.length + 1}`);
       values.push(params.teamId);
     }

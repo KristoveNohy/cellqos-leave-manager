@@ -14,12 +14,12 @@ export default function Navigation() {
   const userRole = user?.role ?? "EMPLOYEE";
   
   const navItems = [
-    { path: "/calendar", label: "Kalendár", icon: Calendar, roles: ["EMPLOYEE", "MANAGER"] },
-    { path: "/my-requests", label: "Moje žiadosti", icon: FileText, roles: ["EMPLOYEE", "MANAGER"] },
-    { path: "/notifications", label: "Notifikácie", icon: Bell, roles: ["EMPLOYEE", "MANAGER"] },
-    { path: "/team", label: "Tím", icon: Users, roles: ["MANAGER"] },
-    { path: "/approvals", label: "Schvaľovanie", icon: CheckSquare, roles: ["MANAGER"] },
-    { path: "/admin", label: "Administrácia", icon: Settings, roles: ["MANAGER"] },
+    { path: "/calendar", label: "Kalendár", icon: Calendar, roles: ["EMPLOYEE", "MANAGER", "ADMIN"] },
+    { path: "/my-requests", label: "Moje žiadosti", icon: FileText, roles: ["EMPLOYEE", "MANAGER", "ADMIN"] },
+    { path: "/notifications", label: "Notifikácie", icon: Bell, roles: ["EMPLOYEE", "MANAGER", "ADMIN"] },
+    { path: "/team", label: "Tím", icon: Users, roles: ["MANAGER", "ADMIN"] },
+    { path: "/approvals", label: "Schvaľovanie", icon: CheckSquare, roles: ["MANAGER", "ADMIN"] },
+    { path: "/admin", label: "Administrácia", icon: Settings, roles: ["ADMIN"] },
   ];
 
   const notificationsQuery = useQuery({
@@ -81,7 +81,8 @@ export default function Navigation() {
                   to="/profile"
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {user.name} ({user.role === "MANAGER" ? "Manažér" : "Zamestnanec"})
+                  {user.name} (
+                  {user.role === "ADMIN" ? "Admin" : user.role === "MANAGER" ? "Manažér" : "Zamestnanec"})
                 </Link>
                 <Button variant="outline" size="sm" onClick={logout}>
                   Odhlásiť

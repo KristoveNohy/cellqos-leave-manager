@@ -1,6 +1,7 @@
 import { api, APIError, Query } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
+import { isAdmin, isManager } from "../shared/rbac";
 import type { LeaveRequest } from "../shared/types";
 
 interface GetCalendarParams {
@@ -12,6 +13,7 @@ interface GetCalendarParams {
 interface CalendarEvent extends LeaveRequest {
   userName: string;
   userEmail: string;
+  teamId: number | null;
 }
 
 interface GetCalendarResponse {
@@ -23,7 +25,8 @@ export const get = api(
   { auth: true, expose: true, method: "GET", path: "/calendar" },
   async (params: GetCalendarParams): Promise<GetCalendarResponse> => {
     const auth = getAuthData()!;
-    const isManager = auth.role === "MANAGER";
+    const isAdminUser = isAdmin(auth.role);
+    const isManagerUser = isManager(auth.role);
     const viewerId = auth.userID;
     let viewerTeamId: number | null = null;
     let showTeamCalendarForEmployees = false;
@@ -38,7 +41,7 @@ export const get = api(
       showTeamCalendarForEmployees = false;
     }
 
-    if (!isManager) {
+    if (!isAdminUser) {
       const viewer = await db.queryRow<{ teamId: number | null }>`
         SELECT team_id as "teamId"
         FROM users
@@ -60,12 +63,12 @@ export const get = api(
     ];
     const values: any[] = [params.startDate, params.endDate];
 
-    if (isManager && params.teamId) {
+    if ((isManagerUser || isAdminUser) && params.teamId) {
       conditions.push(`u.team_id = $${values.length + 1}`);
       values.push(params.teamId);
     }
 
-    if (!isManager) {
+    if (!isManagerUser && !isAdminUser) {
       if (showTeamCalendarForEmployees && viewerTeamId) {
         conditions.push(`u.team_id = $${values.length + 1}`);
         values.push(viewerTeamId);
@@ -92,7 +95,8 @@ export const get = api(
         lr.created_at as "createdAt",
         lr.updated_at as "updatedAt",
         u.name as "userName",
-        u.email as "userEmail"
+        u.email as "userEmail",
+        u.team_id as "teamId"
       FROM leave_requests lr
       JOIN users u ON lr.user_id = u.id
       WHERE ${conditions.join(" AND ")}
@@ -101,9 +105,12 @@ export const get = api(
     
     const events: CalendarEvent[] = [];
     for await (const row of db.rawQuery<CalendarEvent>(query, ...values)) {
-      if (!isManager && row.userId !== viewerId) {
-        row.reason = null;
-        row.managerComment = null;
+      if (!isAdminUser && row.userId !== viewerId) {
+        const isSameTeam = viewerTeamId !== null && viewerTeamId === row.teamId;
+        if (!isManagerUser || !isSameTeam) {
+          row.reason = null;
+          row.managerComment = null;
+        }
       }
       events.push(row);
     }

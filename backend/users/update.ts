@@ -3,7 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateEmail } from "../shared/validation";
 import { createAuditLog } from "../shared/audit";
-import { requireManager } from "../shared/rbac";
+import { requireAdmin } from "../shared/rbac";
 import type { User, UserRole } from "../shared/types";
 
 interface UpdateUserParams {
@@ -21,7 +21,7 @@ export const update = api<UpdateUserParams, User>(
   async (req): Promise<User> => {
     const { id, email, name, role, teamId, birthDate, hasChild } = req;
     const auth = getAuthData()!;
-    requireManager(auth.role);
+    requireAdmin(auth.role);
     const before = await db.queryRow`
       SELECT * FROM users WHERE id = ${id}
     `;
@@ -49,7 +49,9 @@ export const update = api<UpdateUserParams, User>(
       updates.push(`role = $${values.length + 1}`);
       values.push(role);
     }
-    if (teamId !== undefined) {
+    if (role === "ADMIN") {
+      updates.push("team_id = NULL");
+    } else if (teamId !== undefined) {
       updates.push(`team_id = $${values.length + 1}`);
       values.push(teamId || null);
     }

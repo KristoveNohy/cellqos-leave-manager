@@ -1,4 +1,4 @@
-export type UserRole = "EMPLOYEE" | "MANAGER";
+export type UserRole = "EMPLOYEE" | "MANAGER" | "ADMIN";
 
 export type LeaveType = 
   | "ANNUAL_LEAVE" 
