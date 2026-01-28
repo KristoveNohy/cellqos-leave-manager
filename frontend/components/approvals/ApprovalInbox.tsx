@@ -213,15 +213,15 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
 
                 <div className="text-sm text-muted-foreground space-y-1">
                   <div>
-                    {request.startDate} – {request.endDate} ({formatLeaveHours(request.computedDays)})
+                    {request.startDate} – {request.endDate} ({formatLeaveHours(request.computedHours)})
                   </div>
                   {request.userName && (
                     <div>Žiadateľ: {request.userName}</div>
                   )}
-                  {request.currentBalanceDays !== null && request.currentBalanceDays !== undefined && (
+                  {request.currentBalanceHours !== null && request.currentBalanceHours !== undefined && (
                     <div>
-                      Zostatok: {formatLeaveHours(request.currentBalanceDays)} · Po schválení:{" "}
-                      {formatLeaveHours(request.balanceAfterApprovalDays)}
+                      Zostatok: {formatLeaveHours(request.currentBalanceHours)} · Po schválení:{" "}
+                      {formatLeaveHours(request.balanceAfterApprovalHours)}
                     </div>
                   )}
                 </div>

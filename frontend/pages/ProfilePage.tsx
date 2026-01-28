@@ -87,17 +87,17 @@ export default function ProfilePage() {
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Nárok</span>
                 <span className="font-medium">
-                  {formatLeaveHours(balanceQuery.data?.allowanceDays)}
+                  {formatLeaveHours(balanceQuery.data?.allowanceHours)}
                 </span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Použité / plánované</span>
-                <span className="font-medium">{formatLeaveHours(balanceQuery.data?.usedDays)}</span>
+                <span className="font-medium">{formatLeaveHours(balanceQuery.data?.usedHours)}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Zostatok</span>
                 <span className="font-medium">
-                  {formatLeaveHours(balanceQuery.data?.remainingDays)}
+                  {formatLeaveHours(balanceQuery.data?.remainingHours)}
                 </span>
               </div>
             </div>

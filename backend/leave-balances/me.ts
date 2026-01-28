@@ -1,13 +1,13 @@
 import { api } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
-import { getAnnualLeaveAllowance } from "../shared/leave-balance";
+import { getAnnualLeaveAllowanceHours } from "../shared/leave-balance";
 
 interface LeaveBalanceSummary {
   year: number;
-  allowanceDays: number;
-  usedDays: number;
-  remainingDays: number;
+  allowanceHours: number;
+  usedHours: number;
+  remainingHours: number;
 }
 
 export const me = api(
@@ -17,7 +17,7 @@ export const me = api(
     const year = new Date().getFullYear();
 
     const booked = await db.queryRow<{ total: number }>`
-      SELECT COALESCE(SUM(computed_days), 0) as total
+      SELECT COALESCE(SUM(computed_hours), 0) as total
       FROM leave_requests
       WHERE user_id = ${auth.userID}
         AND type = 'ANNUAL_LEAVE'
@@ -25,15 +25,15 @@ export const me = api(
         AND EXTRACT(YEAR FROM start_date) = ${year}
     `;
 
-    const allowanceDays = await getAnnualLeaveAllowance(auth.userID, year);
-    const usedDays = Number(booked?.total ?? 0);
-    const remainingDays = allowanceDays - usedDays;
+    const allowanceHours = await getAnnualLeaveAllowanceHours(auth.userID, year);
+    const usedHours = Number(booked?.total ?? 0);
+    const remainingHours = allowanceHours - usedHours;
 
     return {
       year,
-      allowanceDays,
-      usedDays,
-      remainingDays,
+      allowanceHours,
+      usedHours,
+      remainingHours,
     };
   }
 );

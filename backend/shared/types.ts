@@ -27,8 +27,8 @@ export interface User {
   employmentStartDate: string | null;
   birthDate: string | null;
   hasChild: boolean;
-  manualLeaveAllowanceDays: number | null;
-  remainingLeaveDays?: number | null;
+  manualLeaveAllowanceHours: number | null;
+  remainingLeaveHours?: number | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -58,9 +58,9 @@ export interface LeaveRequest {
   managerComment: string | null;
   approvedBy: string | null;
   approvedAt: Date | null;
-  computedDays: number;
-  currentBalanceDays?: number | null;
-  balanceAfterApprovalDays?: number | null;
+  computedHours: number;
+  currentBalanceHours?: number | null;
+  balanceAfterApprovalHours?: number | null;
   attachmentUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -79,9 +79,9 @@ export interface LeaveBalance {
   id: number;
   userId: string;
   year: number;
-  allowanceDays: number;
-  usedDays: number;
-  remainingDays: number;
+  allowanceHours: number;
+  usedHours: number;
+  remainingHours: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -112,5 +112,5 @@ export interface Notification {
 export interface VacationPolicy {
   accrualPolicy: VacationAccrualPolicy;
   carryOverEnabled: boolean;
-  carryOverLimitDays: number;
+  carryOverLimitHours: number;
 }
