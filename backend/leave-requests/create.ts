@@ -41,7 +41,9 @@ export const create = api(
       req.endDate,
       req.isHalfDayStart || false,
       req.isHalfDayEnd || false,
-      holidayDates
+      holidayDates,
+      req.startTime || null,
+      req.endTime || null
     );
 
     if (req.type === "ANNUAL_LEAVE") {
@@ -56,7 +58,7 @@ export const create = api(
       INSERT INTO leave_requests (
         user_id, type, start_date, end_date, start_time, end_time,
         is_half_day_start, is_half_day_end,
-        reason, computed_days, status,
+        reason, computed_hours, status,
         created_at, updated_at
       ) VALUES (
         ${userId},
@@ -88,7 +90,7 @@ export const create = api(
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"

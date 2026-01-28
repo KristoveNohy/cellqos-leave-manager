@@ -1,47 +1,51 @@
-const FULL_ALLOWANCE_WITH_CHILD = 25;
-const FULL_ALLOWANCE_STANDARD = 20;
+import { HOURS_PER_WORKDAY } from "./date-utils";
+
+const FULL_ALLOWANCE_WITH_CHILD_DAYS = 25;
+const FULL_ALLOWANCE_STANDARD_DAYS = 20;
+const FULL_ALLOWANCE_WITH_CHILD_HOURS = FULL_ALLOWANCE_WITH_CHILD_DAYS * HOURS_PER_WORKDAY;
+const FULL_ALLOWANCE_STANDARD_HOURS = FULL_ALLOWANCE_STANDARD_DAYS * HOURS_PER_WORKDAY;
 
 type AnnualLeaveAllowanceInput = {
   birthDate: string | null;
   hasChild: boolean;
   year: number;
   employmentStartDate?: string | null;
-  manualAllowanceDays?: number | null;
+  manualAllowanceHours?: number | null;
   accrualPolicy?: "YEAR_START" | "PRO_RATA";
 };
 
-export function getAnnualLeaveGroupAllowance({
+export function getAnnualLeaveGroupAllowanceHours({
   birthDate,
   hasChild,
   year,
 }: Pick<AnnualLeaveAllowanceInput, "birthDate" | "hasChild" | "year">): number {
   if (hasChild) {
-    return FULL_ALLOWANCE_WITH_CHILD;
+    return FULL_ALLOWANCE_WITH_CHILD_HOURS;
   }
 
   if (!birthDate) {
-    return FULL_ALLOWANCE_STANDARD;
+    return FULL_ALLOWANCE_STANDARD_HOURS;
   }
 
   const birthYear = Number(birthDate.slice(0, 4));
   const cutoffYear = year - 33;
-  return birthYear <= cutoffYear ? FULL_ALLOWANCE_WITH_CHILD : FULL_ALLOWANCE_STANDARD;
+  return birthYear <= cutoffYear ? FULL_ALLOWANCE_WITH_CHILD_HOURS : FULL_ALLOWANCE_STANDARD_HOURS;
 }
 
-function roundLeaveDays(value: number): number {
+function roundLeaveHours(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-export function computeAnnualLeaveAllowance({
+export function computeAnnualLeaveAllowanceHours({
   birthDate,
   hasChild,
   year,
   employmentStartDate,
-  manualAllowanceDays,
+  manualAllowanceHours,
   accrualPolicy = "YEAR_START",
 }: AnnualLeaveAllowanceInput): number {
-  const baseAllowance = getAnnualLeaveGroupAllowance({ birthDate, hasChild, year });
-  let allowance = baseAllowance;
+  const baseAllowanceHours = getAnnualLeaveGroupAllowanceHours({ birthDate, hasChild, year });
+  let allowanceHours = baseAllowanceHours;
 
   if (employmentStartDate) {
     const startDate = new Date(employmentStartDate);
@@ -52,21 +56,21 @@ export function computeAnnualLeaveAllowance({
       }
 
       if (startYear === year) {
-        if (manualAllowanceDays !== null && manualAllowanceDays !== undefined) {
-          allowance = manualAllowanceDays;
+        if (manualAllowanceHours !== null && manualAllowanceHours !== undefined) {
+          allowanceHours = manualAllowanceHours;
         } else if (accrualPolicy === "PRO_RATA") {
           const startMonth = startDate.getMonth() + 1;
           const monthsWorked = Math.max(0, 12 - startMonth + 1);
-          allowance = (baseAllowance * monthsWorked) / 12;
+          allowanceHours = (baseAllowanceHours * monthsWorked) / 12;
         }
       }
     }
   }
 
-  return roundLeaveDays(allowance);
+  return roundLeaveHours(allowanceHours);
 }
 
-export function computeCarryOverDays({
+export function computeCarryOverHours({
   previousAllowance,
   previousUsed,
   carryOverLimit,

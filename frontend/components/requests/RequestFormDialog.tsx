@@ -45,14 +45,16 @@ export default function RequestFormDialog({
   const { user } = useAuth();
   const isManager = user?.role === "MANAGER";
   const { toast } = useToast();
+  const defaultStartTime = request ? request.startTime || "08:00" : "08:00";
+  const defaultEndTime = request ? request.endTime || "16:00" : "16:00";
   const { register, handleSubmit, setValue, watch, reset } = useForm({
     defaultValues: {
       userId: user?.id ?? "",
       type: request?.type || "ANNUAL_LEAVE",
       startDate: request?.startDate || initialStartDate || "",
       endDate: request?.endDate || initialEndDate || "",
-      startTime: request?.startTime || "",
-      endTime: request?.endTime || "",
+      startTime: defaultStartTime,
+      endTime: defaultEndTime,
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
@@ -71,13 +73,13 @@ export default function RequestFormDialog({
       type: request?.type || "ANNUAL_LEAVE",
       startDate: request?.startDate || initialStartDate || "",
       endDate: request?.endDate || initialEndDate || "",
-      startTime: request?.startTime || "",
-      endTime: request?.endTime || "",
+      startTime: defaultStartTime,
+      endTime: defaultEndTime,
       isHalfDayStart: request?.isHalfDayStart || false,
       isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
     });
-  }, [initialEndDate, initialStartDate, request, reset, user?.id]);
+  }, [defaultEndTime, defaultStartTime, initialEndDate, initialStartDate, request, reset, user?.id]);
   
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -133,6 +135,7 @@ export default function RequestFormDialog({
   const users = usersData?.users || [];
   const startDate = watch("startDate");
   const endDate = watch("endDate");
+  const isSameDay = Boolean(startDate && endDate && startDate === endDate);
 
   const { data: holidayRange } = useQuery({
     queryKey: ["holiday-range", startDate, endDate],
@@ -170,7 +173,7 @@ export default function RequestFormDialog({
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {request ? "Upraviť žiadosť o voľno" : "Nová žiadosť o voľno"}
@@ -222,24 +225,52 @@ export default function RequestFormDialog({
             </Select>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label>Začiatok</Label>
-              <Input type="date" {...register("startDate")} required />
+              <Input className="h-10" type="date" {...register("startDate")} required />
             </div>
             <div>
               <Label>Koniec</Label>
-              <Input type="date" {...register("endDate")} required />
+              <Input className="h-10" type="date" {...register("endDate")} required />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Príchod</Label>
-              <Input type="time" {...register("startTime")} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className={isSameDay ? "text-foreground" : undefined}>Príchod</Label>
+              <Input
+                className={`h-10 ${isSameDay ? "border-primary/60 bg-primary/5" : ""}`}
+                type="time"
+                {...register("startTime")}
+              />
+              <div className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  id="halfDayStart"
+                  checked={watch("isHalfDayStart")}
+                  onCheckedChange={(checked) => setValue("isHalfDayStart", checked as boolean)}
+                />
+                <Label htmlFor="halfDayStart" className="font-normal">
+                  Poldeň (začiatok)
+                </Label>
+              </div>
             </div>
-            <div>
-              <Label>Odchod</Label>
-              <Input type="time" {...register("endTime")} />
+            <div className="space-y-2">
+              <Label className={isSameDay ? "text-foreground" : undefined}>Odchod</Label>
+              <Input
+                className={`h-10 ${isSameDay ? "border-primary/60 bg-primary/5" : ""}`}
+                type="time"
+                {...register("endTime")}
+              />
+              <div className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  id="halfDayEnd"
+                  checked={watch("isHalfDayEnd")}
+                  onCheckedChange={(checked) => setValue("isHalfDayEnd", checked as boolean)}
+                />
+                <Label htmlFor="halfDayEnd" className="font-normal">
+                  Poldeň (koniec)
+                </Label>
+              </div>
             </div>
           </div>
           {holidaysInRange.length > 0 && (
@@ -252,39 +283,20 @@ export default function RequestFormDialog({
             </p>
           )}
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="halfDayStart"
-                checked={watch("isHalfDayStart")}
-                onCheckedChange={(checked) => setValue("isHalfDayStart", checked as boolean)}
-              />
-              <Label htmlFor="halfDayStart" className="font-normal">
-                Poldeň (začiatok)
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="halfDayEnd"
-                checked={watch("isHalfDayEnd")}
-                onCheckedChange={(checked) => setValue("isHalfDayEnd", checked as boolean)}
-              />
-              <Label htmlFor="halfDayEnd" className="font-normal">
-                Poldeň (koniec)
-              </Label>
-            </div>
-          </div>
-          
           <div>
             <Label>Dôvod (nepovinné)</Label>
             <Textarea {...register("reason")} rows={3} />
           </div>
           
-          <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose} className="min-w-[120px]">
               Zrušiť
             </Button>
-            <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+            <Button
+              type="submit"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="min-w-[160px]"
+            >
               {createMutation.isPending || updateMutation.isPending ? "Ukladá sa..." : "Uložiť ako návrh"}
             </Button>
           </div>
