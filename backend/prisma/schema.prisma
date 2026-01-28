@@ -77,6 +77,8 @@ model LeaveRequest {
   type           LeaveType
   startDate      DateTime    @map("start_date")
   endDate        DateTime    @map("end_date")
+  startTime      DateTime?   @map("start_time") @db.Time
+  endTime        DateTime?   @map("end_time") @db.Time
   isHalfDayStart Boolean     @default(false) @map("is_half_day_start")
   isHalfDayEnd   Boolean     @default(false) @map("is_half_day_end")
   status         LeaveStatus @default(DRAFT)

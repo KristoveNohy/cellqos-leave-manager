@@ -68,6 +68,8 @@ export const list = api(
         lr.id, lr.user_id as "userId", lr.type,
         lr.start_date::text as "startDate",
         lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
         lr.is_half_day_start as "isHalfDayStart",
         lr.is_half_day_end as "isHalfDayEnd",
         lr.status, lr.reason, lr.manager_comment as "managerComment",

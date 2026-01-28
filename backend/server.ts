@@ -4,7 +4,7 @@ import cors from "cors";
 import { Pool, type PoolClient } from "pg";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
-import { computeWorkingDays, parseDate } from "./shared/date-utils";
+import { computeWorkingHours, HOURS_PER_WORKDAY, parseDate } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
@@ -249,7 +249,7 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
 
   const policy = await getVacationPolicy();
 
-  const baseAllowance = computeAnnualLeaveAllowance({
+  const baseAllowanceDays = computeAnnualLeaveAllowance({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
@@ -259,11 +259,11 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
   });
 
   if (!policy.carryOverEnabled) {
-    return baseAllowance;
+    return baseAllowanceDays * HOURS_PER_WORKDAY;
   }
 
   const previousYear = year - 1;
-  const previousAllowance = computeAnnualLeaveAllowance({
+  const previousAllowanceDays = computeAnnualLeaveAllowance({
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year: previousYear,
@@ -291,12 +291,12 @@ async function getAnnualLeaveAllowanceForUser(userId: string, year: number): Pro
   });
 
   const carryOverDays = computeCarryOverDays({
-    previousAllowance,
-    previousUsed: Number(previousUsed?.total ?? 0),
+    previousAllowance: previousAllowanceDays,
+    previousUsed: Number(previousUsed?.total ?? 0) / HOURS_PER_WORKDAY,
     carryOverLimit,
   });
 
-  return baseAllowance + carryOverDays;
+  return (baseAllowanceDays + carryOverDays) * HOURS_PER_WORKDAY;
 }
 
 function parseBooleanFlag(value: unknown): boolean {
@@ -1348,6 +1348,8 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
         u.name as "userName",
         lr.start_date::text as "startDate",
         lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
         lr.is_half_day_start as "isHalfDayStart",
         lr.is_half_day_end as "isHalfDayEnd",
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -1410,10 +1412,22 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
 
 app.post("/leave-requests", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  const { type, startDate, endDate, isHalfDayStart, isHalfDayEnd, reason, userId } = req.body as {
+  const {
+    type,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    isHalfDayStart,
+    isHalfDayEnd,
+    reason,
+    userId,
+  } = req.body as {
     type: LeaveType;
     startDate: string;
     endDate: string;
+    startTime?: string | null;
+    endTime?: string | null;
     isHalfDayStart?: boolean;
     isHalfDayEnd?: boolean;
     reason?: string;
@@ -1446,7 +1460,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   );
 
   const holidayDates = new Set(holidayRows.map((h) => h.date));
-  const computedDays = computeWorkingDays(
+  const computedDays = computeWorkingHours(
     startDate,
     endDate,
     isHalfDayStart ?? false,
@@ -1457,14 +1471,25 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   const result = await queryRow<{ id: number }>(
     `
       INSERT INTO leave_requests (
-        user_id, type, start_date, end_date,
+        user_id, type, start_date, end_date, start_time, end_time,
         is_half_day_start, is_half_day_end,
         reason, computed_days, status,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT', NOW(), NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'DRAFT', NOW(), NOW())
       RETURNING id
     `,
-    [targetUserId, type, startDate, endDate, isHalfDayStart ?? false, isHalfDayEnd ?? false, reason ?? null, computedDays]
+    [
+      targetUserId,
+      type,
+      startDate,
+      endDate,
+      startTime ?? null,
+      endTime ?? null,
+      isHalfDayStart ?? false,
+      isHalfDayEnd ?? false,
+      reason ?? null,
+      computedDays,
+    ]
   );
 
   const leaveRequest = await queryRow<LeaveRequest>(
@@ -1473,6 +1498,8 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -1503,10 +1530,22 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
 app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const id = Number(req.params.id);
-  const { type, startDate, endDate, isHalfDayStart, isHalfDayEnd, reason, managerComment } = req.body as {
+  const {
+    type,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    isHalfDayStart,
+    isHalfDayEnd,
+    reason,
+    managerComment,
+  } = req.body as {
     type?: LeaveType;
     startDate?: string;
     endDate?: string;
+    startTime?: string | null;
+    endTime?: string | null;
     isHalfDayStart?: boolean;
     isHalfDayEnd?: boolean;
     reason?: string;
@@ -1519,6 +1558,8 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -1579,7 +1620,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     );
 
     const holidayDates = new Set(holidayRows.map((h) => h.date));
-    computedDays = computeWorkingDays(
+    computedDays = computeWorkingHours(
       newStartDate,
       newEndDate,
       isHalfDayStart ?? before.isHalfDayStart,
@@ -1602,6 +1643,14 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   if (endDate !== undefined) {
     updates.push(`end_date = $${values.length + 1}`);
     values.push(endDate);
+  }
+  if (startTime !== undefined) {
+    updates.push(`start_time = $${values.length + 1}`);
+    values.push(startTime || null);
+  }
+  if (endTime !== undefined) {
+    updates.push(`end_time = $${values.length + 1}`);
+    values.push(endTime || null);
   }
   if (isHalfDayStart !== undefined) {
     updates.push(`is_half_day_start = $${values.length + 1}`);
@@ -1636,6 +1685,8 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -1692,6 +1743,8 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -1734,6 +1787,8 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -1786,6 +1841,8 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -1855,6 +1912,8 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
         lr.id, lr.user_id as "userId", lr.type,
         lr.start_date::text as "startDate",
         lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
         lr.is_half_day_start as "isHalfDayStart",
         lr.is_half_day_end as "isHalfDayEnd",
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -1928,6 +1987,8 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -1974,6 +2035,8 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -2015,6 +2078,8 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -2059,6 +2124,8 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -2094,6 +2161,8 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
@@ -2206,6 +2275,8 @@ app.get("/calendar", asyncHandler(async (req, res) => {
         lr.id, lr.user_id as "userId", lr.type,
         lr.start_date::text as "startDate",
         lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
         lr.is_half_day_start as "isHalfDayStart",
         lr.is_half_day_end as "isHalfDayEnd",
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -2532,6 +2603,11 @@ const port = Number(process.env.PORT ?? 4000);
 
 async function startServer() {
   await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+  await pool.query(`
+    ALTER TABLE leave_requests
+    ADD COLUMN IF NOT EXISTS start_time TIME,
+    ADD COLUMN IF NOT EXISTS end_time TIME
+  `);
   await pool.query(`
     ALTER TABLE holidays
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE

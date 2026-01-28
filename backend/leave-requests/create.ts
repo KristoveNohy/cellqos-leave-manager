@@ -2,7 +2,7 @@ import { api } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
-import { computeWorkingDays } from "../shared/date-utils";
+import { computeWorkingHours } from "../shared/date-utils";
 import { createAuditLog } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import type { LeaveRequest, LeaveType } from "../shared/types";
@@ -11,6 +11,8 @@ interface CreateLeaveRequestRequest {
   type: LeaveType;
   startDate: string;
   endDate: string;
+  startTime?: string | null;
+  endTime?: string | null;
   isHalfDayStart?: boolean;
   isHalfDayEnd?: boolean;
   reason?: string;
@@ -34,7 +36,7 @@ export const create = api(
       holidayDates.add(holiday.date);
     }
     
-    const computedDays = computeWorkingDays(
+    const computedHours = computeWorkingHours(
       req.startDate,
       req.endDate,
       req.isHalfDayStart || false,
@@ -46,13 +48,13 @@ export const create = api(
       await ensureAnnualLeaveBalance({
         userId,
         startDate: req.startDate,
-        requestedDays: computedDays,
+        requestedHours: computedHours,
       });
     }
     
     const result = await db.queryRow<{ id: number }>`
       INSERT INTO leave_requests (
-        user_id, type, start_date, end_date,
+        user_id, type, start_date, end_date, start_time, end_time,
         is_half_day_start, is_half_day_end,
         reason, computed_days, status,
         created_at, updated_at
@@ -61,10 +63,12 @@ export const create = api(
         ${req.type},
         ${req.startDate},
         ${req.endDate},
+        ${req.startTime || null},
+        ${req.endTime || null},
         ${req.isHalfDayStart || false},
         ${req.isHalfDayEnd || false},
         ${req.reason || null},
-        ${computedDays},
+        ${computedHours},
         'DRAFT',
         NOW(),
         NOW()
@@ -77,6 +81,8 @@ export const create = api(
         id, user_id as "userId", type,
         start_date::text as "startDate",
         end_date::text as "endDate",
+        start_time::text as "startTime",
+        end_time::text as "endTime",
         is_half_day_start as "isHalfDayStart",
         is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",

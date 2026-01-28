@@ -29,7 +29,9 @@ export function addDays(date: Date, days: number): Date {
   return result;
 }
 
-export function computeWorkingDays(
+export const HOURS_PER_WORKDAY = 8;
+
+export function computeWorkingHours(
   startDate: string,
   endDate: string,
   isHalfDayStart: boolean,
@@ -57,7 +59,9 @@ export function computeWorkingDays(
     workingDays -= 0.5;
   }
   
-  return Math.max(0, workingDays);
+  const workingHours = workingDays * HOURS_PER_WORKDAY;
+
+  return Math.max(0, workingHours);
 }
 
 export function datesOverlap(
