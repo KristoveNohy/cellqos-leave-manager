@@ -557,9 +557,9 @@ async function resetSerialSequence(client: PoolClient, table: string, column: st
 
 app.post("/auth/login", asyncHandler(async (req, res) => {
   const { email, password } = req.body as { email: string; password: string };
-  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole }>(
+  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole; mustChangePassword: boolean }>(
     `
-      SELECT id, email, name, role
+      SELECT id, email, name, role, must_change_password as "mustChangePassword"
       FROM users
       WHERE email = $1
         AND is_active = true
@@ -618,6 +618,34 @@ app.post("/auth/register", asyncHandler(async (req, res) => {
   res.json({ token, user });
 }));
 
+app.post("/auth/change-password", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+
+  if (!currentPassword || !newPassword) {
+    throw new HttpError(400, "Current and new password are required");
+  }
+
+  const updated = await queryRow<{ id: string }>(
+    `
+      UPDATE users
+      SET password_hash = crypt($1, gen_salt('bf')),
+          must_change_password = false
+      WHERE id = $2
+        AND password_hash IS NOT NULL
+        AND password_hash = crypt($3, password_hash)
+      RETURNING id
+    `,
+    [newPassword, auth.userID, currentPassword]
+  );
+
+  if (!updated) {
+    throw new HttpError(400, "Current password is incorrect");
+  }
+
+  res.json({ ok: true });
+}));
+
 app.post("/auth/magic-link", asyncHandler(async (req, res) => {
   const { email, redirectUrl } = req.body as { email: string; redirectUrl?: string };
   const user = await queryRow<{ id: string }>(
@@ -651,9 +679,9 @@ app.post("/auth/magic-link/verify", asyncHandler(async (req, res) => {
   const { token } = req.body as { token: string };
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
-  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole }>(
+  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole; mustChangePassword: boolean }>(
     `
-      SELECT id, email, name, role
+      SELECT id, email, name, role, must_change_password as "mustChangePassword"
       FROM users
       WHERE magic_link_token_hash = $1
         AND magic_link_expires_at IS NOT NULL
@@ -834,6 +862,11 @@ app.post("/users", asyncHandler(async (req, res) => {
   const userId = randomUUID();
   const userRole: UserRole = role ?? "EMPLOYEE";
   const resolvedTeamId = userRole === "ADMIN" ? null : teamId ?? null;
+  const defaultPassword = "Password123!";
+  const passwordRow = await queryRow<{ hash: string }>(
+    "SELECT crypt($1, gen_salt('bf')) as hash",
+    [defaultPassword]
+  );
 
   if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
     if (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0) {
@@ -842,8 +875,30 @@ app.post("/users", asyncHandler(async (req, res) => {
   }
 
   try {
-    const columns = ["id", "email", "name", "role", "team_id", "birth_date", "has_child", "created_at", "updated_at"];
-    const values: any[] = [userId, email, name, userRole, resolvedTeamId, birthDate ?? null, hasChild ?? false];
+    const columns = [
+      "id",
+      "email",
+      "name",
+      "role",
+      "team_id",
+      "birth_date",
+      "has_child",
+      "password_hash",
+      "must_change_password",
+      "created_at",
+      "updated_at",
+    ];
+    const values: any[] = [
+      userId,
+      email,
+      name,
+      userRole,
+      resolvedTeamId,
+      birthDate ?? null,
+      hasChild ?? false,
+      passwordRow?.hash ?? null,
+      true,
+    ];
 
     if (columnSupport.employmentStartDate) {
       columns.splice(5, 0, "employment_start_date");

@@ -24,9 +24,10 @@ export const create = api(
     requireAdmin(auth.role);
     validateEmail(req.email);
     const resolvedTeamId = req.role === "ADMIN" ? null : req.teamId || null;
+    const defaultPassword = "Password123!";
     
     await db.exec`
-      INSERT INTO users (id, email, name, role, team_id, birth_date, has_child)
+      INSERT INTO users (id, email, name, role, team_id, birth_date, has_child, password_hash, must_change_password)
       VALUES (
         ${req.id},
         ${req.email},
@@ -34,7 +35,9 @@ export const create = api(
         ${req.role},
         ${resolvedTeamId},
         ${req.birthDate || null},
-        ${req.hasChild ?? false}
+        ${req.hasChild ?? false},
+        crypt(${defaultPassword}, gen_salt('bf')),
+        true
       )
     `;
     

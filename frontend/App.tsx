@@ -11,6 +11,7 @@ import LoginPage from "./pages/LoginPage";
 import MagicLinkPage from "./pages/MagicLinkPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
+import ForcePasswordChangeDialog from "./components/auth/ForcePasswordChangeDialog";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import type { UserRole } from "~backend/shared/types";
 
@@ -30,6 +31,7 @@ export default function App() {
         <BrowserRouter>
           <div className="min-h-screen bg-background">
             <Navigation />
+            <ForcePasswordChangeDialog />
             <main className="container mx-auto py-6 px-4">
               <Routes>
                 <Route path="/" element={<Navigate to="/calendar" replace />} />

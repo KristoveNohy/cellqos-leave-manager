@@ -15,6 +15,7 @@ interface LoginResponse {
     email: string;
     name: string;
     role: UserRole;
+    mustChangePassword: boolean;
   };
 }
 
@@ -26,8 +27,9 @@ export const login = api(
       email: string;
       name: string;
       role: UserRole;
+      mustChangePassword: boolean;
     }>`
-      SELECT id, email, name, role
+      SELECT id, email, name, role, must_change_password as "mustChangePassword"
       FROM users
       WHERE email = ${req.email}
         AND is_active = true
