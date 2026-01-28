@@ -27,7 +27,7 @@
         "birth_date": "1985-04-18",
         "has_child": true,
         "employment_start_date": "2016-09-12",
-        "manual_leave_allowance_days": null
+        "manual_leave_allowance_hours": null
       },
       {
         "id": "user_anna_placeholder",
@@ -44,7 +44,7 @@
         "birth_date": "1992-08-14",
         "has_child": true,
         "employment_start_date": "2021-03-01",
-        "manual_leave_allowance_days": 24
+        "manual_leave_allowance_hours": 192
       },
       {
         "id": "user_peter_placeholder",
@@ -61,7 +61,7 @@
         "birth_date": "1990-01-05",
         "has_child": false,
         "employment_start_date": "2023-09-15",
-        "manual_leave_allowance_days": 22
+        "manual_leave_allowance_hours": 176
       }
     ],
     "leave_requests": [
@@ -78,7 +78,7 @@
         "manager_comment": "Schválené",
         "approved_by": "user_manager_placeholder",
         "approved_at": "2026-01-22T09:10:00.000Z",
-        "computed_days": 3,
+        "computed_hours": 24,
         "attachment_url": null,
         "created_at": "2026-01-22T08:50:00.000Z",
         "updated_at": "2026-01-22T09:10:00.000Z"
@@ -96,7 +96,7 @@
         "manager_comment": "OK",
         "approved_by": "user_manager_placeholder",
         "approved_at": "2026-01-22T10:05:00.000Z",
-        "computed_days": 0.5,
+        "computed_hours": 4.0,
         "attachment_url": null,
         "created_at": "2026-01-22T09:55:00.000Z",
         "updated_at": "2026-01-22T10:05:00.000Z"
@@ -114,7 +114,7 @@
         "manager_comment": "",
         "approved_by": "user_manager_placeholder",
         "approved_at": "2026-02-11T07:45:00.000Z",
-        "computed_days": 2,
+        "computed_hours": 16,
         "attachment_url": null,
         "created_at": "2026-02-11T07:30:00.000Z",
         "updated_at": "2026-02-11T07:45:00.000Z"
@@ -132,7 +132,7 @@
         "manager_comment": "V tom termíne je už veľa absencií.",
         "approved_by": "user_manager_placeholder",
         "approved_at": "2026-02-10T12:15:00.000Z",
-        "computed_days": 1.5,
+        "computed_hours": 12.0,
         "attachment_url": null,
         "created_at": "2026-02-10T11:40:00.000Z",
         "updated_at": "2026-02-10T12:15:00.000Z"
@@ -150,7 +150,7 @@
         "manager_comment": null,
         "approved_by": null,
         "approved_at": null,
-        "computed_days": 1,
+        "computed_hours": 8,
         "attachment_url": null,
         "created_at": "2026-02-14T08:20:00.000Z",
         "updated_at": "2026-02-15T09:05:00.000Z"
@@ -168,7 +168,7 @@
         "manager_comment": null,
         "approved_by": null,
         "approved_at": null,
-        "computed_days": 3,
+        "computed_hours": 24,
         "attachment_url": null,
         "created_at": "2026-02-18T10:00:00.000Z",
         "updated_at": "2026-02-18T10:00:00.000Z"
@@ -186,7 +186,7 @@
         "manager_comment": null,
         "approved_by": null,
         "approved_at": null,
-        "computed_days": 2.5,
+        "computed_hours": 20.0,
         "attachment_url": null,
         "created_at": "2026-02-20T16:30:00.000Z",
         "updated_at": "2026-02-20T16:30:00.000Z"
@@ -204,7 +204,7 @@
         "manager_comment": "Zapisujem ako poldeň",
         "approved_by": "user_manager_placeholder",
         "approved_at": "2026-01-27T07:20:00.000Z",
-        "computed_days": 0.5,
+        "computed_hours": 4.0,
         "attachment_url": null,
         "created_at": "2026-01-27T07:05:00.000Z",
         "updated_at": "2026-01-27T07:20:00.000Z"
@@ -222,7 +222,7 @@
         "manager_comment": "Schválené",
         "approved_by": "user_manager_placeholder",
         "approved_at": "2026-01-30T13:30:00.000Z",
-        "computed_days": 1.5,
+        "computed_hours": 12.0,
         "attachment_url": null,
         "created_at": "2026-01-30T13:10:00.000Z",
         "updated_at": "2026-01-30T13:30:00.000Z"
@@ -256,8 +256,8 @@
         "id": "1",
         "user_id": "user_anna_placeholder",
         "year": 2026,
-        "allowance_days": 24,
-        "used_days": 5,
+        "allowance_hours": 192,
+        "used_hours": 40,
         "created_at": "2026-01-22T12:00:00.000Z",
         "updated_at": "2026-02-11T08:00:00.000Z"
       },
@@ -265,8 +265,8 @@
         "id": "2",
         "user_id": "user_peter_placeholder",
         "year": 2026,
-        "allowance_days": 22,
-        "used_days": 2,
+        "allowance_hours": 176,
+        "used_hours": 16,
         "created_at": "2026-01-22T12:00:00.000Z",
         "updated_at": "2026-01-27T07:25:00.000Z"
       },
@@ -274,8 +274,8 @@
         "id": "3",
         "user_id": "user_manager_placeholder",
         "year": 2026,
-        "allowance_days": 25,
-        "used_days": 1.5,
+        "allowance_hours": 200,
+        "used_hours": 12.0,
         "created_at": "2026-01-22T12:00:00.000Z",
         "updated_at": "2026-01-30T13:35:00.000Z"
       }
@@ -286,7 +286,7 @@
         "show_team_calendar_for_employees": false,
         "annual_leave_accrual_policy": "YEAR_START",
         "carry_over_enabled": false,
-        "carry_over_limit_days": 0,
+        "carry_over_limit_hours": 0,
         "updated_at": "2026-01-22T11:27:04.444Z"
       }
     ],
@@ -298,7 +298,9 @@
         "entity_id": "1",
         "action": "APPROVE",
         "before_json": null,
-        "after_json": { "status": "APPROVED" },
+        "after_json": {
+          "status": "APPROVED"
+        },
         "created_at": "2026-01-22T09:10:00.000Z"
       },
       {
@@ -308,7 +310,9 @@
         "entity_id": "4",
         "action": "REJECT",
         "before_json": null,
-        "after_json": { "status": "REJECTED" },
+        "after_json": {
+          "status": "REJECTED"
+        },
         "created_at": "2026-02-10T12:15:00.000Z"
       },
       {
@@ -318,7 +322,9 @@
         "entity_id": "5",
         "action": "CANCEL",
         "before_json": null,
-        "after_json": { "status": "CANCELLED" },
+        "after_json": {
+          "status": "CANCELLED"
+        },
         "created_at": "2026-02-15T09:05:00.000Z"
       }
     ],
@@ -327,7 +333,10 @@
         "id": "1",
         "user_id": "user_manager_placeholder",
         "type": "REQUEST_SUBMITTED",
-        "payload_json": { "leaveRequestId": "6", "userId": "user_peter_placeholder" },
+        "payload_json": {
+          "leaveRequestId": "6",
+          "userId": "user_peter_placeholder"
+        },
         "sent_at": "2026-02-18T10:00:00.000Z",
         "read_at": null,
         "created_at": "2026-02-18T10:00:00.000Z"
@@ -336,7 +345,10 @@
         "id": "2",
         "user_id": "user_anna_placeholder",
         "type": "REQUEST_APPROVED",
-        "payload_json": { "leaveRequestId": "1", "approvedBy": "user_manager_placeholder" },
+        "payload_json": {
+          "leaveRequestId": "1",
+          "approvedBy": "user_manager_placeholder"
+        },
         "sent_at": "2026-01-22T09:10:00.000Z",
         "read_at": "2026-01-22T10:00:00.000Z",
         "created_at": "2026-01-22T09:10:00.000Z"
@@ -345,7 +357,10 @@
         "id": "3",
         "user_id": "user_peter_placeholder",
         "type": "REQUEST_REJECTED",
-        "payload_json": { "leaveRequestId": "4", "approvedBy": "user_manager_placeholder" },
+        "payload_json": {
+          "leaveRequestId": "4",
+          "approvedBy": "user_manager_placeholder"
+        },
         "sent_at": "2026-02-10T12:15:00.000Z",
         "read_at": null,
         "created_at": "2026-02-10T12:15:00.000Z"

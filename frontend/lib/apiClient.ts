@@ -81,7 +81,7 @@ export function createApiClient(token: string | null) {
         birthDate?: string | null;
         hasChild?: boolean;
         employmentStartDate?: string | null;
-        manualLeaveAllowanceDays?: number | null;
+        manualLeaveAllowanceHours?: number | null;
       }) =>
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>
@@ -114,7 +114,7 @@ export function createApiClient(token: string | null) {
     },
     leave_balances: {
       me: () =>
-        apiRequest<{ year: number; allowanceDays: number; usedDays: number; remainingDays: number }>(
+        apiRequest<{ year: number; allowanceHours: number; usedHours: number; remainingHours: number }>(
           "/leave-balances/me",
           { token }
         ),
