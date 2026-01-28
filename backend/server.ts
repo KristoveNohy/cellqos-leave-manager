@@ -2604,6 +2604,11 @@ const port = Number(process.env.PORT ?? 4000);
 async function startServer() {
   await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
   await pool.query(`
+    ALTER TABLE leave_requests
+    ADD COLUMN IF NOT EXISTS start_time TIME,
+    ADD COLUMN IF NOT EXISTS end_time TIME
+  `);
+  await pool.query(`
     ALTER TABLE holidays
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
   `);
