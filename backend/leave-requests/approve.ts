@@ -30,7 +30,7 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
-        lr.computed_days as "computedDays",
+        lr.computed_hours as "computedHours",
         lr.attachment_url as "attachmentUrl",
         lr.created_at as "createdAt",
         lr.updated_at as "updatedAt",
@@ -80,7 +80,7 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
       await ensureAnnualLeaveBalance({
         userId: request.userId,
         startDate: request.startDate,
-        requestedHours: request.computedDays,
+        requestedHours: request.computedHours,
         requestId: request.id,
       });
     }
@@ -108,7 +108,7 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"

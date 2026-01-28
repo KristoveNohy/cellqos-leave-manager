@@ -25,7 +25,7 @@ export const cancel = api(
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -65,7 +65,7 @@ export const cancel = api(
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
-        computed_days as "computedDays",
+        computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
         updated_at as "updatedAt"

@@ -30,8 +30,8 @@ export default function VacationPolicyManagement() {
   });
   const { handleSubmit, reset, setValue, watch } = useForm<VacationPolicyFormValues>({
     defaultValues: {
-      accrualPolicy: "YEAR_START",
-      carryOverEnabled: false,
+      accrualPolicy: "PRO_RATA",
+      carryOverEnabled: true,
     },
   });
 
@@ -39,7 +39,7 @@ export default function VacationPolicyManagement() {
     mutationFn: async (payload: {
       accrualPolicy: VacationAccrualPolicy;
       carryOverEnabled: boolean;
-      carryOverLimitDays: number;
+      carryOverLimitHours: number;
     }) => backend.vacation_policy.update(payload),
     onSuccess: (response) => {
       toast({ title: "Politika dovoleniek bola uložená." });
@@ -75,7 +75,7 @@ export default function VacationPolicyManagement() {
     updateMutation.mutate({
       accrualPolicy: values.accrualPolicy,
       carryOverEnabled: values.carryOverEnabled,
-      carryOverLimitDays: 0,
+      carryOverLimitHours: 0,
     });
   };
 
@@ -117,7 +117,7 @@ export default function VacationPolicyManagement() {
             <Label htmlFor="carry-over-enabled">Povoliť prenos nevyčerpanej dovolenky</Label>
           </div>
           <p className="text-xs text-muted-foreground">
-            Prenášať sa môže maximálne výška ročného nároku (20 alebo 25 dní podľa skupiny).
+            Prenášať sa môže maximálne výška ročného nároku (160 alebo 200 hodín podľa skupiny).
           </p>
         </div>
 

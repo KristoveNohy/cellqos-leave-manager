@@ -37,8 +37,30 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   const isManager = user?.role === "MANAGER";
   const { toast } = useToast();
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const formatDateTime = (dateValue?: string | null, timeValue?: string | null) => {
+    if (!dateValue) {
+      return "";
+    }
+
+    const datePart = dateValue.slice(0, 10);
+    const timePart = timeValue
+      ? timeValue.length === 5
+        ? `${timeValue}:00`
+        : timeValue.slice(0, 8)
+      : dateValue.length >= 19
+        ? dateValue.slice(11, 19)
+        : "00:00:00";
+
+    return `${datePart} ${timePart}`;
+  };
+  const startDateLabel = formatDateTime(request.startDate, request.startTime);
+  const endDateLabel = formatDateTime(request.endDate, request.endTime);
   const startTimeLabel = request.startTime ? request.startTime.slice(0, 5) : null;
   const endTimeLabel = request.endTime ? request.endTime.slice(0, 5) : null;
+  const timeRangeLabel =
+    startTimeLabel && endTimeLabel
+      ? `${startTimeLabel} – ${endTimeLabel}`
+      : startTimeLabel || endTimeLabel;
   
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -148,8 +170,8 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   const formatHistoryEntry = (entry: AuditLogEntry) => {
     const before = entry.beforeJson ?? {};
     const after = entry.afterJson ?? {};
-    const startDate = after.startDate ?? before.startDate;
-    const endDate = after.endDate ?? before.endDate;
+    const startDate = formatDateTime(after.startDate ?? before.startDate, after.startTime ?? before.startTime);
+    const endDate = formatDateTime(after.endDate ?? before.endDate, after.endTime ?? before.endTime);
     const beforeStatus = before.status;
     const afterStatus = after.status;
     const statusChange =
@@ -179,29 +201,30 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Detail žiadosti o voľno</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
               <div className="text-sm text-muted-foreground">Typ</div>
               <div className="font-medium">{typeLabels[request.type as keyof typeof typeLabels]}</div>
             </div>
-            <Badge className={statusColors[request.status as keyof typeof statusColors]}>
+            <Badge
+              className={`${statusColors[request.status as keyof typeof statusColors]} px-3 py-1 text-xs shrink-0`}
+            >
               {statusLabels[request.status as keyof typeof statusLabels] ?? request.status}
             </Badge>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <div className="text-sm text-muted-foreground mb-1">Začiatok</div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>{request.startDate}</span>
-                {startTimeLabel && <span className="text-muted-foreground">• {startTimeLabel}</span>}
+                <span className="break-all">{startDateLabel}</span>
                 {request.isHalfDayStart && (
                   <Badge variant="outline" className="text-xs">Poldeň</Badge>
                 )}
@@ -209,22 +232,31 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
             </div>
             <div>
               <div className="text-sm text-muted-foreground mb-1">Koniec</div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>{request.endDate}</span>
-                {endTimeLabel && <span className="text-muted-foreground">• {endTimeLabel}</span>}
+                <span className="break-all">{endDateLabel}</span>
                 {request.isHalfDayEnd && (
                   <Badge variant="outline" className="text-xs">Poldeň</Badge>
                 )}
               </div>
             </div>
           </div>
+
+          {timeRangeLabel && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">Čas</div>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span>{timeRangeLabel}</span>
+              </div>
+            </div>
+          )}
           
           <div>
             <div className="text-sm text-muted-foreground mb-1">Trvanie</div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{formatLeaveHours(request.computedDays)} pracovného času</span>
+              <span>{formatLeaveHours(request.computedHours)}</span>
             </div>
           </div>
           
@@ -257,11 +289,11 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
               {!historyQuery.isLoading && !historyQuery.isError && sortedHistory.length > 0 && (
                 <ul className="space-y-3">
                   {sortedHistory.map((entry) => (
-                    <li key={entry.id} className="flex items-start gap-3">
+                    <li key={entry.id} className="flex flex-wrap items-start gap-3">
                       <Badge variant="outline">
                         {actionLabels[entry.action] ?? entry.action}
                       </Badge>
-                      <div className="space-y-1">
+                      <div className="space-y-1 min-w-0">
                         <div className="text-sm">
                           {new Date(entry.createdAt).toLocaleString("sk-SK")}
                           {" • "}
@@ -278,13 +310,14 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
             </div>
           )}
           
-          <div className="flex justify-end space-x-2">
+          <div className="flex flex-wrap justify-end gap-2">
             {isManager && (
               <>
-                <Button variant="outline" onClick={() => setShowEditDialog(true)}>
+                <Button size="sm" variant="outline" onClick={() => setShowEditDialog(true)}>
                   Upraviť
                 </Button>
                 <Button
+                  size="sm"
                   variant="destructive"
                   onClick={() => {
                     if (window.confirm("Naozaj chcete odstrániť túto žiadosť?")) {
@@ -298,18 +331,15 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
               </>
             )}
             {request.status === "DRAFT" && (
-              <Button onClick={() => submitMutation.mutate()}>
+              <Button size="sm" className="font-semibold" onClick={() => submitMutation.mutate()}>
                 Odoslať na schválenie
               </Button>
             )}
             {(request.status === "DRAFT" || request.status === "PENDING") && (
-              <Button variant="destructive" onClick={() => cancelMutation.mutate()}>
+              <Button size="sm" variant="destructive" onClick={() => cancelMutation.mutate()}>
                 Zrušiť žiadosť
               </Button>
             )}
-            <Button variant="outline" onClick={onClose}>
-              Zavrieť
-            </Button>
           </div>
         </div>
       </DialogContent>

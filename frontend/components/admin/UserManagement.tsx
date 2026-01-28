@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatLeaveHours } from "@/lib/leaveFormat";
 import {
   Dialog,
   DialogContent,
@@ -40,7 +41,7 @@ type UserFormValues = {
   employmentStartDate: string;
   birthDate: string;
   hasChild: boolean;
-  manualLeaveAllowanceDays: string;
+  manualLeaveAllowanceHours: string;
 };
 
 export default function UserManagement() {
@@ -66,7 +67,7 @@ export default function UserManagement() {
       employmentStartDate: "",
       birthDate: "",
       hasChild: false,
-      manualLeaveAllowanceDays: "",
+      manualLeaveAllowanceHours: "",
     },
   });
 
@@ -79,7 +80,7 @@ export default function UserManagement() {
       birthDate?: string | null;
       hasChild?: boolean;
       employmentStartDate?: string | null;
-      manualLeaveAllowanceDays?: number | null;
+      manualLeaveAllowanceHours?: number | null;
     }) =>
       backend.users.create(payload),
     onSuccess: () => {
@@ -149,7 +150,7 @@ export default function UserManagement() {
       employmentStartDate: "",
       birthDate: "",
       hasChild: false,
-      manualLeaveAllowanceDays: "",
+      manualLeaveAllowanceHours: "",
     });
     setDialogOpen(true);
   };
@@ -164,8 +165,8 @@ export default function UserManagement() {
       employmentStartDate: user.employmentStartDate ? String(user.employmentStartDate).slice(0, 10) : "",
       birthDate: user.birthDate ? String(user.birthDate).slice(0, 10) : "",
       hasChild: Boolean(user.hasChild),
-      manualLeaveAllowanceDays: user.manualLeaveAllowanceDays !== null && user.manualLeaveAllowanceDays !== undefined
-        ? String(user.manualLeaveAllowanceDays)
+      manualLeaveAllowanceHours: user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined
+        ? String(user.manualLeaveAllowanceHours)
         : "",
     });
     setDialogOpen(true);
@@ -187,8 +188,8 @@ export default function UserManagement() {
       employmentStartDate: values.employmentStartDate ? values.employmentStartDate : null,
       birthDate: values.birthDate ? values.birthDate : null,
       hasChild: values.hasChild,
-      manualLeaveAllowanceDays: values.manualLeaveAllowanceDays
-        ? Number(values.manualLeaveAllowanceDays)
+      manualLeaveAllowanceHours: values.manualLeaveAllowanceHours
+        ? Number(values.manualLeaveAllowanceHours)
         : null,
     };
 
@@ -220,7 +221,7 @@ export default function UserManagement() {
             <TableHead>Nástup</TableHead>
             <TableHead>Narodenie</TableHead>
             <TableHead>Dieťa</TableHead>
-            <TableHead>Zostatok dovolenky</TableHead>
+            <TableHead>Zostatok dovolenky (hodiny)</TableHead>
             <TableHead>Stav</TableHead>
             <TableHead className="text-right">Akcie</TableHead>
           </TableRow>
@@ -245,7 +246,7 @@ export default function UserManagement() {
                   {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—"}
                 </TableCell>
                 <TableCell>{user.hasChild ? "Áno" : "Nie"}</TableCell>
-                <TableCell>{user.remainingLeaveDays ?? "—"}</TableCell>
+                <TableCell>{formatLeaveHours(user.remainingLeaveHours)}</TableCell>
                 <TableCell>
                   <Badge variant={user.isActive ? "default" : "destructive"}>
                     {user.isActive ? "Aktívny" : "Neaktívny"}
@@ -350,15 +351,18 @@ export default function UserManagement() {
                 <Input id="user-start-date" type="date" {...register("employmentStartDate")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="user-manual-allowance">Manuálny nárok (dni)</Label>
+                <Label htmlFor="user-manual-allowance">Zostatok dovolenky (hodiny)</Label>
                 <Input
                   id="user-manual-allowance"
                   type="number"
                   min={0}
                   step="0.5"
-                  placeholder="Napr. 12.5"
-                  {...register("manualLeaveAllowanceDays")}
+                  placeholder="Napr. 160"
+                  {...register("manualLeaveAllowanceHours")}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Prepíše aktuálny zostatok dovolenky pre tento rok na zadanú hodnotu.
+                </p>
               </div>
             </div>
             <div className="flex justify-end gap-2">

@@ -84,13 +84,42 @@ export default function CalendarPage() {
     OTHER: "Iné",
   };
 
-  const events: CalendarEvent[] = (data?.events || []).map((event) => ({
-    id: event.id,
-    title: `${event.userName} - ${typeLabels[event.type as keyof typeof typeLabels] ?? event.type.replace("_", " ")}`,
-    start: new Date(event.startDate),
-    end: new Date(event.endDate),
-    resource: { ...event, kind: "LEAVE" },
-  }));
+  const resolveTime = (timeValue?: string | null, fallbackTime = "00:00:00") => {
+    if (!timeValue) {
+      return fallbackTime;
+    }
+    if (timeValue.length === 5) {
+      return `${timeValue}:00`;
+    }
+    return timeValue.slice(0, 8);
+  };
+
+  const buildEventDateTime = (dateValue: string, timeValue?: string | null, fallbackTime = "00:00:00") => {
+    const datePart = dateValue.slice(0, 10);
+    const timePart = resolveTime(timeValue, fallbackTime);
+    return moment(`${datePart}T${timePart}`).toDate();
+  };
+
+  const events: CalendarEvent[] = (data?.events || []).map((event) => {
+    const hasTimeRange = Boolean(event.startTime || event.endTime);
+    const start = hasTimeRange
+      ? buildEventDateTime(event.startDate, event.startTime, "00:00:00")
+      : moment(event.startDate).startOf("day").toDate();
+    const end = hasTimeRange
+      ? buildEventDateTime(event.endDate, event.endTime, "23:59:59")
+      : moment(event.endDate).startOf("day").add(1, "day").toDate();
+
+    return {
+      id: event.id,
+      title: `${event.userName} - ${
+        typeLabels[event.type as keyof typeof typeLabels] ?? event.type.replace("_", " ")
+      }`,
+      start,
+      end,
+      allDay: !hasTimeRange,
+      resource: { ...event, kind: "LEAVE" },
+    };
+  });
   const holidayEvents: CalendarEvent[] = (holidayData?.holidays || []).map((holiday) => ({
     id: `holiday-${holiday.id}`,
     title: `Sviatok: ${holiday.name}`,
