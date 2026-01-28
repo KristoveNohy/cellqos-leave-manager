@@ -1,6 +1,7 @@
 import { api, APIError, Query } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
+import { isAdmin, isManager } from "../shared/rbac";
 import type { AuditLog } from "../shared/types";
 
 interface ListAuditLogsParams {
@@ -18,8 +19,9 @@ export const list = api(
   { auth: true, expose: true, method: "GET", path: "/audit" },
   async (params: ListAuditLogsParams): Promise<ListAuditLogsResponse> => {
     const auth = getAuthData()!;
-    const isManager = auth.role === "MANAGER";
-    if (!isManager) {
+    const isAdminUser = isAdmin(auth.role);
+    const isManagerUser = isManager(auth.role);
+    if (!isAdminUser && !isManagerUser) {
       if (params.entityType !== "leave_request" || !params.entityId) {
         throw APIError.permissionDenied("Not allowed to view audit logs");
       }
@@ -31,6 +33,24 @@ export const list = api(
           AND user_id = ${auth.userID}
       `;
       if (!owned) {
+        throw APIError.permissionDenied("Not allowed to view audit logs");
+      }
+    }
+
+    if (isManagerUser && !isAdminUser && params.entityType === "leave_request" && params.entityId) {
+      const requestId = Number(params.entityId);
+      const request = await db.queryRow<{ teamId: number | null }>`
+        SELECT u.team_id as "teamId"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE lr.id = ${requestId}
+      `;
+      const viewer = await db.queryRow<{ teamId: number | null }>`
+        SELECT team_id as "teamId"
+        FROM users
+        WHERE id = ${auth.userID}
+      `;
+      if (!request || !viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
         throw APIError.permissionDenied("Not allowed to view audit logs");
       }
     }

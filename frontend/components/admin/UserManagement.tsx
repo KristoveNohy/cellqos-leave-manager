@@ -36,7 +36,7 @@ import {
 type UserFormValues = {
   name: string;
   email: string;
-  role: "EMPLOYEE" | "MANAGER";
+  role: "EMPLOYEE" | "MANAGER" | "ADMIN";
   teamId: string;
   employmentStartDate: string;
   birthDate: string;
@@ -138,6 +138,7 @@ export default function UserManagement() {
   const roleLabels = {
     MANAGER: "Manažér",
     EMPLOYEE: "Zamestnanec",
+    ADMIN: "Admin",
   };
 
   const openCreate = () => {
@@ -234,7 +235,7 @@ export default function UserManagement() {
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>
-                  <Badge variant={user.role === "MANAGER" ? "default" : "secondary"}>
+                  <Badge variant={user.role === "ADMIN" ? "default" : user.role === "MANAGER" ? "secondary" : "outline"}>
                     {roleLabels[user.role as keyof typeof roleLabels] ?? user.role}
                   </Badge>
                 </TableCell>
@@ -300,7 +301,12 @@ export default function UserManagement() {
                 <Label>Rola</Label>
                 <Select
                   value={watch("role")}
-                  onValueChange={(value) => setValue("role", value as UserFormValues["role"])}
+                  onValueChange={(value) => {
+                    setValue("role", value as UserFormValues["role"]);
+                    if (value === "ADMIN") {
+                      setValue("teamId", "none");
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -308,6 +314,7 @@ export default function UserManagement() {
                   <SelectContent>
                     <SelectItem value="EMPLOYEE">Zamestnanec</SelectItem>
                     <SelectItem value="MANAGER">Manažér</SelectItem>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -316,6 +323,7 @@ export default function UserManagement() {
                 <Select
                   value={watch("teamId")}
                   onValueChange={(value) => setValue("teamId", value)}
+                  disabled={watch("role") === "ADMIN"}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Bez tímu" />
