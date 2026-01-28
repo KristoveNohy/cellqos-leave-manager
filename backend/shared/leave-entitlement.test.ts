@@ -1,28 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  computeAnnualLeaveAllowance,
-  computeCarryOverDays,
-  getAnnualLeaveGroupAllowance,
+  computeAnnualLeaveAllowanceHours,
+  computeCarryOverHours,
+  getAnnualLeaveGroupAllowanceHours,
 } from "./leave-entitlement";
+import { HOURS_PER_WORKDAY } from "./date-utils";
 
 test("calculates group allowance based on age and child status", () => {
   assert.equal(
-    getAnnualLeaveGroupAllowance({ birthDate: "1995-01-01", hasChild: false, year: 2024 }),
-    20
+    getAnnualLeaveGroupAllowanceHours({ birthDate: "1995-01-01", hasChild: false, year: 2024 }),
+    20 * HOURS_PER_WORKDAY
   );
   assert.equal(
-    getAnnualLeaveGroupAllowance({ birthDate: "1985-01-01", hasChild: false, year: 2024 }),
-    25
+    getAnnualLeaveGroupAllowanceHours({ birthDate: "1985-01-01", hasChild: false, year: 2024 }),
+    25 * HOURS_PER_WORKDAY
   );
   assert.equal(
-    getAnnualLeaveGroupAllowance({ birthDate: null, hasChild: true, year: 2024 }),
-    25
+    getAnnualLeaveGroupAllowanceHours({ birthDate: null, hasChild: true, year: 2024 }),
+    25 * HOURS_PER_WORKDAY
   );
 });
 
 test("applies pro-rata allowance for employees starting mid-year", () => {
-  const allowance = computeAnnualLeaveAllowance({
+  const allowance = computeAnnualLeaveAllowanceHours({
     birthDate: "1995-01-01",
     hasChild: false,
     year: 2024,
@@ -30,24 +31,24 @@ test("applies pro-rata allowance for employees starting mid-year", () => {
     accrualPolicy: "PRO_RATA",
   });
 
-  assert.equal(allowance, 16.67);
+  assert.equal(allowance, 133.33);
 });
 
 test("uses manual allowance for the start year when provided", () => {
-  const allowance = computeAnnualLeaveAllowance({
+  const allowance = computeAnnualLeaveAllowanceHours({
     birthDate: "1995-01-01",
     hasChild: false,
     year: 2024,
     employmentStartDate: "2024-04-01",
-    manualAllowanceDays: 12.5,
+    manualAllowanceHours: 12.5 * HOURS_PER_WORKDAY,
     accrualPolicy: "PRO_RATA",
   });
 
-  assert.equal(allowance, 12.5);
+  assert.equal(allowance, 100);
 });
 
 test("returns zero allowance before employment start year", () => {
-  const allowance = computeAnnualLeaveAllowance({
+  const allowance = computeAnnualLeaveAllowanceHours({
     birthDate: "1995-01-01",
     hasChild: false,
     year: 2024,
@@ -60,20 +61,20 @@ test("returns zero allowance before employment start year", () => {
 
 test("caps carry-over by the group allowance limit", () => {
   assert.equal(
-    computeCarryOverDays({
-      previousAllowance: 25,
-      previousUsed: 5,
-      carryOverLimit: 25,
+    computeCarryOverHours({
+      previousAllowance: 25 * HOURS_PER_WORKDAY,
+      previousUsed: 5 * HOURS_PER_WORKDAY,
+      carryOverLimit: 25 * HOURS_PER_WORKDAY,
     }),
-    20
+    20 * HOURS_PER_WORKDAY
   );
 
   assert.equal(
-    computeCarryOverDays({
-      previousAllowance: 30,
+    computeCarryOverHours({
+      previousAllowance: 30 * HOURS_PER_WORKDAY,
       previousUsed: 0,
-      carryOverLimit: 20,
+      carryOverLimit: 20 * HOURS_PER_WORKDAY,
     }),
-    20
+    20 * HOURS_PER_WORKDAY
   );
 });

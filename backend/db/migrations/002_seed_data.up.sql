@@ -45,35 +45,35 @@ INSERT INTO holidays (date, name, is_company_holiday) VALUES
   ('2025-12-26', 'Druhý sviatok vianočný', true);
 
 -- Insert leave balances for 2024-2025
-INSERT INTO leave_balances (user_id, year, allowance_days, used_days) VALUES
-  ('user_anna_placeholder', 2024, 20, 5),
-  ('user_peter_placeholder', 2024, 20, 3),
-  ('user_lucia_placeholder', 2024, 20, 7),
-  ('user_anna_placeholder', 2025, 20, 0),
-  ('user_peter_placeholder', 2025, 20, 0),
-  ('user_lucia_placeholder', 2025, 20, 0);
+INSERT INTO leave_balances (user_id, year, allowance_hours, used_hours) VALUES
+  ('user_anna_placeholder', 2024, 160, 40),
+  ('user_peter_placeholder', 2024, 160, 24),
+  ('user_lucia_placeholder', 2024, 160, 56),
+  ('user_anna_placeholder', 2025, 160, 0),
+  ('user_peter_placeholder', 2025, 160, 0),
+  ('user_lucia_placeholder', 2025, 160, 0);
 
 -- Insert demo leave requests
 INSERT INTO leave_requests (
   user_id, type, start_date, end_date, 
-  status, reason, computed_days, approved_by, approved_at
+  status, reason, computed_hours, approved_by, approved_at
 ) VALUES
   -- Anna's approved vacation
   ('user_anna_placeholder', 'ANNUAL_LEAVE', '2024-12-23', '2024-12-27', 
-   'APPROVED', 'Christmas vacation', 3, 'user_manager_placeholder', NOW() - INTERVAL '2 days'),
+   'APPROVED', 'Christmas vacation', 24, 'user_manager_placeholder', NOW() - INTERVAL '2 days'),
   
   -- Peter's pending request
   ('user_peter_placeholder', 'ANNUAL_LEAVE', '2025-01-13', '2025-01-17',
-   'PENDING', 'Winter break', 5, NULL, NULL),
+   'PENDING', 'Winter break', 40, NULL, NULL),
   
   -- Lucia's draft request
   ('user_lucia_placeholder', 'ANNUAL_LEAVE', '2025-02-10', '2025-02-14',
-   'DRAFT', 'Planning ahead', 5, NULL, NULL),
+   'DRAFT', 'Planning ahead', 40, NULL, NULL),
   
   -- Anna's half-day sick leave
   ('user_anna_placeholder', 'SICK_LEAVE', '2024-12-15', '2024-12-15',
-   'APPROVED', 'Doctor appointment', 0.5, 'user_manager_placeholder', NOW() - INTERVAL '5 days'),
+   'APPROVED', 'Doctor appointment', 4, 'user_manager_placeholder', NOW() - INTERVAL '5 days'),
   
   -- Peter's rejected request (overlapping with team limit)
   ('user_peter_placeholder', 'ANNUAL_LEAVE', '2024-12-23', '2024-12-27',
-   'REJECTED', 'Holiday season', 3, 'user_manager_placeholder', NOW() - INTERVAL '3 days');
+   'REJECTED', 'Holiday season', 24, 'user_manager_placeholder', NOW() - INTERVAL '3 days');
