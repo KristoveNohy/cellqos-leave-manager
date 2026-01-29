@@ -1673,7 +1673,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   if (type) {
-    conditions.push(`lr.type = $${values.length + 1}`);
+    conditions.push(`lr.type = $${values.length + 1}::leave_type`);
     values.push(type);
   }
 
@@ -1927,24 +1927,24 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   const before = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2137,24 +2137,24 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
   const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2195,24 +2195,24 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
   const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
