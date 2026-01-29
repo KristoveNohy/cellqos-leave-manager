@@ -190,7 +190,58 @@ type VacationPolicyColumnSupport = {
 };
 
 const columnSupportCache = new Map<string, boolean>();
-const statsExportJobs = new Map<string, StatsExportJob & { content?: string | null }>();
+const statsExportJobs = new Map<
+  string,
+  StatsExportJob & { content?: Buffer | string | null; contentType?: string }
+>();
+
+function escapePdfText(value: string) {
+  return value.replace(/[()\\]/g, "\\$&");
+}
+
+function buildSimplePdf(lines: string[]): Buffer {
+  const fontSize = 12;
+  const startX = 50;
+  const startY = 800;
+  const lineHeight = 16;
+  const contentLines = [
+    "BT",
+    `/F1 ${fontSize} Tf`,
+    `${startX} ${startY} Td`,
+    ...lines.flatMap((line, index) => {
+      const escaped = escapePdfText(line);
+      if (index === 0) {
+        return [`(${escaped}) Tj`];
+      }
+      return [`0 -${lineHeight} Td`, `(${escaped}) Tj`];
+    }),
+    "ET",
+  ];
+  const contentStream = contentLines.join("\n");
+
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    `5 0 obj\n<< /Length ${Buffer.byteLength(contentStream)} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (const obj of objects) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += obj;
+  }
+
+  const xrefStart = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+  return Buffer.from(pdf, "utf-8");
+}
 
 async function columnExists(table: string, column: string): Promise<boolean> {
   const cacheKey = `${table}.${column}`;
@@ -3337,12 +3388,17 @@ app.post("/stats/exports", asyncHandler(async (req, res) => {
     }
   }
 
-  await resolveStatsScope(auth, filters.teamId ?? null, memberIds);
+  const range = buildStatsDateRange({
+    year: filters.year ?? new Date().getFullYear(),
+    month: filters.month,
+    quarter: filters.quarter,
+  });
+  const scope = await resolveStatsScope(auth, filters.teamId ?? null, memberIds);
 
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   const downloadUrl = `/stats/exports/${id}/download`;
-  const job: StatsExportJob & { content?: string | null } = {
+  const job: StatsExportJob & { content?: Buffer | string | null; contentType?: string } = {
     id,
     createdAt,
     createdBy: auth.userID,
@@ -3360,10 +3416,221 @@ app.post("/stats/exports", asyncHandler(async (req, res) => {
     downloadUrl,
   };
 
-  if (format === "CSV") {
-    job.content = "id,status\nsample,ready\n";
+  const eventTypes = (filters.eventTypes ?? []).filter(isValidLeaveType);
+  const hasScopedMembers = scope.members.length > 0;
+  const baseConditions = [
+    "lr.start_date <= $2",
+    "lr.end_date >= $1",
+    "lr.status NOT IN ('DRAFT', 'REJECTED', 'CANCELLED')",
+  ];
+  const baseValues: any[] = [range.startDate, range.endDate];
+
+  if (scope.teamId) {
+    baseConditions.push(`u.team_id = $${baseValues.length + 1}`);
+    baseValues.push(scope.teamId);
+  }
+
+  if (hasScopedMembers) {
+    const scopedIds = scope.members.map((member) => member.id);
+    baseConditions.push(`lr.user_id = ANY($${baseValues.length + 1}::text[])`);
+    baseValues.push(scopedIds);
+  }
+
+  if (eventTypes.length > 0) {
+    baseConditions.push(`lr.type = ANY($${baseValues.length + 1}::leave_type[])`);
+    baseValues.push(eventTypes);
+  }
+
+  const createCsvContent = (rows: string[][]) => {
+    const csvRows = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, "\"\"")}"`).join(","));
+    return `\uFEFF${csvRows.join("\n")}\n`;
+  };
+
+  if (!hasScopedMembers) {
+    const emptyMessage = "Export neobsahuje žiadne dáta pre zvolené filtre.";
+    if (format === "PDF") {
+      job.content = buildSimplePdf([emptyMessage]);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([["message"], [emptyMessage]]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
+  } else if (reportType === "DASHBOARD_SUMMARY") {
+    const totalsRow = await queryRow<{ totalEvents: string; totalHours: string }>(
+      `
+        SELECT
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE ${baseConditions.join(" AND ")}
+      `,
+      baseValues
+    );
+
+    const typeRows = await queryRows<{ type: LeaveType; totalEvents: string; totalHours: string }>(
+      `
+        SELECT
+          lr.type,
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE ${baseConditions.join(" AND ")}
+        GROUP BY lr.type
+        ORDER BY COALESCE(SUM(lr.computed_hours), 0) DESC
+      `,
+      baseValues
+    );
+
+    const totalEvents = Number(totalsRow?.totalEvents ?? 0);
+    const totalHours = Number(totalsRow?.totalHours ?? 0);
+    const totalDays = totalHours / HOURS_PER_WORKDAY;
+
+    const lines = [
+      "Dashboard – súhrn",
+      `Obdobie: ${range.startDate} až ${range.endDate}`,
+      `Počet udalostí: ${totalEvents}`,
+      `Počet dní: ${totalDays.toFixed(1)}`,
+      "Rozdelenie podľa typu:",
+      ...typeRows.map((row) => {
+        const days = Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY;
+        return `- ${row.type}: ${Number(row.totalEvents ?? 0)} udalostí, ${days.toFixed(1)} dní`;
+      }),
+    ];
+
+    if (format === "PDF") {
+      job.content = buildSimplePdf(lines);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([
+        ["metric", "value"],
+        ["period_start", range.startDate],
+        ["period_end", range.endDate],
+        ["total_events", totalEvents],
+        ["total_days", totalDays.toFixed(2)],
+        ...typeRows.map((row) => [
+          `type_${row.type.toLowerCase()}`,
+          `${Number(row.totalEvents ?? 0)} events / ${(Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY).toFixed(2)} days`,
+        ]),
+      ]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
+  } else if (reportType === "TABLE_DETAIL") {
+    const userConditions = ["u.is_active = true"];
+    const userValues: any[] = [];
+    if (scope.teamId) {
+      userConditions.push(`u.team_id = $${userValues.length + 1}`);
+      userValues.push(scope.teamId);
+    }
+    if (hasScopedMembers) {
+      const scopedIds = scope.members.map((member) => member.id);
+      userConditions.push(`u.id = ANY($${userValues.length + 1}::text[])`);
+      userValues.push(scopedIds);
+    }
+
+    const dataRows = await queryRows<{
+      memberId: string;
+      memberName: string;
+      totalEvents: string;
+      totalHours: string;
+      lastEventDate: string | null;
+    }>(
+      `
+        SELECT
+          u.id as "memberId",
+          u.name as "memberName",
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours",
+          MAX(lr.end_date)::text as "lastEventDate"
+        FROM users u
+        LEFT JOIN leave_requests lr
+          ON u.id = lr.user_id
+          AND ${baseConditions.join(" AND ")}
+        WHERE ${userConditions.join(" AND ")}
+        GROUP BY u.id, u.name
+        ORDER BY COALESCE(SUM(lr.computed_hours), 0) DESC, u.name ASC
+      `,
+      [...baseValues, ...userValues]
+    );
+
+    if (format === "PDF") {
+      const lines = [
+        "Tabuľka – detail",
+        `Obdobie: ${range.startDate} až ${range.endDate}`,
+        ...dataRows.map((row) => {
+          const days = Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY;
+          const lastEvent = row.lastEventDate ? `, posledné: ${row.lastEventDate}` : "";
+          return `${row.memberName}: ${Number(row.totalEvents ?? 0)} udalostí, ${days.toFixed(1)} dní${lastEvent}`;
+        }),
+      ];
+      job.content = buildSimplePdf(lines);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([
+        ["member", "total_events", "total_days", "last_event_date"],
+        ...dataRows.map((row) => [
+          row.memberName,
+          Number(row.totalEvents ?? 0),
+          (Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY).toFixed(2),
+          row.lastEventDate ?? "",
+        ]),
+      ]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
   } else {
-    job.content = "Export ready.";
+    const eventRows = await queryRows<{
+      memberId: string;
+      memberName: string;
+      type: LeaveType;
+      startDate: string;
+      endDate: string;
+    }>(
+      `
+        SELECT
+          lr.user_id as "memberId",
+          u.name as "memberName",
+          lr.type,
+          lr.start_date::text as "startDate",
+          lr.end_date::text as "endDate"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE ${baseConditions.join(" AND ")}
+        ORDER BY lr.start_date ASC
+      `,
+      baseValues
+    );
+
+    const dayMap = new Map<string, { totalOut: number; typeCounts: Map<LeaveType, number> }>();
+    for (const event of eventRows) {
+      let current = parseDate(event.startDate);
+      const end = parseDate(event.endDate);
+      while (current <= end) {
+        const dateStr = formatDate(current);
+        const existing = dayMap.get(dateStr) ?? { totalOut: 0, typeCounts: new Map() };
+        existing.totalOut += 1;
+        existing.typeCounts.set(event.type, (existing.typeCounts.get(event.type) ?? 0) + 1);
+        dayMap.set(dateStr, existing);
+        current = addDays(current, 1);
+      }
+    }
+
+    const days = Array.from(dayMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+    if (format === "PDF") {
+      const lines = [
+        "Rokový kalendár",
+        `Obdobie: ${range.startDate} až ${range.endDate}`,
+        ...days.map(([date, info]) => `${date}: ${info.totalOut} mimo tímu`),
+      ];
+      job.content = buildSimplePdf(lines);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([
+        ["date", "total_out"],
+        ...days.map(([date, info]) => [date, info.totalOut]),
+      ]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
   }
 
   statsExportJobs.set(id, job);
@@ -3403,7 +3670,7 @@ app.get("/stats/exports/:id/download", asyncHandler(async (req, res) => {
     "Content-Disposition",
     `attachment; filename=stats-export-${job.id}.${job.format.toLowerCase()}`
   );
-  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Content-Type", job.contentType ?? "text/plain; charset=utf-8");
   res.send(job.content ?? "Export ready.");
 }));
 
