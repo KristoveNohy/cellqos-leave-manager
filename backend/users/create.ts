@@ -3,7 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateEmail } from "../shared/validation";
 import { createAuditLog } from "../shared/audit";
-import { requireManager } from "../shared/rbac";
+import { requireAdmin } from "../shared/rbac";
 import type { User, UserRole } from "../shared/types";
 
 interface CreateUserRequest {
@@ -16,24 +16,28 @@ interface CreateUserRequest {
   hasChild?: boolean;
 }
 
-// Creates a new user (manager only)
+// Creates a new user (admin only)
 export const create = api(
   { auth: true, expose: true, method: "POST", path: "/users" },
   async (req: CreateUserRequest): Promise<User> => {
     const auth = getAuthData()!;
-    requireManager(auth.role);
+    requireAdmin(auth.role);
     validateEmail(req.email);
+    const resolvedTeamId = req.role === "ADMIN" ? null : req.teamId || null;
+    const defaultPassword = "Password123!";
     
     await db.exec`
-      INSERT INTO users (id, email, name, role, team_id, birth_date, has_child)
+      INSERT INTO users (id, email, name, role, team_id, birth_date, has_child, password_hash, must_change_password)
       VALUES (
         ${req.id},
         ${req.email},
         ${req.name},
         ${req.role},
-        ${req.teamId || null},
+        ${resolvedTeamId},
         ${req.birthDate || null},
-        ${req.hasChild ?? false}
+        ${req.hasChild ?? false},
+        crypt(${defaultPassword}, gen_salt('bf')),
+        true
       )
     `;
     

@@ -7,7 +7,7 @@ import { randomBytes, createHash, randomUUID } from "crypto";
 import { computeWorkingHours, parseDate } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
-import { canEditRequest, requireManager, requireAuth } from "./shared/rbac";
+import { canEditRequest, isAdmin, isManager, requireAdmin, requireManager, requireAuth } from "./shared/rbac";
 import {
   computeAnnualLeaveAllowanceHours,
   computeCarryOverHours,
@@ -557,9 +557,9 @@ async function resetSerialSequence(client: PoolClient, table: string, column: st
 
 app.post("/auth/login", asyncHandler(async (req, res) => {
   const { email, password } = req.body as { email: string; password: string };
-  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole }>(
+  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole; mustChangePassword: boolean }>(
     `
-      SELECT id, email, name, role
+      SELECT id, email, name, role, must_change_password as "mustChangePassword"
       FROM users
       WHERE email = $1
         AND is_active = true
@@ -618,6 +618,34 @@ app.post("/auth/register", asyncHandler(async (req, res) => {
   res.json({ token, user });
 }));
 
+app.post("/auth/change-password", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+
+  if (!currentPassword || !newPassword) {
+    throw new HttpError(400, "Current and new password are required");
+  }
+
+  const updated = await queryRow<{ id: string }>(
+    `
+      UPDATE users
+      SET password_hash = crypt($1, gen_salt('bf')),
+          must_change_password = false
+      WHERE id = $2
+        AND password_hash IS NOT NULL
+        AND password_hash = crypt($3, password_hash)
+      RETURNING id
+    `,
+    [newPassword, auth.userID, currentPassword]
+  );
+
+  if (!updated) {
+    throw new HttpError(400, "Current password is incorrect");
+  }
+
+  res.json({ ok: true });
+}));
+
 app.post("/auth/magic-link", asyncHandler(async (req, res) => {
   const { email, redirectUrl } = req.body as { email: string; redirectUrl?: string };
   const user = await queryRow<{ id: string }>(
@@ -651,9 +679,9 @@ app.post("/auth/magic-link/verify", asyncHandler(async (req, res) => {
   const { token } = req.body as { token: string };
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
-  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole }>(
+  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole; mustChangePassword: boolean }>(
     `
-      SELECT id, email, name, role
+      SELECT id, email, name, role, must_change_password as "mustChangePassword"
       FROM users
       WHERE magic_link_token_hash = $1
         AND magic_link_expires_at IS NOT NULL
@@ -741,8 +769,24 @@ app.get("/leave-balances/me", asyncHandler(async (req, res) => {
 
 app.get("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   requireManager(auth.role);
   const columnSupport = await getUserColumnSupport();
+  let teamFilter = "";
+  let params: Array<number> = [];
+  if (isManagerUser && !isAdminUser) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (viewer?.teamId) {
+      teamFilter = "WHERE team_id = $1";
+      params = [viewer.teamId];
+    } else {
+      teamFilter = "WHERE 1=0";
+    }
+  }
 
   const users = await queryRows<User>(
     `
@@ -757,8 +801,10 @@ app.get("/users", asyncHandler(async (req, res) => {
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM users
+      ${teamFilter}
       ORDER BY name ASC
-    `
+    `,
+    params
   );
 
   const year = new Date().getFullYear();
@@ -794,7 +840,7 @@ app.get("/users", asyncHandler(async (req, res) => {
 
 app.post("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const columnSupport = await getUserColumnSupport();
   const { email, name, role, teamId, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceHours } = req.body as {
     email?: string;
@@ -815,6 +861,12 @@ app.post("/users", asyncHandler(async (req, res) => {
 
   const userId = randomUUID();
   const userRole: UserRole = role ?? "EMPLOYEE";
+  const resolvedTeamId = userRole === "ADMIN" ? null : teamId ?? null;
+  const defaultPassword = "Password123!";
+  const passwordRow = await queryRow<{ hash: string }>(
+    "SELECT crypt($1, gen_salt('bf')) as hash",
+    [defaultPassword]
+  );
 
   if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
     if (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0) {
@@ -823,8 +875,30 @@ app.post("/users", asyncHandler(async (req, res) => {
   }
 
   try {
-    const columns = ["id", "email", "name", "role", "team_id", "birth_date", "has_child", "created_at", "updated_at"];
-    const values: any[] = [userId, email, name, userRole, teamId ?? null, birthDate ?? null, hasChild ?? false];
+    const columns = [
+      "id",
+      "email",
+      "name",
+      "role",
+      "team_id",
+      "birth_date",
+      "has_child",
+      "password_hash",
+      "must_change_password",
+      "created_at",
+      "updated_at",
+    ];
+    const values: any[] = [
+      userId,
+      email,
+      name,
+      userRole,
+      resolvedTeamId,
+      birthDate ?? null,
+      hasChild ?? false,
+      passwordRow?.hash ?? null,
+      true,
+    ];
 
     if (columnSupport.employmentStartDate) {
       columns.splice(5, 0, "employment_start_date");
@@ -880,7 +954,7 @@ app.post("/users", asyncHandler(async (req, res) => {
 
 app.patch("/users/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const { id } = req.params;
   const columnSupport = await getUserColumnSupport();
   const { email, name, role, teamId, isActive, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceHours } = req.body as {
@@ -918,7 +992,9 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     updates.push(`role = $${values.length + 1}`);
     values.push(role);
   }
-  if (teamId !== undefined) {
+  if (role === "ADMIN") {
+    updates.push("team_id = NULL");
+  } else if (teamId !== undefined) {
     updates.push(`team_id = $${values.length + 1}`);
     values.push(teamId ?? null);
   }
@@ -983,9 +1059,62 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   res.json(user);
 }));
 
+app.post("/users/:id/reset-password", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireAdmin(auth.role);
+  const { id } = req.params;
+
+  const targetUser = await queryRow<{ id: string; name: string; email: string }>(
+    `
+      SELECT id, name, email
+      FROM users
+      WHERE id = $1
+    `,
+    [id]
+  );
+
+  if (!targetUser) {
+    throw new HttpError(404, "User not found");
+  }
+
+  const defaultPassword = "Password123!";
+
+  await pool.query(
+    `
+      UPDATE users
+      SET password_hash = crypt($1, gen_salt('bf')),
+          must_change_password = true
+      WHERE id = $2
+    `,
+    [defaultPassword, id]
+  );
+
+  const adminUser = await queryRow<{ name: string; email: string }>(
+    `
+      SELECT name, email
+      FROM users
+      WHERE id = $1
+    `,
+    [auth.userID]
+  );
+
+  await createEntityAuditLog(auth.userID, "users", id, "RESET_PASSWORD", null, {
+    mustChangePassword: true,
+  });
+
+  await createNotification(targetUser.id, "PASSWORD_RESET", {
+    adminName: adminUser?.name ?? "Admin",
+    adminEmail: adminUser?.email ?? null,
+    userName: targetUser.name,
+    userEmail: targetUser.email,
+  });
+
+  res.json({ ok: true });
+}));
+
 app.delete("/users/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const { id } = req.params;
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [id]);
@@ -1039,7 +1168,7 @@ app.get("/teams", asyncHandler(async (req, res) => {
 
 app.post("/teams", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const { name, maxConcurrentLeaves } = req.body as {
     name?: string;
     maxConcurrentLeaves?: number | null;
@@ -1093,7 +1222,7 @@ app.post("/teams", asyncHandler(async (req, res) => {
 
 app.patch("/teams/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const id = Number(req.params.id);
   const { name, maxConcurrentLeaves } = req.body as {
     name?: string;
@@ -1153,7 +1282,7 @@ app.patch("/teams/:id", asyncHandler(async (req, res) => {
 
 app.delete("/teams/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const id = Number(req.params.id);
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM teams WHERE id = $1", [id]);
@@ -1220,7 +1349,7 @@ app.get("/holidays", asyncHandler(async (req, res) => {
 
 app.post("/holidays", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const { date, name, isCompanyHoliday, isActive } = req.body as {
     date?: string;
     name?: string;
@@ -1286,7 +1415,7 @@ app.post("/holidays", asyncHandler(async (req, res) => {
 
 app.patch("/holidays/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const id = Number(req.params.id);
   const { date, name, isCompanyHoliday, isActive } = req.body as {
     date?: string;
@@ -1369,7 +1498,7 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
 
 app.delete("/holidays/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
   const id = Number(req.params.id);
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM holidays WHERE id = $1", [id]);
@@ -1385,7 +1514,16 @@ app.delete("/holidays/:id", asyncHandler(async (req, res) => {
 
 app.get("/leave-requests", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  const isManager = auth.role === "MANAGER";
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
+  let viewerTeamId: number | null = null;
+  if (isManagerUser && !isAdminUser) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    viewerTeamId = viewer?.teamId ?? null;
+  }
   const conditions: string[] = ["1=1"];
   const values: any[] = [];
 
@@ -1397,16 +1535,34 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   const teamId = req.query.teamId ? Number(req.query.teamId) : undefined;
 
   if (userId) {
-    if (!isManager && userId !== auth.userID) {
+    if (!isManagerUser && !isAdminUser && userId !== auth.userID) {
       throw new HttpError(403, "Not allowed to view other users' requests");
+    }
+    if (isManagerUser && !isAdminUser && userId !== auth.userID) {
+      const target = await queryRow<{ teamId: number | null }>(
+        "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+        [userId]
+      );
+      if (!target || viewerTeamId === null || target.teamId !== viewerTeamId) {
+        throw new HttpError(403, "Not allowed to view other teams' requests");
+      }
     }
     conditions.push(`lr.user_id = $${values.length + 1}`);
     values.push(userId);
   }
 
-  if (!isManager && !userId) {
+  if (!isManagerUser && !isAdminUser && !userId) {
     conditions.push(`lr.user_id = $${values.length + 1}`);
     values.push(auth.userID);
+  }
+
+  if (isManagerUser && !isAdminUser && !userId) {
+    if (viewerTeamId === null) {
+      conditions.push("1=0");
+    } else {
+      conditions.push(`u.team_id = $${values.length + 1}`);
+      values.push(viewerTeamId);
+    }
   }
 
   if (status) {
@@ -1430,6 +1586,9 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   if (teamId) {
+    if (isManagerUser && !isAdminUser && teamId !== viewerTeamId) {
+      throw new HttpError(403, "Not allowed to view other teams' requests");
+    }
     conditions.push(`u.team_id = $${values.length + 1}`);
     values.push(teamId);
   }
@@ -1504,6 +1663,8 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
 
 app.post("/leave-requests", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   const {
     type,
     startDate,
@@ -1529,6 +1690,19 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   const targetUserId = userId ?? auth.userID;
   if (targetUserId !== auth.userID) {
     requireManager(auth.role);
+    if (isManagerUser && !isAdminUser) {
+      const viewer = await queryRow<{ teamId: number | null }>(
+        "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+        [auth.userID]
+      );
+      const target = await queryRow<{ teamId: number | null }>(
+        "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+        [targetUserId]
+      );
+      if (!viewer || !target || viewer.teamId === null || viewer.teamId !== target.teamId) {
+        throw new HttpError(403, "Cannot create requests for another team");
+      }
+    }
   }
 
   const userExists = await queryRow<{ id: string }>(
@@ -1623,6 +1797,8 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
 
 app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   const id = Number(req.params.id);
   const {
     type,
@@ -1646,7 +1822,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     managerComment?: string;
   };
 
-  const before = await queryRow<LeaveRequest>(
+  const before = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
         id, user_id as "userId", type,
@@ -1662,8 +1838,10 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
         computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
-        updated_at as "updatedAt"
+        updated_at as "updatedAt",
+        u.team_id as "teamId"
       FROM leave_requests
+      JOIN users u ON leave_requests.user_id = u.id
       WHERE id = $1
     `,
     [id]
@@ -1673,7 +1851,19 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     throw new HttpError(404, "Leave request not found");
   }
 
-  if (!canEditRequest(before.userId, before.status, auth.userID, auth.role)) {
+  let isSameTeam = before.userId === auth.userID;
+  if (isManagerUser && !isAdminUser && before.userId !== auth.userID) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    isSameTeam = Boolean(viewer?.teamId && viewer.teamId === before.teamId);
+    if (!isSameTeam) {
+      throw new HttpError(403, "You are not allowed to edit this request");
+    }
+  }
+
+  if (!canEditRequest(before.userId, before.status, auth.userID, auth.role, isSameTeam)) {
     throw new HttpError(403, "You are not allowed to edit this request");
   }
 
@@ -1814,7 +2004,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     after as unknown as Record<string, unknown>
   );
 
-  if (auth.role === "MANAGER" && before.userId !== auth.userID) {
+  if ((isManagerUser || isAdminUser) && before.userId !== auth.userID) {
     await createNotification(
       before.userId,
       "REQUEST_UPDATED_BY_MANAGER",
@@ -1834,13 +2024,15 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
 
 app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   const id = Number(req.params.id);
 
-  if (auth.role !== "MANAGER") {
+  if (!isManagerUser && !isAdminUser) {
     throw new HttpError(403, "Employees cannot delete requests; use cancel.");
   }
 
-  const request = await queryRow<LeaveRequest>(
+  const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
         id, user_id as "userId", type,
@@ -1856,8 +2048,10 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
         computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
-        updated_at as "updatedAt"
+        updated_at as "updatedAt",
+        u.team_id as "teamId"
       FROM leave_requests
+      JOIN users u ON leave_requests.user_id = u.id
       WHERE id = $1
     `,
     [id]
@@ -1865,6 +2059,16 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
 
   if (!request) {
     throw new HttpError(404, "Leave request not found");
+  }
+
+  if (isManagerUser && !isAdminUser && request.userId !== auth.userID) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (!viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+      throw new HttpError(403, "Cannot delete another team's request");
+    }
   }
 
   await pool.query("DELETE FROM leave_requests WHERE id = $1", [id]);
@@ -1883,8 +2087,10 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
 
 app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   const id = Number(req.params.id);
-  const request = await queryRow<LeaveRequest>(
+  const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
         id, user_id as "userId", type,
@@ -1900,8 +2106,10 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
         computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
-        updated_at as "updatedAt"
+        updated_at as "updatedAt",
+        u.team_id as "teamId"
       FROM leave_requests
+      JOIN users u ON leave_requests.user_id = u.id
       WHERE id = $1
     `,
     [id]
@@ -1911,7 +2119,7 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     throw new HttpError(404, "Leave request not found");
   }
 
-  if (auth.role !== "MANAGER" && request.userId !== auth.userID) {
+  if (!isManagerUser && !isAdminUser && request.userId !== auth.userID) {
     throw new HttpError(403, "Cannot submit another user's request");
   }
 
@@ -1934,6 +2142,21 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
 
   if (overlaps && overlaps.count > 0) {
     throw new HttpError(409, "Request overlaps with existing pending or approved request");
+  }
+
+  const requester = await queryRow<{ teamId: number | null; name: string }>(
+    "SELECT team_id as \"teamId\", name FROM users WHERE id = $1",
+    [request.userId]
+  );
+
+  if (isManagerUser && !isAdminUser && request.userId !== auth.userID) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (!viewer || viewer.teamId === null || viewer.teamId !== requester?.teamId) {
+      throw new HttpError(403, "Cannot submit another team's request");
+    }
   }
 
   await pool.query("UPDATE leave_requests SET status = 'PENDING' WHERE id = $1", [id]);
@@ -1970,11 +2193,6 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     updated as unknown as Record<string, unknown>
   );
 
-  const requester = await queryRow<{ teamId: number | null; name: string }>(
-    "SELECT team_id as \"teamId\", name FROM users WHERE id = $1",
-    [request.userId]
-  );
-
   const managers = requester?.teamId
     ? await queryRows<{ id: string }>(
         "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true AND team_id = $1",
@@ -2005,6 +2223,8 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
 
 app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   requireManager(auth.role);
   const id = Number(req.params.id);
   const { comment, bulk } = req.body as { comment?: string; bulk?: boolean };
@@ -2036,6 +2256,16 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
 
   if (!request) {
     throw new HttpError(404, "Leave request not found");
+  }
+
+  if (isManagerUser && !isAdminUser) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (!viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+      throw new HttpError(403, "Cannot approve another team's request");
+    }
   }
 
   if (request.status !== "PENDING") {
@@ -2128,6 +2358,8 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
 
 app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   requireManager(auth.role);
   const id = Number(req.params.id);
   const { comment, bulk } = req.body as { comment: string; bulk?: boolean };
@@ -2157,6 +2389,16 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
 
   if (!request) {
     throw new HttpError(404, "Leave request not found");
+  }
+
+  if (isManagerUser && !isAdminUser) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (!viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+      throw new HttpError(403, "Cannot reject another team's request");
+    }
   }
 
   if (request.status !== "PENDING") {
@@ -2219,6 +2461,8 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
 
 app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   const id = Number(req.params.id);
 
   const request = await queryRow<LeaveRequest>(
@@ -2252,8 +2496,23 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     throw new HttpError(409, "Request is already cancelled");
   }
 
-  if (auth.role !== "MANAGER" && request.userId !== auth.userID) {
+  if (!isManagerUser && !isAdminUser && request.userId !== auth.userID) {
     throw new HttpError(403, "Cannot cancel another user's request");
+  }
+
+  const requester = await queryRow<{ teamId: number | null; name: string }>(
+    "SELECT team_id as \"teamId\", name FROM users WHERE id = $1",
+    [request.userId]
+  );
+
+  if (isManagerUser && !isAdminUser && request.userId !== auth.userID) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (!viewer || viewer.teamId === null || viewer.teamId !== requester?.teamId) {
+      throw new HttpError(403, "Cannot cancel another team's request");
+    }
   }
 
   await pool.query("UPDATE leave_requests SET status = 'CANCELLED' WHERE id = $1", [id]);
@@ -2290,11 +2549,6 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     updated as unknown as Record<string, unknown>
   );
 
-  const requester = await queryRow<{ teamId: number | null; name: string }>(
-    "SELECT team_id as \"teamId\", name FROM users WHERE id = $1",
-    [request.userId]
-  );
-
   const managers = requester?.teamId
     ? await queryRows<{ id: string }>(
         "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true AND team_id = $1",
@@ -2328,12 +2582,13 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const startDate = req.query.startDate as string;
   const endDate = req.query.endDate as string;
   const teamId = req.query.teamId ? Number(req.query.teamId) : undefined;
-  const isManager = auth.role === "MANAGER";
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   const viewerId = auth.userID;
   let viewerTeamId: number | null = null;
   const showTeamCalendarForEmployees = await getShowTeamCalendarForEmployees();
 
-  if (!isManager) {
+  if (!isAdminUser) {
     const viewer = await queryRow<{ teamId: number | null }>(
       "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
       [viewerId]
@@ -2358,12 +2613,12 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   ];
   const values: any[] = [startDate, endDate];
 
-  if (isManager && teamId) {
+  if ((isManagerUser || isAdminUser) && teamId) {
     conditions.push(`u.team_id = $${values.length + 1}`);
     values.push(teamId);
   }
 
-  if (!isManager) {
+  if (!isManagerUser && !isAdminUser) {
     if (showTeamCalendarForEmployees && viewerTeamId) {
       conditions.push(`u.team_id = $${values.length + 1}`);
       values.push(viewerTeamId);
@@ -2390,7 +2645,8 @@ app.get("/calendar", asyncHandler(async (req, res) => {
         lr.created_at as "createdAt",
         lr.updated_at as "updatedAt",
         u.name as "userName",
-        u.email as "userEmail"
+        u.email as "userEmail",
+        u.team_id as "teamId"
       FROM leave_requests lr
       JOIN users u ON lr.user_id = u.id
       WHERE ${conditions.join(" AND ")}
@@ -2399,12 +2655,15 @@ app.get("/calendar", asyncHandler(async (req, res) => {
 
   const events = await queryRows<any>(query, values);
   const safeEvents = events.map((event) => {
-    if (!isManager && event.userId !== viewerId) {
-      return {
-        ...event,
-        reason: null,
-        managerComment: null,
-      };
+    if (!isAdminUser && event.userId !== viewerId) {
+      const isSameTeam = viewerTeamId !== null && viewerTeamId === event.teamId;
+      if (!isManagerUser || !isSameTeam) {
+        return {
+          ...event,
+          reason: null,
+          managerComment: null,
+        };
+      }
     }
 
     return event;
@@ -2415,12 +2674,13 @@ app.get("/calendar", asyncHandler(async (req, res) => {
 
 app.get("/audit", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  const isManager = auth.role === "MANAGER";
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
   const entityType = req.query.entityType as string | undefined;
   const entityId = req.query.entityId as string | undefined;
   const limit = req.query.limit ? Number(req.query.limit) : 100;
 
-  if (!isManager) {
+  if (!isAdminUser && !isManagerUser) {
     if (entityType !== "leave_request" || !entityId) {
       throw new HttpError(403, "Not allowed to view audit logs");
     }
@@ -2429,6 +2689,25 @@ app.get("/audit", asyncHandler(async (req, res) => {
       [Number(entityId), auth.userID]
     );
     if (!owned) {
+      throw new HttpError(403, "Not allowed to view audit logs");
+    }
+  }
+
+  if (isManagerUser && !isAdminUser && entityType === "leave_request" && entityId) {
+    const request = await queryRow<{ teamId: number | null }>(
+      `
+        SELECT u.team_id as "teamId"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE lr.id = $1
+      `,
+      [Number(entityId)]
+    );
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (!request || !viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
       throw new HttpError(403, "Not allowed to view audit logs");
     }
   }
@@ -2470,8 +2749,11 @@ app.get("/audit", asyncHandler(async (req, res) => {
 
 app.get("/notifications", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
+  const isAdminUser = isAdmin(auth.role);
   const supportsDedupeKey = await hasNotificationsDedupeKey();
   const dedupeSelect = supportsDedupeKey ? `, dedupe_key as "dedupeKey"` : "";
+  const whereClause = isAdminUser ? "" : "WHERE user_id = $1";
+  const params = isAdminUser ? [] : [auth.userID];
   const notifications = await queryRows<Notification>(
     `
       SELECT 
@@ -2484,11 +2766,11 @@ app.get("/notifications", asyncHandler(async (req, res) => {
         created_at as "createdAt"
         ${dedupeSelect}
       FROM notifications
-      WHERE user_id = $1
+      ${whereClause}
       ORDER BY (read_at IS NULL) DESC, created_at DESC
       LIMIT 50
     `,
-    [auth.userID]
+    params
   );
 
   res.json({ notifications });
@@ -2497,25 +2779,33 @@ app.get("/notifications", asyncHandler(async (req, res) => {
 app.post("/notifications/:id/read", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const id = Number(req.params.id);
-  await pool.query(
-    "UPDATE notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2",
-    [id, auth.userID]
-  );
+  if (isAdmin(auth.role)) {
+    await pool.query("UPDATE notifications SET read_at = NOW() WHERE id = $1", [id]);
+  } else {
+    await pool.query(
+      "UPDATE notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2",
+      [id, auth.userID]
+    );
+  }
   res.json({ ok: true });
 }));
 
 app.post("/notifications/read-all", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  await pool.query(
-    "UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL",
-    [auth.userID]
-  );
+  if (isAdmin(auth.role)) {
+    await pool.query("UPDATE notifications SET read_at = NOW() WHERE read_at IS NULL");
+  } else {
+    await pool.query(
+      "UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL",
+      [auth.userID]
+    );
+  }
   res.json({ ok: true });
 }));
 
 app.get("/admin/vacation-policy", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
 
   const policy = await getVacationPolicy();
   res.json({ policy });
@@ -2523,7 +2813,7 @@ app.get("/admin/vacation-policy", asyncHandler(async (req, res) => {
 
 app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
 
   const policySupport = await getVacationPolicySupport();
   if (!policySupport.hasPolicyColumns) {
@@ -2573,7 +2863,7 @@ app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
 
 app.get("/admin/database/export", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
 
   const tables = {
     teams: await queryRows<Record<string, unknown>>("SELECT * FROM teams ORDER BY id ASC"),
@@ -2604,7 +2894,7 @@ app.get("/admin/database/export", asyncHandler(async (req, res) => {
 
 app.post("/admin/database/import", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
-  requireManager(auth.role);
+  requireAdmin(auth.role);
 
   const { backup, confirm } = req.body as { backup?: DatabaseBackup; confirm?: string };
 

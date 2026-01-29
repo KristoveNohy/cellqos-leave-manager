@@ -2,18 +2,18 @@ import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog } from "../shared/audit";
-import { requireManager } from "../shared/rbac";
+import { requireAdmin } from "../shared/rbac";
 
 interface DeleteTeamParams {
   id: number;
 }
 
-// Deletes a team (manager only)
+// Deletes a team (admin only)
 export const remove = api(
   { auth: true, expose: true, method: "DELETE", path: "/teams/:id" },
   async ({ id }: DeleteTeamParams): Promise<void> => {
     const auth = getAuthData()!;
-    requireManager(auth.role);
+    requireAdmin(auth.role);
     const before = await db.queryRow`
       SELECT * FROM teams WHERE id = ${id}
     `;

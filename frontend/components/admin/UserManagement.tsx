@@ -36,7 +36,7 @@ import {
 type UserFormValues = {
   name: string;
   email: string;
-  role: "EMPLOYEE" | "MANAGER";
+  role: "EMPLOYEE" | "MANAGER" | "ADMIN";
   teamId: string;
   employmentStartDate: string;
   birthDate: string;
@@ -128,6 +128,20 @@ export default function UserManagement() {
       });
     },
   });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (payload: { id: string }) => backend.users.resetPassword(payload),
+    onSuccess: () => {
+      toast({ title: "Heslo bolo resetované na predvolené." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Reset hesla zlyhal",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
   
   if (isLoading) {
     return <div className="text-center py-12">Načítava sa...</div>;
@@ -138,6 +152,7 @@ export default function UserManagement() {
   const roleLabels = {
     MANAGER: "Manažér",
     EMPLOYEE: "Zamestnanec",
+    ADMIN: "Admin",
   };
 
   const openCreate = () => {
@@ -176,6 +191,15 @@ export default function UserManagement() {
     const confirmed = window.confirm(`Naozaj chcete odstrániť používateľa ${user.name}?`);
     if (confirmed) {
       deleteMutation.mutate({ id: user.id });
+    }
+  };
+
+  const handleResetPassword = (user: any) => {
+    const confirmed = window.confirm(
+      `Naozaj chcete resetovať heslo používateľa ${user.name}?`
+    );
+    if (confirmed) {
+      resetPasswordMutation.mutate({ id: user.id });
     }
   };
 
@@ -234,7 +258,7 @@ export default function UserManagement() {
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>
-                  <Badge variant={user.role === "MANAGER" ? "default" : "secondary"}>
+                  <Badge variant={user.role === "ADMIN" ? "default" : user.role === "MANAGER" ? "secondary" : "outline"}>
                     {roleLabels[user.role as keyof typeof roleLabels] ?? user.role}
                   </Badge>
                 </TableCell>
@@ -256,6 +280,14 @@ export default function UserManagement() {
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(user)}>
                       Upraviť
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleResetPassword(user)}
+                      disabled={resetPasswordMutation.isPending}
+                    >
+                      Reset hesla
                     </Button>
                     <Button
                       variant="destructive"
@@ -300,7 +332,12 @@ export default function UserManagement() {
                 <Label>Rola</Label>
                 <Select
                   value={watch("role")}
-                  onValueChange={(value) => setValue("role", value as UserFormValues["role"])}
+                  onValueChange={(value) => {
+                    setValue("role", value as UserFormValues["role"]);
+                    if (value === "ADMIN") {
+                      setValue("teamId", "none");
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -308,6 +345,7 @@ export default function UserManagement() {
                   <SelectContent>
                     <SelectItem value="EMPLOYEE">Zamestnanec</SelectItem>
                     <SelectItem value="MANAGER">Manažér</SelectItem>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -316,6 +354,7 @@ export default function UserManagement() {
                 <Select
                   value={watch("teamId")}
                   onValueChange={(value) => setValue("teamId", value)}
+                  disabled={watch("role") === "ADMIN"}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Bez tímu" />

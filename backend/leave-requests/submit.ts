@@ -3,6 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog, createNotification } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
+import { isAdmin, isManager } from "../shared/rbac";
 import type { LeaveRequest } from "../shared/types";
 
 interface SubmitLeaveRequestParams {
@@ -14,6 +15,8 @@ export const submit = api(
   { auth: true, expose: true, method: "POST", path: "/leave-requests/:id/submit" },
   async ({ id }: SubmitLeaveRequestParams): Promise<LeaveRequest> => {
     const auth = getAuthData()!;
+    const isAdminUser = isAdmin(auth.role);
+    const isManagerUser = isManager(auth.role);
     const request = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,
@@ -38,7 +41,7 @@ export const submit = api(
       throw APIError.notFound("Leave request not found");
     }
 
-    if (auth.role !== "MANAGER" && request.userId !== auth.userID) {
+    if (!isManagerUser && !isAdminUser && request.userId !== auth.userID) {
       throw APIError.permissionDenied("Cannot submit another user's request");
     }
     
@@ -72,6 +75,23 @@ export const submit = api(
       });
     }
     
+    const requester = await db.queryRow<{ teamId: number | null; name: string }>`
+      SELECT team_id as "teamId", name
+      FROM users
+      WHERE id = ${request.userId}
+    `;
+
+    if (isManagerUser && !isAdminUser && request.userId !== auth.userID) {
+      const viewer = await db.queryRow<{ teamId: number | null }>`
+        SELECT team_id as "teamId"
+        FROM users
+        WHERE id = ${auth.userID}
+      `;
+      if (!viewer || viewer.teamId === null || viewer.teamId !== requester?.teamId) {
+        throw APIError.permissionDenied("Cannot submit another team's request");
+      }
+    }
+
     await db.exec`
       UPDATE leave_requests
       SET status = 'PENDING'
@@ -106,12 +126,6 @@ export const submit = api(
       request,
       updated
     );
-    
-    const requester = await db.queryRow<{ teamId: number | null; name: string }>`
-      SELECT team_id as "teamId", name
-      FROM users
-      WHERE id = ${request.userId}
-    `;
 
     const managers = requester?.teamId
       ? await db.queryAll<{ id: string }>`

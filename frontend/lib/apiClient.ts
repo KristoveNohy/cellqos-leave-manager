@@ -43,6 +43,10 @@ function toQuery(params: Record<string, string | number | undefined>) {
 
 export function createApiClient(token: string | null) {
   return {
+    auth: {
+      changePassword: (data: { currentPassword: string; newPassword: string }) =>
+        apiRequest<{ ok: true }>("/auth/change-password", { method: "POST", body: data, token }),
+    },
     audit: {
       list: (params: { entityType?: string; entityId?: string; limit?: number }) =>
         apiRequest<{ logs: any[] }>(`/audit${toQuery(params)}`, { token }),
@@ -86,6 +90,8 @@ export function createApiClient(token: string | null) {
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>
         apiRequest<any>(`/users/${data.id}`, { method: "PATCH", body: data, token }),
+      resetPassword: (data: { id: string }) =>
+        apiRequest<{ ok: true }>(`/users/${data.id}/reset-password`, { method: "POST", token }),
       remove: (data: { id: string }) =>
         apiRequest<any>(`/users/${data.id}`, { method: "DELETE", token }),
     },

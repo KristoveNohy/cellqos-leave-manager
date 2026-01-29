@@ -6,6 +6,18 @@ type AuthData = {
   role: UserRole;
 };
 
+export function isAdmin(userRole: UserRole | undefined): boolean {
+  return userRole === "ADMIN";
+}
+
+export function isManager(userRole: UserRole | undefined): boolean {
+  return userRole === "MANAGER";
+}
+
+export function isManagerOrAdmin(userRole: UserRole | undefined): boolean {
+  return userRole === "MANAGER" || userRole === "ADMIN";
+}
+
 export function requireAuth(auth?: AuthData | null): AuthData {
   if (!auth) {
     throw new HttpError(401, "Authentication required");
@@ -14,8 +26,14 @@ export function requireAuth(auth?: AuthData | null): AuthData {
 }
 
 export function requireManager(userRole: UserRole | undefined): void {
-  if (userRole !== "MANAGER") {
+  if (!isManagerOrAdmin(userRole)) {
     throw new HttpError(403, "This action requires manager role");
+  }
+}
+
+export function requireAdmin(userRole: UserRole | undefined): void {
+  if (userRole !== "ADMIN") {
+    throw new HttpError(403, "This action requires admin role");
   }
 }
 
@@ -23,11 +41,16 @@ export function canEditRequest(
   requestUserId: string,
   requestStatus: string,
   currentUserId: string,
-  currentUserRole: UserRole
+  currentUserRole: UserRole,
+  isSameTeam: boolean
 ): boolean {
-  // Manager can edit anything
-  if (currentUserRole === "MANAGER") {
+  if (currentUserRole === "ADMIN") {
     return true;
+  }
+
+  // Manager can edit requests in their team
+  if (currentUserRole === "MANAGER") {
+    return isSameTeam;
   }
   
   // Employee can only edit their own requests

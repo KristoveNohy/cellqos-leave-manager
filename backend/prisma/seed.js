@@ -23,6 +23,7 @@ async function main() {
     where: { id: "user_manager_placeholder" },
     update: {
       passwordHash: hash,
+      mustChangePassword: true,
       role: "MANAGER",
       teamId: team.id,
       isActive: true,
@@ -35,6 +36,28 @@ async function main() {
       teamId: team.id,
       isActive: true,
       passwordHash: hash,
+      mustChangePassword: true,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { id: "user_admin_placeholder" },
+    update: {
+      passwordHash: hash,
+      mustChangePassword: true,
+      role: "ADMIN",
+      teamId: null,
+      isActive: true,
+    },
+    create: {
+      id: "user_admin_placeholder",
+      email: "admin@cellqos.com",
+      name: "Admin User",
+      role: "ADMIN",
+      teamId: null,
+      isActive: true,
+      passwordHash: hash,
+      mustChangePassword: true,
     },
   });
 
@@ -49,6 +72,7 @@ async function main() {
       where: { id: employee.id },
       update: {
         passwordHash: hash,
+        mustChangePassword: true,
         role: "EMPLOYEE",
         teamId: team.id,
         isActive: true,
@@ -61,6 +85,7 @@ async function main() {
         teamId: team.id,
         isActive: true,
         passwordHash: hash,
+        mustChangePassword: true,
       },
     });
   }

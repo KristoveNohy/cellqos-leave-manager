@@ -43,7 +43,7 @@ export default function RequestFormDialog({
 }: RequestFormDialogProps) {
   const backend = useBackend();
   const { user } = useAuth();
-  const isManager = user?.role === "MANAGER";
+  const canManageUsers = user?.role === "MANAGER" || user?.role === "ADMIN";
   const { toast } = useToast();
   const defaultStartTime = request ? request.startTime || "08:00" : "08:00";
   const defaultEndTime = request ? request.endTime || "16:00" : "16:00";
@@ -64,7 +64,7 @@ export default function RequestFormDialog({
   const { data: usersData } = useQuery({
     queryKey: ["users"],
     queryFn: async () => backend.users.list(),
-    enabled: isManager,
+    enabled: canManageUsers,
   });
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function RequestFormDialog({
   const onSubmit = (data: any) => {
     const payload = {
       ...data,
-      userId: isManager ? data.userId : undefined,
+      userId: canManageUsers ? data.userId : undefined,
     };
 
     if (request) {
@@ -186,7 +186,7 @@ export default function RequestFormDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {isManager && !request && (
+          {canManageUsers && !request && (
             <div>
               <Label>Žiadateľ</Label>
               <Select
