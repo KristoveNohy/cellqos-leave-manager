@@ -121,7 +121,7 @@ function TopMembersChart({ data }: { data: StatsTopMember[] }) {
 export default function StatsCharts({ trend, typeBreakdown, topMembers }: StatsChartsProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <Card className="lg:col-span-2">
+      <Card className="lg:col-span-2 stats-print-avoid">
         <CardHeader>
           <CardTitle>Trend podľa mesiacov</CardTitle>
         </CardHeader>
@@ -129,7 +129,7 @@ export default function StatsCharts({ trend, typeBreakdown, topMembers }: StatsC
           <TrendChart data={trend} />
         </CardContent>
       </Card>
-      <Card>
+      <Card className="stats-print-avoid">
         <CardHeader>
           <CardTitle>Rozdelenie podľa typu</CardTitle>
         </CardHeader>
@@ -137,7 +137,7 @@ export default function StatsCharts({ trend, typeBreakdown, topMembers }: StatsC
           <TypeDistribution data={typeBreakdown} />
         </CardContent>
       </Card>
-      <Card className="lg:col-span-3">
+      <Card className="lg:col-span-3 stats-print-avoid">
         <CardHeader>
           <CardTitle>Top členovia</CardTitle>
         </CardHeader>

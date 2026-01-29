@@ -1,3 +1,4 @@
+import { formatDate } from "./date-utils";
 import type { LeaveType } from "./types";
 
 export const STATS_EVENT_TYPES: LeaveType[] = [
@@ -40,8 +41,8 @@ export function buildStatsDateRange({
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0);
     return {
-      startDate: start.toISOString().slice(0, 10),
-      endDate: end.toISOString().slice(0, 10),
+      startDate: formatDate(start),
+      endDate: formatDate(end),
       months: [month],
     };
   }
@@ -55,8 +56,8 @@ export function buildStatsDateRange({
     const start = new Date(year, startMonth - 1, 1);
     const end = new Date(year, endMonth, 0);
     return {
-      startDate: start.toISOString().slice(0, 10),
-      endDate: end.toISOString().slice(0, 10),
+      startDate: formatDate(start),
+      endDate: formatDate(end),
       months: [startMonth, startMonth + 1, endMonth],
     };
   }
@@ -64,8 +65,8 @@ export function buildStatsDateRange({
   const start = new Date(year, 0, 1);
   const end = new Date(year, 12, 0);
   return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
+    startDate: formatDate(start),
+    endDate: formatDate(end),
     months: Array.from({ length: 12 }, (_, index) => index + 1),
   };
 }

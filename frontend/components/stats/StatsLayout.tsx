@@ -12,7 +12,7 @@ interface StatsLayoutProps {
 export default function StatsLayout({ title, breadcrumb, subtitle, children }: StatsLayoutProps) {
   const location = useLocation();
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stats-print-scope">
       <header className="space-y-1">
         <p className="text-sm text-muted-foreground">Štatistiky / {breadcrumb}</p>
         <h1 className="text-3xl font-bold">{title}</h1>

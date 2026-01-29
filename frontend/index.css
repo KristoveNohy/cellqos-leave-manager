@@ -58,13 +58,28 @@
     background: white;
   }
 
+  html,
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   .stats-no-print {
     display: none !important;
+  }
+
+  .stats-print-scope {
+    max-width: 100%;
   }
 
   .stats-print-page {
     box-shadow: none;
     border: none;
+  }
+
+  .stats-print-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .stats-calendar-grid {

@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StatsCalendarResponse } from "~backend/shared/types";
+import { formatDate } from "~backend/shared/date-utils";
 import { leaveTypeLabel, statsEventTypes } from "@/lib/stats";
 
 interface StatsCalendarProps {
@@ -90,7 +91,7 @@ export default function StatsCalendar({ data, isLoading, error, highlightMemberI
         </div>
       </div>
 
-      <Card className="stats-print-page">
+      <Card className="stats-print-page stats-print-avoid">
         <CardHeader className="flex flex-col gap-2">
           <CardTitle>
             {data.teamName ? `${data.teamName} – ${data.year}` : `Tím – ${data.year}`}
@@ -118,7 +119,7 @@ export default function StatsCalendar({ data, isLoading, error, highlightMemberI
                   </div>
                   <div className="mt-1 grid grid-cols-7 gap-1 text-[10px]">
                     {monthDays.map((day) => {
-                      const dateStr = day.date.toISOString().slice(0, 10);
+                      const dateStr = formatDate(day.date);
                       const info = dayMap.get(dateStr);
                       const highlight =
                         highlightMemberId && info?.members.some((member) => member.memberId === highlightMemberId);
