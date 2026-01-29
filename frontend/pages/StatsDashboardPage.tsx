@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
 import { useAuth } from "@/lib/auth";
@@ -12,17 +13,35 @@ import { buildStatsQuery, formatNumber } from "@/lib/stats";
 export default function StatsDashboardPage() {
   const backend = useBackend();
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const currentYear = new Date().getFullYear();
   const isAdmin = user?.role === "ADMIN";
 
-  const defaultFilters: StatsFilterState = {
-    year: currentYear,
-    month: undefined,
-    quarter: undefined,
-    teamId: undefined,
-    memberIds: [],
-    eventTypes: ["ANNUAL_LEAVE", "SICK_LEAVE", "HOME_OFFICE", "UNPAID_LEAVE", "OTHER"],
-  };
+  const defaultFilters: StatsFilterState = useMemo(() => {
+    const yearParam = Number(searchParams.get("year") ?? currentYear);
+    const monthParam = searchParams.get("month");
+    const quarterParam = searchParams.get("quarter");
+    const teamParam = searchParams.get("teamId");
+    const memberParam = searchParams.get("memberIds");
+    const eventTypesParam = searchParams.get("eventTypes");
+    const parsedYear = Number.isFinite(yearParam) ? yearParam : currentYear;
+    const parsedMonth = monthParam ? Number(monthParam) : undefined;
+    const parsedQuarter = quarterParam ? Number(quarterParam) : undefined;
+    const parsedTeam = teamParam ? Number(teamParam) : undefined;
+    const parsedMembers = memberParam ? memberParam.split(",").filter(Boolean) : [];
+    const parsedEventTypes = eventTypesParam
+      ? (eventTypesParam.split(",").filter(Boolean) as StatsFilterState["eventTypes"])
+      : ["ANNUAL_LEAVE", "SICK_LEAVE", "HOME_OFFICE", "UNPAID_LEAVE", "OTHER"];
+
+    return {
+      year: parsedYear,
+      month: parsedMonth,
+      quarter: parsedQuarter,
+      teamId: parsedTeam,
+      memberIds: parsedMembers,
+      eventTypes: parsedEventTypes,
+    };
+  }, [currentYear, searchParams]);
 
   const [filters, setFilters] = useState<StatsFilterState>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<StatsFilterState>(defaultFilters);
