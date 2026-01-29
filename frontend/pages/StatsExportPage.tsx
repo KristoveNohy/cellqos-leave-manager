@@ -23,7 +23,7 @@ const formatOptions: Array<{ value: StatsExportFormat; label: string }> = [
 
 export default function StatsExportPage() {
   const backend = useBackend();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const currentYear = new Date().getFullYear();
   const isAdmin = user?.role === "ADMIN";
 
@@ -90,6 +90,42 @@ export default function StatsExportPage() {
     setReportType("DASHBOARD_SUMMARY");
     setFormat("PDF");
     setStatusMessage(null);
+  };
+
+  const handleDownload = async (job: { downloadUrl?: string; id: string; format: StatsExportFormat }) => {
+    if (!job.downloadUrl || !token) {
+      setStatusMessage("Export nemá dostupný súbor alebo chýba prihlásenie.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}${job.downloadUrl}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message || "Sťahovanie exportu zlyhalo.");
+      }
+
+      const contentDisposition = response.headers.get("Content-Disposition") ?? "";
+      const match = /filename="?([^"]+)"?/i.exec(contentDisposition);
+      const fallbackName = `stats-export-${job.id}.${job.format.toLowerCase()}`;
+      const filename = match?.[1] ?? fallbackName;
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setStatusMessage((error as Error).message);
+    }
   };
 
   return (
@@ -177,12 +213,13 @@ export default function StatsExportPage() {
                   <span className="rounded-full bg-muted px-2 py-1 text-xs">{job.status}</span>
                 </div>
                 {job.downloadUrl && (
-                  <a
-                    href={`${apiBaseUrl}${job.downloadUrl}`}
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(job)}
                     className="mt-2 inline-block text-xs font-medium text-primary underline"
                   >
                     Stiahnuť súbor
-                  </a>
+                  </button>
                 )}
               </div>
             ))}
