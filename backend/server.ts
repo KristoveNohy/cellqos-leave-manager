@@ -195,8 +195,62 @@ const statsExportJobs = new Map<
   StatsExportJob & { content?: Buffer | string | null; contentType?: string }
 >();
 
-function escapePdfText(value: string) {
-  return value.replace(/[()\\]/g, "\\$&");
+function utf16Units(value: string): number[] {
+  const units: number[] = [];
+  for (const char of value) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint === undefined) continue;
+    if (codePoint <= 0xffff) {
+      units.push(codePoint);
+    } else {
+      const high = Math.floor((codePoint - 0x10000) / 0x400) + 0xd800;
+      const low = ((codePoint - 0x10000) % 0x400) + 0xdc00;
+      units.push(high, low);
+    }
+  }
+  return units;
+}
+
+function encodePdfHex(value: string): string {
+  return utf16Units(value)
+    .map((unit) => unit.toString(16).padStart(4, "0"))
+    .join("");
+}
+
+function buildToUnicodeCMap(units: number[]): string {
+  const unique = Array.from(new Set(units)).sort((a, b) => a - b);
+  const chunks: number[][] = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    chunks.push(unique.slice(i, i + 100));
+  }
+  const mappings = chunks
+    .map((chunk) => {
+      const lines = chunk
+        .map((unit) => {
+          const hex = unit.toString(16).padStart(4, "0");
+          return `<${hex}> <${hex}>`;
+        })
+        .join("\n");
+      return `${chunk.length} beginbfchar\n${lines}\nendbfchar`;
+    })
+    .join("\n");
+
+  return [
+    "/CIDInit /ProcSet findresource begin",
+    "12 dict begin",
+    "begincmap",
+    "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def",
+    "/CMapName /Adobe-Identity-UCS def",
+    "/CMapType 2 def",
+    "1 begincodespacerange",
+    "<0000> <FFFF>",
+    "endcodespacerange",
+    mappings,
+    "endcmap",
+    "CMapName currentdict /CMap defineresource pop",
+    "end",
+    "end",
+  ].join("\n");
 }
 
 function buildSimplePdf(lines: string[]): Buffer {
@@ -204,16 +258,18 @@ function buildSimplePdf(lines: string[]): Buffer {
   const startX = 50;
   const startY = 800;
   const lineHeight = 16;
+  const allUnits = lines.flatMap((line) => utf16Units(line));
+  const toUnicode = buildToUnicodeCMap(allUnits);
   const contentLines = [
     "BT",
     `/F1 ${fontSize} Tf`,
     `${startX} ${startY} Td`,
     ...lines.flatMap((line, index) => {
-      const escaped = escapePdfText(line);
+      const hex = encodePdfHex(line);
       if (index === 0) {
-        return [`(${escaped}) Tj`];
+        return [`<${hex}> Tj`];
       }
-      return [`0 -${lineHeight} Td`, `(${escaped}) Tj`];
+      return [`0 -${lineHeight} Td`, `<${hex}> Tj`];
     }),
     "ET",
   ];
@@ -222,9 +278,12 @@ function buildSimplePdf(lines: string[]): Buffer {
   const objects = [
     "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
     "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
-    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
-    `5 0 obj\n<< /Length ${Buffer.byteLength(contentStream)} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /Helvetica /Encoding /Identity-H /DescendantFonts [5 0 R] /ToUnicode 6 0 R >>\nendobj\n",
+    "5 0 obj\n<< /Type /Font /Subtype /CIDFontType0 /BaseFont /Helvetica /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 8 0 R /W [0 [600]] >>\nendobj\n",
+    `6 0 obj\n<< /Length ${Buffer.byteLength(toUnicode)} >>\nstream\n${toUnicode}\nendstream\nendobj\n`,
+    `7 0 obj\n<< /Length ${Buffer.byteLength(contentStream)} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+    "8 0 obj\n<< /Type /FontDescriptor /FontName /Helvetica /Flags 32 /Ascent 718 /Descent -207 /CapHeight 718 /ItalicAngle 0 /StemV 80 >>\nendobj\n",
   ];
 
   let pdf = "%PDF-1.4\n";
@@ -240,7 +299,7 @@ function buildSimplePdf(lines: string[]): Buffer {
     pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
   }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
-  return Buffer.from(pdf, "utf-8");
+  return Buffer.from(pdf, "binary");
 }
 
 async function columnExists(table: string, column: string): Promise<boolean> {
@@ -3517,17 +3576,21 @@ app.post("/stats/exports", asyncHandler(async (req, res) => {
       job.contentType = "text/csv; charset=utf-8";
     }
   } else if (reportType === "TABLE_DETAIL") {
-    const userConditions = ["u.is_active = true"];
-    const userValues: any[] = [];
-    if (scope.teamId) {
-      userConditions.push(`u.team_id = $${userValues.length + 1}`);
-      userValues.push(scope.teamId);
-    }
-    if (hasScopedMembers) {
-      const scopedIds = scope.members.map((member) => member.id);
-      userConditions.push(`u.id = ANY($${userValues.length + 1}::text[])`);
-      userValues.push(scopedIds);
-    }
+    const buildUserConditions = (startIndex: number) => {
+      const conditions = ["u.is_active = true"];
+      const values: any[] = [];
+      if (scope.teamId) {
+        conditions.push(`u.team_id = $${startIndex + values.length}`);
+        values.push(scope.teamId);
+      }
+      if (hasScopedMembers) {
+        const scopedIds = scope.members.map((member) => member.id);
+        conditions.push(`u.id = ANY($${startIndex + values.length}::text[])`);
+        values.push(scopedIds);
+      }
+      return { conditions, values };
+    };
+    const { conditions: userConditions, values: userValues } = buildUserConditions(baseValues.length + 1);
 
     const dataRows = await queryRows<{
       memberId: string;
