@@ -1666,7 +1666,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   if (type) {
-    conditions.push(`lr.type = $${values.length + 1}`);
+    conditions.push(`lr.type = $${values.length + 1}::leave_type`);
     values.push(type);
   }
 
@@ -1920,24 +1920,24 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   const before = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2130,24 +2130,24 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
   const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2188,24 +2188,24 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
   const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2827,7 +2827,7 @@ app.get("/stats/dashboard", asyncHandler(async (req, res) => {
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
@@ -3028,24 +3028,30 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
     res.json(response);
     return;
   }
+  const buildUserConditions = (targetValues: any[]) => {
+    const conditions = ["u.is_active = true"];
+
+    if (scope.teamId) {
+      conditions.push(`u.team_id = $${targetValues.length + 1}`);
+      targetValues.push(scope.teamId);
+    }
+
+    if (scope.members.length > 0) {
+      const scopedIds = scope.members.map((member) => member.id);
+      conditions.push(`u.id = ANY($${targetValues.length + 1}::text[])`);
+      targetValues.push(scopedIds);
+    }
+
+    if (search) {
+      conditions.push(`u.name ILIKE $${targetValues.length + 1}`);
+      targetValues.push(`%${search}%`);
+    }
+
+    return conditions;
+  };
+
   const values: any[] = [range.startDate, range.endDate];
-  const userConditions = ["u.is_active = true"];
-
-  if (scope.teamId) {
-    userConditions.push(`u.team_id = $${values.length + 1}`);
-    values.push(scope.teamId);
-  }
-
-  if (scope.members.length > 0) {
-    const scopedIds = scope.members.map((member) => member.id);
-    userConditions.push(`u.id = ANY($${values.length + 1}::text[])`);
-    values.push(scopedIds);
-  }
-
-  if (search) {
-    userConditions.push(`u.name ILIKE $${values.length + 1}`);
-    values.push(`%${search}%`);
-  }
+  const userConditions = buildUserConditions(values);
 
   const leaveConditions = [
     "lr.start_date <= $2",
@@ -3054,17 +3060,19 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
   ];
 
   if (eventTypes.length > 0) {
-    leaveConditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    leaveConditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
+  const totalValues: any[] = [];
+  const totalConditions = buildUserConditions(totalValues);
   const totalRow = await queryRow<{ total: string }>(
     `
       SELECT COUNT(*) as total
       FROM users u
-      WHERE ${userConditions.join(" AND ")}
+      WHERE ${totalConditions.join(" AND ")}
     `,
-    values
+    totalValues
   );
 
   const sortMap: Record<string, string> = {
@@ -3205,7 +3213,7 @@ app.get("/stats/calendar", asyncHandler(async (req, res) => {
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
