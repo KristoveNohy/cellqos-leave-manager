@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Calendar, FileText, Users, CheckSquare, Settings } from "lucide-react";
+import { Bell, Calendar, FileText, Users, CheckSquare, Settings, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ export default function Navigation() {
     { path: "/notifications", label: "Notifikácie", icon: Bell, roles: ["EMPLOYEE", "MANAGER", "ADMIN"] },
     { path: "/team", label: "Tím", icon: Users, roles: ["MANAGER", "ADMIN"] },
     { path: "/approvals", label: "Schvaľovanie", icon: CheckSquare, roles: ["MANAGER", "ADMIN"] },
+    { path: "/stats", label: "Štatistiky", icon: BarChart3, roles: ["MANAGER", "ADMIN"] },
     { path: "/admin", label: "Administrácia", icon: Settings, roles: ["ADMIN"] },
   ];
 
@@ -48,7 +49,8 @@ export default function Navigation() {
             <div className="flex space-x-1">
               {visibleItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname === item.path;
+                const isActive =
+                  location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
                 
                 return (
                   <Link
