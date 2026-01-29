@@ -91,6 +91,8 @@ export default function StatsDashboardPage() {
   });
 
   const kpis = dashboardQuery.data?.kpis;
+  const isExportReady =
+    dashboardQuery.isSuccess && tableQuery.isSuccess && !dashboardQuery.isFetching && !tableQuery.isFetching;
 
   const handleApply = () => {
     setAppliedFilters(filters);
@@ -124,91 +126,93 @@ export default function StatsDashboardPage() {
       breadcrumb="Dashboard"
       subtitle="Agregované KPI, grafy a tabuľka udalostí pre zvolený tím."
     >
-      <StatsFilters
-        filters={filters}
-        teams={teamsData?.teams ?? []}
-        members={members}
-        onChange={setFilters}
-        onApply={handleApply}
-        onReset={handleReset}
-        isLoading={dashboardQuery.isLoading}
-        showTeamSelect={isAdmin}
-      />
-
-      {dashboardQuery.isLoading && <p className="text-sm text-muted-foreground">Načítavam štatistiky...</p>}
-      {dashboardQuery.error && (
-        <p className="text-sm text-destructive">{(dashboardQuery.error as Error).message}</p>
-      )}
-
-      {dashboardQuery.data && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">Celkový počet udalostí</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold">{kpis?.totalEvents ?? 0}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">Celkový počet dní</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold">{formatNumber(kpis?.totalDays ?? 0)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">Priemer na člena</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold">{formatNumber(kpis?.averageDaysPerMember ?? 0)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">Najviac zaťažený člen</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg font-semibold">{kpis?.topMember?.memberName ?? "—"}</div>
-              <p className="text-sm text-muted-foreground">
-                {kpis?.topMember ? `${formatNumber(kpis.topMember.totalDays)} dní` : "Bez dát"}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {dashboardQuery.data && (
-        <StatsCharts
-          trend={dashboardQuery.data.trend}
-          typeBreakdown={dashboardQuery.data.typeBreakdown}
-          topMembers={dashboardQuery.data.topMembers}
+      <div className="space-y-6" data-export-ready={isExportReady ? "true" : "false"}>
+        <StatsFilters
+          filters={filters}
+          teams={teamsData?.teams ?? []}
+          members={members}
+          onChange={setFilters}
+          onApply={handleApply}
+          onReset={handleReset}
+          isLoading={dashboardQuery.isLoading}
+          showTeamSelect={isAdmin}
         />
-      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Prehľad podľa členov</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <StatsTable
-            data={tableQuery.data}
-            isLoading={tableQuery.isLoading}
-            error={tableQuery.error as Error | null}
-            search={search}
-            onSearchChange={(value) => {
-              setSearch(value);
-              setPage(1);
-            }}
-            sortBy={sortBy}
-            sortDir={sortDir}
-            onSortChange={handleSortChange}
-            onPageChange={setPage}
+        {dashboardQuery.isLoading && <p className="text-sm text-muted-foreground">Načítavam štatistiky...</p>}
+        {dashboardQuery.error && (
+          <p className="text-sm text-destructive">{(dashboardQuery.error as Error).message}</p>
+        )}
+
+        {dashboardQuery.data && (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Celkový počet udalostí</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold">{kpis?.totalEvents ?? 0}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Celkový počet dní</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold">{formatNumber(kpis?.totalDays ?? 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Priemer na člena</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold">{formatNumber(kpis?.averageDaysPerMember ?? 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">Najviac zaťažený člen</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-lg font-semibold">{kpis?.topMember?.memberName ?? "—"}</div>
+                <p className="text-sm text-muted-foreground">
+                  {kpis?.topMember ? `${formatNumber(kpis.topMember.totalDays)} dní` : "Bez dát"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {dashboardQuery.data && (
+          <StatsCharts
+            trend={dashboardQuery.data.trend}
+            typeBreakdown={dashboardQuery.data.typeBreakdown}
+            topMembers={dashboardQuery.data.topMembers}
           />
-        </CardContent>
-      </Card>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Prehľad podľa členov</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StatsTable
+              data={tableQuery.data}
+              isLoading={tableQuery.isLoading}
+              error={tableQuery.error as Error | null}
+              search={search}
+              onSearchChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={handleSortChange}
+              onPageChange={setPage}
+            />
+          </CardContent>
+        </Card>
+      </div>
     </StatsLayout>
   );
 }

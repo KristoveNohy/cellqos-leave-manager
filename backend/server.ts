@@ -580,11 +580,15 @@ async function tryRenderDashboardPdf({
       { token, user: { id: auth.userID, email: auth.email, name: auth.name, role: auth.role } }
     );
     await page.goto(url, { waitUntil: "networkidle" });
-    await page.waitForTimeout(1500);
+    await page.waitForLoadState("networkidle");
+    await page.waitForFunction(() => document.fonts.ready.then(() => true));
+    await page.waitForSelector('[data-export-ready="true"]', { timeout: 15000 });
+    await page.waitForTimeout(300);
     const pdf = await page.pdf({
-      format: "A4",
+      format: "A3",
       landscape: true,
       printBackground: true,
+      scale: 1,
       margin: { top: "16px", bottom: "16px", left: "16px", right: "16px" },
     });
     await browser.close();
