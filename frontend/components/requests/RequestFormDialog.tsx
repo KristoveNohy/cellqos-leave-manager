@@ -34,6 +34,19 @@ interface RequestFormDialogProps {
   initialEndDate?: string;
 }
 
+const formatDateValue = (value?: string) => {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = moment(value, ["YYYY-MM-DD", "YYYY-MM-DD HH:mm:ss", moment.ISO_8601], true);
+  if (parsed.isValid()) {
+    return parsed.format("YYYY-MM-DD");
+  }
+
+  return value.split(" ")[0] || value;
+};
+
 export default function RequestFormDialog({
   open,
   onClose,
@@ -51,8 +64,8 @@ export default function RequestFormDialog({
     defaultValues: {
       userId: user?.id ?? "",
       type: request?.type || "ANNUAL_LEAVE",
-      startDate: request?.startDate || initialStartDate || "",
-      endDate: request?.endDate || initialEndDate || "",
+      startDate: formatDateValue(request?.startDate || initialStartDate),
+      endDate: formatDateValue(request?.endDate || initialEndDate),
       startTime: defaultStartTime,
       endTime: defaultEndTime,
       isHalfDayStart: request?.isHalfDayStart || false,
@@ -71,8 +84,8 @@ export default function RequestFormDialog({
     reset({
       userId: request?.userId || user?.id || "",
       type: request?.type || "ANNUAL_LEAVE",
-      startDate: request?.startDate || initialStartDate || "",
-      endDate: request?.endDate || initialEndDate || "",
+      startDate: formatDateValue(request?.startDate || initialStartDate),
+      endDate: formatDateValue(request?.endDate || initialEndDate),
       startTime: defaultStartTime,
       endTime: defaultEndTime,
       isHalfDayStart: request?.isHalfDayStart || false,

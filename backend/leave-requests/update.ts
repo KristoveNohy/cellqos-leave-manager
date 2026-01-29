@@ -87,7 +87,7 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     
     if (startDate || endDate) {
       validateDateRange(newStartDate, newEndDate);
-      validateNotInPast(newStartDate);
+      validateNotInPast(newStartDate, { allowPast: isManagerUser || isAdminUser });
       
       // Check for overlaps with other requests
       const overlaps = await db.queryRow<{ count: number }>`

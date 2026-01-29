@@ -1714,7 +1714,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   validateDateRange(startDate, endDate);
-  validateNotInPast(startDate);
+  validateNotInPast(startDate, { allowPast: isManagerUser || isAdminUser });
 
   const holidayRows = await queryRows<{ date: string }>(
     `
@@ -1872,7 +1872,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
 
   if (startDate || endDate) {
     validateDateRange(newStartDate, newEndDate);
-    validateNotInPast(newStartDate);
+    validateNotInPast(newStartDate, { allowPast: isManagerUser || isAdminUser });
 
     const overlaps = await queryRow<{ count: number }>(
       `
