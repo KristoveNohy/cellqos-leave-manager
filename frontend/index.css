@@ -48,6 +48,30 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+@media print {
+  @page {
+    size: A3 landscape;
+    margin: 12mm;
+  }
+
+  body {
+    background: white;
+  }
+
+  .stats-no-print {
+    display: none !important;
+  }
+
+  .stats-print-page {
+    box-shadow: none;
+    border: none;
+  }
+
+  .stats-calendar-grid {
+    gap: 8px;
+  }
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

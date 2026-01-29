@@ -11,6 +11,9 @@ import LoginPage from "./pages/LoginPage";
 import MagicLinkPage from "./pages/MagicLinkPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
+import StatsDashboardPage from "./pages/StatsDashboardPage";
+import StatsCalendarPage from "./pages/StatsCalendarPage";
+import StatsExportPage from "./pages/StatsExportPage";
 import ForcePasswordChangeDialog from "./components/auth/ForcePasswordChangeDialog";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import type { UserRole } from "~backend/shared/types";
@@ -90,6 +93,30 @@ export default function App() {
                   element={
                     <RequireRole roles={["ADMIN"]}>
                       <AdminPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/stats"
+                  element={
+                    <RequireRole roles={["MANAGER", "ADMIN"]}>
+                      <StatsDashboardPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/stats/calendar"
+                  element={
+                    <RequireRole roles={["MANAGER", "ADMIN"]}>
+                      <StatsCalendarPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/stats/export"
+                  element={
+                    <RequireRole roles={["MANAGER", "ADMIN"]}>
+                      <StatsExportPage />
                     </RequireRole>
                   }
                 />

@@ -114,3 +114,95 @@ export interface VacationPolicy {
   carryOverEnabled: boolean;
   carryOverLimitHours: number;
 }
+
+export type StatsExportStatus = "PENDING" | "READY" | "FAILED";
+export type StatsExportFormat = "PDF" | "XLSX" | "CSV";
+export type StatsReportType = "DASHBOARD_SUMMARY" | "TABLE_DETAIL" | "YEAR_CALENDAR";
+
+export interface StatsKpiSummary {
+  totalEvents: number;
+  totalDays: number;
+  averageDaysPerMember: number;
+  topMember: StatsTopMember | null;
+}
+
+export interface StatsTopMember {
+  memberId: string;
+  memberName: string;
+  totalDays: number;
+  totalEvents: number;
+}
+
+export interface StatsTrendPoint {
+  month: number;
+  totalDays: number;
+  totalEvents: number;
+}
+
+export interface StatsTypeBreakdown {
+  type: LeaveType;
+  totalDays: number;
+  totalEvents: number;
+}
+
+export interface StatsMemberRow {
+  memberId: string;
+  memberName: string;
+  totalDays: number;
+  totalEvents: number;
+  lastEventDate: string | null;
+  typeBreakdown: StatsTypeBreakdown[];
+}
+
+export interface StatsTableResponse {
+  rows: StatsMemberRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface StatsDashboardResponse {
+  kpis: StatsKpiSummary;
+  trend: StatsTrendPoint[];
+  typeBreakdown: StatsTypeBreakdown[];
+  topMembers: StatsTopMember[];
+}
+
+export interface StatsCalendarDay {
+  date: string;
+  totalOut: number;
+  typeCounts: StatsTypeBreakdown[];
+  members: Array<{
+    memberId: string;
+    memberName: string;
+    type: LeaveType;
+  }>;
+}
+
+export interface StatsCalendarResponse {
+  year: number;
+  teamId: number | null;
+  teamName: string | null;
+  totalMembers: number;
+  members: Array<{ id: string; name: string }>;
+  days: StatsCalendarDay[];
+}
+
+export interface StatsExportJob {
+  id: string;
+  createdAt: string;
+  createdBy: string;
+  status: StatsExportStatus;
+  format: StatsExportFormat;
+  reportType: StatsReportType;
+  filters: {
+    year: number;
+    month?: number;
+    quarter?: number;
+    teamId?: number;
+    memberIds?: string[];
+    eventTypes?: LeaveType[];
+  };
+  downloadUrl?: string | null;
+  error?: string | null;
+}
