@@ -535,6 +535,66 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number)
   return baseAllowanceHours + carryOverHours;
 }
 
+async function tryRenderDashboardPdf({
+  auth,
+  filters,
+}: {
+  auth: AuthUser;
+  filters: {
+    year?: number;
+    month?: number;
+    quarter?: number;
+    teamId?: number;
+    memberIds?: string[];
+    eventTypes?: LeaveType[];
+  };
+}): Promise<Buffer | null> {
+  const frontendBaseUrl = process.env.FRONTEND_BASE_URL ?? "http://localhost:5173";
+  const token = signAuthToken({
+    sub: auth.userID,
+    email: auth.email,
+    role: auth.role,
+    name: auth.name,
+  });
+  const params = new URLSearchParams();
+  if (filters.year) params.set("year", String(filters.year));
+  if (filters.month) params.set("month", String(filters.month));
+  if (filters.quarter) params.set("quarter", String(filters.quarter));
+  if (filters.teamId) params.set("teamId", String(filters.teamId));
+  if (filters.memberIds && filters.memberIds.length > 0) {
+    params.set("memberIds", filters.memberIds.join(","));
+  }
+  if (filters.eventTypes && filters.eventTypes.length > 0) {
+    params.set("eventTypes", filters.eventTypes.join(","));
+  }
+  const url = `${frontendBaseUrl}/stats?${params.toString()}`;
+
+  try {
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.addInitScript(
+      ({ token, user }) => {
+        window.localStorage.setItem("cellqos.auth", JSON.stringify({ token, user }));
+      },
+      { token, user: { id: auth.userID, email: auth.email, name: auth.name, role: auth.role } }
+    );
+    await page.goto(url, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1500);
+    const pdf = await page.pdf({
+      format: "A4",
+      landscape: true,
+      printBackground: true,
+      margin: { top: "16px", bottom: "16px", left: "16px", right: "16px" },
+    });
+    await browser.close();
+    return pdf;
+  } catch (error) {
+    console.warn("Failed to render dashboard PDF", error);
+    return null;
+  }
+}
+
 function parseBooleanFlag(value: unknown): boolean {
   return value === "true" || value === "1" || value === true;
 }
@@ -3546,21 +3606,26 @@ app.post("/stats/exports", asyncHandler(async (req, res) => {
     const totalHours = Number(totalsRow?.totalHours ?? 0);
     const totalDays = totalHours / HOURS_PER_WORKDAY;
 
-    const lines = [
-      "Dashboard – súhrn",
-      `Obdobie: ${range.startDate} až ${range.endDate}`,
-      `Počet udalostí: ${totalEvents}`,
-      `Počet dní: ${totalDays.toFixed(1)}`,
-      "Rozdelenie podľa typu:",
-      ...typeRows.map((row) => {
-        const days = Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY;
-        return `- ${row.type}: ${Number(row.totalEvents ?? 0)} udalostí, ${days.toFixed(1)} dní`;
-      }),
-    ];
-
     if (format === "PDF") {
-      job.content = buildSimplePdf(lines);
-      job.contentType = "application/pdf";
+      const renderedPdf = await tryRenderDashboardPdf({ auth, filters: job.filters });
+      if (renderedPdf) {
+        job.content = renderedPdf;
+        job.contentType = "application/pdf";
+      } else {
+        const lines = [
+          "Dashboard – súhrn",
+          `Obdobie: ${range.startDate} až ${range.endDate}`,
+          `Počet udalostí: ${totalEvents}`,
+          `Počet dní: ${totalDays.toFixed(1)}`,
+          "Rozdelenie podľa typu:",
+          ...typeRows.map((row) => {
+            const days = Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY;
+            return `- ${row.type}: ${Number(row.totalEvents ?? 0)} udalostí, ${days.toFixed(1)} dní`;
+          }),
+        ];
+        job.content = buildSimplePdf(lines);
+        job.contentType = "application/pdf";
+      }
     } else {
       job.content = createCsvContent([
         ["metric", "value"],
