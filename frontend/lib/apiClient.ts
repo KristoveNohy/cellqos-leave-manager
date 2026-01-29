@@ -1,5 +1,15 @@
 import { apiBaseUrl } from "@/lib/auth";
-import type { LeaveStatus, LeaveType, VacationPolicy } from "~backend/shared/types";
+import type {
+  LeaveStatus,
+  LeaveType,
+  VacationPolicy,
+  StatsDashboardResponse,
+  StatsTableResponse,
+  StatsCalendarResponse,
+  StatsExportJob,
+  StatsExportFormat,
+  StatsReportType,
+} from "~backend/shared/types";
 
 interface RequestOptions {
   method?: string;
@@ -140,6 +150,82 @@ export function createApiClient(token: string | null) {
       get: () => apiRequest<{ policy: VacationPolicy }>("/admin/vacation-policy", { token }),
       update: (data: Partial<VacationPolicy>) =>
         apiRequest<{ policy: VacationPolicy }>("/admin/vacation-policy", { method: "PATCH", body: data, token }),
+    },
+    stats: {
+      dashboard: (params: {
+        year?: number;
+        month?: number;
+        quarter?: number;
+        teamId?: number;
+        memberIds?: string[];
+        eventTypes?: LeaveType[];
+      }) =>
+        apiRequest<StatsDashboardResponse>(
+          `/stats/dashboard${toQuery({
+            year: params.year,
+            month: params.month,
+            quarter: params.quarter,
+            teamId: params.teamId,
+            memberIds: params.memberIds?.join(","),
+            eventTypes: params.eventTypes?.join(","),
+          })}`,
+          { token }
+        ),
+      table: (params: {
+        year?: number;
+        month?: number;
+        quarter?: number;
+        teamId?: number;
+        memberIds?: string[];
+        eventTypes?: LeaveType[];
+        search?: string;
+        sortBy?: string;
+        sortDir?: string;
+        page?: number;
+        pageSize?: number;
+      }) =>
+        apiRequest<StatsTableResponse>(
+          `/stats/table${toQuery({
+            year: params.year,
+            month: params.month,
+            quarter: params.quarter,
+            teamId: params.teamId,
+            memberIds: params.memberIds?.join(","),
+            eventTypes: params.eventTypes?.join(","),
+            search: params.search,
+            sortBy: params.sortBy,
+            sortDir: params.sortDir,
+            page: params.page,
+            pageSize: params.pageSize,
+          })}`,
+          { token }
+        ),
+      calendar: (params: { year?: number; teamId?: number; memberIds?: string[]; eventTypes?: LeaveType[] }) =>
+        apiRequest<StatsCalendarResponse>(
+          `/stats/calendar${toQuery({
+            year: params.year,
+            teamId: params.teamId,
+            memberIds: params.memberIds?.join(","),
+            eventTypes: params.eventTypes?.join(","),
+          })}`,
+          { token }
+        ),
+      exports: {
+        create: (data: {
+          reportType: StatsReportType;
+          format: StatsExportFormat;
+          filters: {
+            year?: number;
+            month?: number;
+            quarter?: number;
+            teamId?: number;
+            memberIds?: string[];
+            eventTypes?: LeaveType[];
+          };
+        }) => apiRequest<StatsExportJob>("/stats/exports", { method: "POST", body: data, token }),
+        list: () => apiRequest<{ exports: StatsExportJob[] }>("/stats/exports", { token }),
+        detail: (id: string) => apiRequest<StatsExportJob>(`/stats/exports/${id}`, { token }),
+      },
     },
   };
 }

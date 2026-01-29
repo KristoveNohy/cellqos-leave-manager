@@ -4,10 +4,11 @@ import cors from "cors";
 import { Pool, type PoolClient } from "pg";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
-import { computeWorkingHours, parseDate } from "./shared/date-utils";
+import { computeWorkingHours, parseDate, formatDate, addDays, HOURS_PER_WORKDAY } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
 import { canEditRequest, isAdmin, isManager, requireAdmin, requireManager, requireAuth } from "./shared/rbac";
+import { buildStatsDateRange, isValidLeaveType, parseCsvList } from "./shared/stats-utils";
 import {
   computeAnnualLeaveAllowanceHours,
   computeCarryOverHours,
@@ -25,6 +26,12 @@ import type {
   Notification,
   VacationPolicy,
   VacationAccrualPolicy,
+  StatsDashboardResponse,
+  StatsTableResponse,
+  StatsCalendarResponse,
+  StatsExportJob,
+  StatsExportFormat,
+  StatsReportType,
 } from "./shared/types";
 import { HttpError } from "./shared/http-error";
 
@@ -176,6 +183,7 @@ type VacationPolicyColumnSupport = {
 };
 
 const columnSupportCache = new Map<string, boolean>();
+const statsExportJobs = new Map<string, StatsExportJob & { content?: string | null }>();
 
 async function columnExists(table: string, column: string): Promise<boolean> {
   const cacheKey = `${table}.${column}`;
@@ -198,6 +206,93 @@ async function columnExists(table: string, column: string): Promise<boolean> {
   const exists = Boolean(result?.exists);
   columnSupportCache.set(cacheKey, exists);
   return exists;
+}
+
+type StatsScope = {
+  teamId: number | null;
+  teamName: string | null;
+  members: Array<{ id: string; name: string }>;
+  allMembers: Array<{ id: string; name: string }>;
+};
+
+async function resolveStatsScope(
+  auth: AuthUser,
+  requestedTeamId: number | null,
+  memberIds: string[]
+): Promise<StatsScope> {
+  const isAdminUser = isAdmin(auth.role);
+  const isManagerUser = isManager(auth.role);
+
+  let teamId: number | null = requestedTeamId;
+  let teamName: string | null = null;
+
+  if (!isAdminUser) {
+    const viewer = await queryRow<{ teamId: number | null }>(
+      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+      [auth.userID]
+    );
+    if (!viewer) {
+      throw new HttpError(404, "User not found");
+    }
+    if (!viewer.teamId) {
+      return { teamId: null, teamName: null, members: [], allMembers: [] };
+    }
+    if (requestedTeamId && requestedTeamId !== viewer.teamId) {
+      throw new HttpError(403, "Cannot access another team's statistics");
+    }
+    teamId = viewer.teamId;
+  }
+
+  if (teamId) {
+    const team = await queryRow<{ name: string }>("SELECT name FROM teams WHERE id = $1", [teamId]);
+    teamName = team?.name ?? null;
+  }
+
+  const teamConditions: string[] = ["is_active = true"];
+  const teamParams: any[] = [];
+  if (teamId) {
+    teamConditions.push(`team_id = $${teamParams.length + 1}`);
+    teamParams.push(teamId);
+  }
+
+  const allMembers = await queryRows<{ id: string; name: string }>(
+    `
+      SELECT id, name
+      FROM users
+      WHERE ${teamConditions.join(" AND ")}
+      ORDER BY name ASC
+    `,
+    teamParams
+  );
+
+  if (isManagerUser && !isAdminUser && memberIds.length > 0) {
+    const allowedIds = new Set(allMembers.map((member) => member.id));
+    const invalid = memberIds.filter((id) => !allowedIds.has(id));
+    if (invalid.length > 0) {
+      throw new HttpError(403, "Member filter contains users outside your team");
+    }
+  }
+
+  const scopedMembers =
+    memberIds.length > 0
+      ? allMembers.filter((member) => memberIds.includes(member.id))
+      : allMembers;
+
+  return {
+    teamId,
+    teamName,
+    members: scopedMembers,
+    allMembers,
+  };
+}
+
+function parseOptionalNumber(value?: string): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+  return parsed;
 }
 
 async function getUserColumnSupport(): Promise<UserColumnSupport> {
@@ -2670,6 +2765,630 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   });
 
   res.json({ events: safeEvents });
+}));
+
+app.get("/stats/dashboard", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const currentYear = new Date().getFullYear();
+  const year = parseOptionalNumber(req.query.year as string) ?? currentYear;
+  const month = parseOptionalNumber(req.query.month as string);
+  const quarter = parseOptionalNumber(req.query.quarter as string);
+  const teamId = parseOptionalNumber(req.query.teamId as string);
+  const memberIds = parseCsvList(req.query.memberIds as string | undefined);
+  const eventTypesRaw = parseCsvList(req.query.eventTypes as string | undefined);
+  const eventTypes = eventTypesRaw.filter(isValidLeaveType);
+
+  let range;
+  try {
+    range = buildStatsDateRange({ year, month, quarter });
+  } catch (error) {
+    throw new HttpError(400, (error as Error).message);
+  }
+
+  const scope = await resolveStatsScope(auth, teamId ?? null, memberIds);
+
+  if (scope.members.length === 0) {
+    const response: StatsDashboardResponse = {
+      kpis: {
+        totalEvents: 0,
+        totalDays: 0,
+        averageDaysPerMember: 0,
+        topMember: null,
+      },
+      trend: range.months.map((monthValue) => ({
+        month: monthValue,
+        totalEvents: 0,
+        totalDays: 0,
+      })),
+      typeBreakdown: [],
+      topMembers: [],
+    };
+    res.json(response);
+    return;
+  }
+
+  const values: any[] = [range.startDate, range.endDate];
+  const conditions = [
+    "lr.start_date <= $2",
+    "lr.end_date >= $1",
+    "lr.status NOT IN ('DRAFT', 'REJECTED', 'CANCELLED')",
+  ];
+
+  if (scope.teamId) {
+    conditions.push(`u.team_id = $${values.length + 1}`);
+    values.push(scope.teamId);
+  }
+
+  if (scope.members.length > 0) {
+    const scopedIds = scope.members.map((member) => member.id);
+    conditions.push(`lr.user_id = ANY($${values.length + 1}::text[])`);
+    values.push(scopedIds);
+  }
+
+  if (eventTypes.length > 0) {
+    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    values.push(eventTypes);
+  }
+
+  const totalsRow = await queryRow<{
+    totalEvents: string;
+    totalHours: string;
+  }>(
+    `
+      SELECT
+        COUNT(lr.id) as "totalEvents",
+        COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE ${conditions.join(" AND ")}
+    `,
+    values
+  );
+
+  const totalEvents = Number(totalsRow?.totalEvents ?? 0);
+  const totalHours = Number(totalsRow?.totalHours ?? 0);
+  const totalDays = totalHours / HOURS_PER_WORKDAY;
+  const memberCount = scope.members.length;
+  const averageDaysPerMember = memberCount > 0 ? totalDays / memberCount : 0;
+
+  const topMemberRow = await queryRow<{
+    memberId: string;
+    memberName: string;
+    totalEvents: string;
+    totalHours: string;
+  }>(
+    `
+      SELECT
+        u.id as "memberId",
+        u.name as "memberName",
+        COUNT(lr.id) as "totalEvents",
+        COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE ${conditions.join(" AND ")}
+      GROUP BY u.id, u.name
+      ORDER BY COALESCE(SUM(lr.computed_hours), 0) DESC
+      LIMIT 1
+    `,
+    values
+  );
+
+  const topMember = topMemberRow
+    ? {
+        memberId: topMemberRow.memberId,
+        memberName: topMemberRow.memberName,
+        totalEvents: Number(topMemberRow.totalEvents ?? 0),
+        totalDays: Number(topMemberRow.totalHours ?? 0) / HOURS_PER_WORKDAY,
+      }
+    : null;
+
+  const trendRows = await queryRows<{
+    month: number;
+    totalEvents: string;
+    totalHours: string;
+  }>(
+    `
+      SELECT
+        EXTRACT(MONTH FROM lr.start_date)::int as month,
+        COUNT(lr.id) as "totalEvents",
+        COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE ${conditions.join(" AND ")}
+      GROUP BY month
+      ORDER BY month ASC
+    `,
+    values
+  );
+
+  const trendMap = new Map(
+    trendRows.map((row) => [
+      row.month,
+      {
+        month: row.month,
+        totalEvents: Number(row.totalEvents ?? 0),
+        totalDays: Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY,
+      },
+    ])
+  );
+
+  const trend = range.months.map((monthValue) => {
+    return (
+      trendMap.get(monthValue) ?? {
+        month: monthValue,
+        totalEvents: 0,
+        totalDays: 0,
+      }
+    );
+  });
+
+  const typeRows = await queryRows<{
+    type: LeaveType;
+    totalEvents: string;
+    totalHours: string;
+  }>(
+    `
+      SELECT
+        lr.type,
+        COUNT(lr.id) as "totalEvents",
+        COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE ${conditions.join(" AND ")}
+      GROUP BY lr.type
+      ORDER BY COALESCE(SUM(lr.computed_hours), 0) DESC
+    `,
+    values
+  );
+
+  const typeBreakdown = typeRows.map((row) => ({
+    type: row.type,
+    totalEvents: Number(row.totalEvents ?? 0),
+    totalDays: Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY,
+  }));
+
+  const topMemberRows = await queryRows<{
+    memberId: string;
+    memberName: string;
+    totalEvents: string;
+    totalHours: string;
+  }>(
+    `
+      SELECT
+        u.id as "memberId",
+        u.name as "memberName",
+        COUNT(lr.id) as "totalEvents",
+        COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE ${conditions.join(" AND ")}
+      GROUP BY u.id, u.name
+      ORDER BY COALESCE(SUM(lr.computed_hours), 0) DESC
+      LIMIT 10
+    `,
+    values
+  );
+
+  const topMembers = topMemberRows.map((row) => ({
+    memberId: row.memberId,
+    memberName: row.memberName,
+    totalEvents: Number(row.totalEvents ?? 0),
+    totalDays: Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY,
+  }));
+
+  const response: StatsDashboardResponse = {
+    kpis: {
+      totalEvents,
+      totalDays,
+      averageDaysPerMember,
+      topMember,
+    },
+    trend,
+    typeBreakdown,
+    topMembers,
+  };
+
+  res.json(response);
+}));
+
+app.get("/stats/table", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const currentYear = new Date().getFullYear();
+  const year = parseOptionalNumber(req.query.year as string) ?? currentYear;
+  const month = parseOptionalNumber(req.query.month as string);
+  const quarter = parseOptionalNumber(req.query.quarter as string);
+  const teamId = parseOptionalNumber(req.query.teamId as string);
+  const memberIds = parseCsvList(req.query.memberIds as string | undefined);
+  const eventTypesRaw = parseCsvList(req.query.eventTypes as string | undefined);
+  const eventTypes = eventTypesRaw.filter(isValidLeaveType);
+  const search = (req.query.search as string | undefined)?.trim();
+  const page = Math.max(1, parseOptionalNumber(req.query.page as string) ?? 1);
+  const pageSize = Math.min(50, Math.max(5, parseOptionalNumber(req.query.pageSize as string) ?? 10));
+  const sortBy = (req.query.sortBy as string | undefined) ?? "totalDays";
+  const sortDir = (req.query.sortDir as string | undefined) === "asc" ? "ASC" : "DESC";
+
+  let range;
+  try {
+    range = buildStatsDateRange({ year, month, quarter });
+  } catch (error) {
+    throw new HttpError(400, (error as Error).message);
+  }
+
+  const scope = await resolveStatsScope(auth, teamId ?? null, memberIds);
+
+  if (scope.members.length === 0) {
+    const response: StatsTableResponse = {
+      rows: [],
+      total: 0,
+      page,
+      pageSize,
+    };
+    res.json(response);
+    return;
+  }
+  const values: any[] = [range.startDate, range.endDate];
+  const userConditions = ["u.is_active = true"];
+
+  if (scope.teamId) {
+    userConditions.push(`u.team_id = $${values.length + 1}`);
+    values.push(scope.teamId);
+  }
+
+  if (scope.members.length > 0) {
+    const scopedIds = scope.members.map((member) => member.id);
+    userConditions.push(`u.id = ANY($${values.length + 1}::text[])`);
+    values.push(scopedIds);
+  }
+
+  if (search) {
+    userConditions.push(`u.name ILIKE $${values.length + 1}`);
+    values.push(`%${search}%`);
+  }
+
+  const leaveConditions = [
+    "lr.start_date <= $2",
+    "lr.end_date >= $1",
+    "lr.status NOT IN ('DRAFT', 'REJECTED', 'CANCELLED')",
+  ];
+
+  if (eventTypes.length > 0) {
+    leaveConditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    values.push(eventTypes);
+  }
+
+  const totalRow = await queryRow<{ total: string }>(
+    `
+      SELECT COUNT(*) as total
+      FROM users u
+      WHERE ${userConditions.join(" AND ")}
+    `,
+    values
+  );
+
+  const sortMap: Record<string, string> = {
+    name: "u.name",
+    totalEvents: "COUNT(lr.id)",
+    totalDays: "COALESCE(SUM(lr.computed_hours), 0)",
+    lastEventDate: "MAX(lr.end_date)",
+  };
+  const sortColumn = sortMap[sortBy] ?? sortMap.totalDays;
+
+  const dataRows = await queryRows<{
+    memberId: string;
+    memberName: string;
+    totalEvents: string;
+    totalHours: string;
+    lastEventDate: string | null;
+  }>(
+    `
+      SELECT
+        u.id as "memberId",
+        u.name as "memberName",
+        COUNT(lr.id) as "totalEvents",
+        COALESCE(SUM(lr.computed_hours), 0) as "totalHours",
+        MAX(lr.end_date)::text as "lastEventDate"
+      FROM users u
+      LEFT JOIN leave_requests lr
+        ON u.id = lr.user_id
+        AND ${leaveConditions.join(" AND ")}
+      WHERE ${userConditions.join(" AND ")}
+      GROUP BY u.id, u.name
+      ORDER BY ${sortColumn} ${sortDir}
+      LIMIT $${values.length + 1}
+      OFFSET $${values.length + 2}
+    `,
+    [...values, pageSize, (page - 1) * pageSize]
+  );
+
+  const memberIdsPage = dataRows.map((row) => row.memberId);
+  const typeRows =
+    memberIdsPage.length > 0
+      ? await queryRows<{
+          memberId: string;
+          type: LeaveType;
+          totalEvents: string;
+          totalHours: string;
+        }>(
+          `
+            SELECT
+              lr.user_id as "memberId",
+              lr.type,
+              COUNT(lr.id) as "totalEvents",
+              COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+            FROM leave_requests lr
+            WHERE ${leaveConditions.join(" AND ")}
+              AND lr.user_id = ANY($${values.length + 1}::text[])
+            GROUP BY lr.user_id, lr.type
+          `,
+          [...values, memberIdsPage]
+        )
+      : [];
+
+  const typeByMember = new Map<string, typeof typeRows>();
+  for (const row of typeRows) {
+    const existing = typeByMember.get(row.memberId) ?? [];
+    existing.push(row);
+    typeByMember.set(row.memberId, existing);
+  }
+
+  const rows = dataRows.map((row) => {
+    const breakdown = typeByMember.get(row.memberId) ?? [];
+    return {
+      memberId: row.memberId,
+      memberName: row.memberName,
+      totalEvents: Number(row.totalEvents ?? 0),
+      totalDays: Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY,
+      lastEventDate: row.lastEventDate,
+      typeBreakdown: breakdown.map((typeRow) => ({
+        type: typeRow.type,
+        totalEvents: Number(typeRow.totalEvents ?? 0),
+        totalDays: Number(typeRow.totalHours ?? 0) / HOURS_PER_WORKDAY,
+      })),
+    };
+  });
+
+  const response: StatsTableResponse = {
+    rows,
+    total: Number(totalRow?.total ?? 0),
+    page,
+    pageSize,
+  };
+
+  res.json(response);
+}));
+
+app.get("/stats/calendar", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const currentYear = new Date().getFullYear();
+  const year = parseOptionalNumber(req.query.year as string) ?? currentYear;
+  const teamId = parseOptionalNumber(req.query.teamId as string);
+  const memberIds = parseCsvList(req.query.memberIds as string | undefined);
+  const eventTypesRaw = parseCsvList(req.query.eventTypes as string | undefined);
+  const eventTypes = eventTypesRaw.filter(isValidLeaveType);
+
+  const startDate = `${year}-01-01`;
+  const endDate = `${year}-12-31`;
+
+  const scope = await resolveStatsScope(auth, teamId ?? null, memberIds);
+
+  if (scope.members.length === 0) {
+    const response: StatsCalendarResponse = {
+      year,
+      teamId: scope.teamId,
+      teamName: scope.teamName,
+      totalMembers: 0,
+      members: [],
+      days: [],
+    };
+    res.json(response);
+    return;
+  }
+  const values: any[] = [startDate, endDate];
+  const conditions = [
+    "lr.start_date <= $2",
+    "lr.end_date >= $1",
+    "lr.status NOT IN ('DRAFT', 'REJECTED', 'CANCELLED')",
+  ];
+
+  if (scope.teamId) {
+    conditions.push(`u.team_id = $${values.length + 1}`);
+    values.push(scope.teamId);
+  }
+
+  if (scope.members.length > 0) {
+    const scopedIds = scope.members.map((member) => member.id);
+    conditions.push(`lr.user_id = ANY($${values.length + 1}::text[])`);
+    values.push(scopedIds);
+  }
+
+  if (eventTypes.length > 0) {
+    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    values.push(eventTypes);
+  }
+
+  const eventRows = await queryRows<{
+    memberId: string;
+    memberName: string;
+    type: LeaveType;
+    startDate: string;
+    endDate: string;
+  }>(
+    `
+      SELECT
+        lr.user_id as "memberId",
+        u.name as "memberName",
+        lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate"
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY lr.start_date ASC
+    `,
+    values
+  );
+
+  const dayMap = new Map<
+    string,
+    {
+      date: string;
+      members: Array<{ memberId: string; memberName: string; type: LeaveType }>;
+      typeCounts: Map<LeaveType, number>;
+    }
+  >();
+
+  for (const event of eventRows) {
+    let current = parseDate(event.startDate);
+    const end = parseDate(event.endDate);
+
+    while (current <= end) {
+      const dateStr = formatDate(current);
+      let day = dayMap.get(dateStr);
+      if (!day) {
+        day = { date: dateStr, members: [], typeCounts: new Map() };
+        dayMap.set(dateStr, day);
+      }
+      day.members.push({
+        memberId: event.memberId,
+        memberName: event.memberName,
+        type: event.type,
+      });
+      day.typeCounts.set(event.type, (day.typeCounts.get(event.type) ?? 0) + 1);
+      current = addDays(current, 1);
+    }
+  }
+
+  const days = Array.from(dayMap.values()).map((day) => ({
+    date: day.date,
+    totalOut: day.members.length,
+    typeCounts: Array.from(day.typeCounts.entries()).map(([type, count]) => ({
+      type,
+      totalEvents: count,
+      totalDays: count,
+    })),
+    members: day.members,
+  }));
+
+  const response: StatsCalendarResponse = {
+    year,
+    teamId: scope.teamId,
+    teamName: scope.teamName,
+    totalMembers: scope.members.length,
+    members: scope.members,
+    days,
+  };
+
+  res.json(response);
+}));
+
+app.post("/stats/exports", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const payload = req.body as {
+    reportType?: StatsReportType;
+    format?: StatsExportFormat;
+    filters?: {
+      year?: number;
+      month?: number;
+      quarter?: number;
+      teamId?: number;
+      memberIds?: string[];
+      eventTypes?: LeaveType[];
+    };
+  };
+
+  const reportType = payload.reportType ?? "DASHBOARD_SUMMARY";
+  const format = payload.format ?? "PDF";
+  const filters = payload.filters ?? {};
+  const memberIds = filters.memberIds ?? [];
+  const allowedFormats: StatsExportFormat[] = ["PDF", "XLSX", "CSV"];
+  const allowedReportTypes: StatsReportType[] = ["DASHBOARD_SUMMARY", "TABLE_DETAIL", "YEAR_CALENDAR"];
+
+  if (!allowedFormats.includes(format)) {
+    throw new HttpError(400, "Unsupported export format");
+  }
+  if (!allowedReportTypes.includes(reportType)) {
+    throw new HttpError(400, "Unsupported report type");
+  }
+
+  if (filters.eventTypes && filters.eventTypes.length > 0) {
+    const invalid = filters.eventTypes.filter((type) => !isValidLeaveType(type));
+    if (invalid.length > 0) {
+      throw new HttpError(400, "Invalid event types");
+    }
+  }
+
+  await resolveStatsScope(auth, filters.teamId ?? null, memberIds);
+
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+  const downloadUrl = `/stats/exports/${id}/download`;
+  const job: StatsExportJob & { content?: string | null } = {
+    id,
+    createdAt,
+    createdBy: auth.userID,
+    status: "READY",
+    format,
+    reportType,
+    filters: {
+      year: filters.year ?? new Date().getFullYear(),
+      month: filters.month,
+      quarter: filters.quarter,
+      teamId: filters.teamId,
+      memberIds: filters.memberIds,
+      eventTypes: filters.eventTypes,
+    },
+    downloadUrl,
+  };
+
+  if (format === "CSV") {
+    job.content = "id,status\nsample,ready\n";
+  } else {
+    job.content = "Export ready.";
+  }
+
+  statsExportJobs.set(id, job);
+
+  res.status(201).json(job);
+}));
+
+app.get("/stats/exports", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const jobs = Array.from(statsExportJobs.values()).filter((job) => job.createdBy === auth.userID);
+  res.json({ exports: jobs });
+}));
+
+app.get("/stats/exports/:id", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const job = statsExportJobs.get(req.params.id);
+  if (!job || job.createdBy !== auth.userID) {
+    throw new HttpError(404, "Export not found");
+  }
+  res.json(job);
+}));
+
+app.get("/stats/exports/:id/download", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireManager(auth.role);
+  const job = statsExportJobs.get(req.params.id);
+  if (!job || job.createdBy !== auth.userID) {
+    throw new HttpError(404, "Export not found");
+  }
+  if (job.status !== "READY") {
+    throw new HttpError(409, "Export not ready");
+  }
+
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=stats-export-${job.id}.${job.format.toLowerCase()}`
+  );
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.send(job.content ?? \"Export ready.\");
 }));
 
 app.get("/audit", asyncHandler(async (req, res) => {
