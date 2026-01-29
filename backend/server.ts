@@ -1,8 +1,8 @@
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
-import { Pool, type PoolClient } from "pg";
-import jwt from "jsonwebtoken";
+import { Pool, type PoolClient, type QueryResultRow } from "pg";
+import jwt, { type SignOptions } from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
 import { computeWorkingHours, parseDate, formatDate, addDays, HOURS_PER_WORKDAY } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
@@ -42,24 +42,27 @@ const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) {
   throw new Error("JWT_SECRET is required");
 }
+const jwtSecretValue = jwtSecret;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 type AuthUser = {
   userID: string;
-  email: string;
   role: UserRole;
-  name: string;
+  email?: string;
+  name?: string;
 };
 
-declare module "express-serve-static-core" {
-  interface Request {
-    auth?: AuthUser | null;
+declare global {
+  namespace Express {
+    interface Request {
+      auth?: AuthUser | null;
+    }
   }
 }
 
-const asyncHandler = (handler: (req: Request, res: Response, next: NextFunction) => Promise<void>) =>
+const asyncHandler = (handler: (req: Request, res: Response, next: NextFunction) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => {
     handler(req, res, next).catch(next);
   };
@@ -73,7 +76,7 @@ app.use((req, _res, next) => {
 
   const token = header.replace("Bearer ", "");
   try {
-    const payload = jwt.verify(token, jwtSecret) as AuthUser & { sub: string };
+    const payload = jwt.verify(token, jwtSecretValue) as AuthUser & { sub: string };
     req.auth = {
       userID: payload.sub,
       email: payload.email,
@@ -87,16 +90,20 @@ app.use((req, _res, next) => {
   return next();
 });
 
-function signAuthToken(payload: { sub: string; email: string; role: UserRole; name: string }, expiresIn = "7d") {
-  return jwt.sign(payload, jwtSecret, { expiresIn });
+function signAuthToken(
+  payload: { sub: string; email: string; role: UserRole; name: string },
+  expiresIn: SignOptions["expiresIn"] = "7d"
+) {
+  const options: SignOptions = { expiresIn };
+  return jwt.sign(payload, jwtSecretValue, options);
 }
 
-async function queryRow<T>(text: string, values: any[] = []): Promise<T | null> {
+async function queryRow<T extends QueryResultRow>(text: string, values: any[] = []): Promise<T | null> {
   const result = await pool.query<T>(text, values);
   return result.rows[0] ?? null;
 }
 
-async function queryRows<T>(text: string, values: any[] = []): Promise<T[]> {
+async function queryRows<T extends QueryResultRow>(text: string, values: any[] = []): Promise<T[]> {
   const result = await pool.query<T>(text, values);
   return result.rows;
 }
@@ -120,8 +127,8 @@ async function createEntityAuditLog(
   entityType: string,
   entityId: string | number,
   action: string,
-  before: Record<string, unknown> | null,
-  after: Record<string, unknown> | null
+  before: unknown | null,
+  after: unknown | null
 ): Promise<void> {
   await pool.query(
     `
@@ -2459,7 +2466,7 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const { comment, bulk } = req.body as { comment: string; bulk?: boolean };
 
-  const request = await queryRow<LeaveRequest>(
+  const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
         id, user_id as "userId", type,
@@ -2475,7 +2482,8 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
         computed_hours as "computedHours",
         attachment_url as "attachmentUrl",
         created_at as "createdAt",
-        updated_at as "updatedAt"
+        updated_at as "updatedAt",
+        (SELECT team_id FROM users WHERE id = leave_requests.user_id) as "teamId"
       FROM leave_requests
       WHERE id = $1
     `,
@@ -3388,7 +3396,7 @@ app.get("/stats/exports/:id/download", asyncHandler(async (req, res) => {
     `attachment; filename=stats-export-${job.id}.${job.format.toLowerCase()}`
   );
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.send(job.content ?? \"Export ready.\");
+  res.send(job.content ?? "Export ready.");
 }));
 
 app.get("/audit", asyncHandler(async (req, res) => {
