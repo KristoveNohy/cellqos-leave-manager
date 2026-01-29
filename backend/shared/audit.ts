@@ -1,4 +1,6 @@
 import db from "../db";
+import { sendNotificationEmail } from "./email";
+import { buildNotificationEmail } from "./notification-email";
 
 let notificationsDedupeKeySupported: boolean | null = null;
 
@@ -47,17 +49,50 @@ export async function createNotification(
   dedupeKey?: string | null
 ): Promise<void> {
   const supportsDedupeKey = await hasNotificationsDedupeKey();
+  let notificationId: number | null = null;
   if (supportsDedupeKey) {
-    await db.exec`
+    const inserted = await db.queryRow<{ id: number }>`
       INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
       VALUES (${userId}, ${type}, ${JSON.stringify(payload)}, ${dedupeKey ?? null})
       ON CONFLICT (dedupe_key) DO NOTHING
+      RETURNING id
     `;
+    notificationId = inserted?.id ?? null;
+  } else {
+    const inserted = await db.queryRow<{ id: number }>`
+      INSERT INTO notifications (user_id, type, payload_json)
+      VALUES (${userId}, ${type}, ${JSON.stringify(payload)})
+      RETURNING id
+    `;
+    notificationId = inserted?.id ?? null;
+  }
+
+  if (!notificationId) {
     return;
   }
-  await db.exec`
-    INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
-    VALUES (${userId}, ${type}, ${JSON.stringify(payload)}, ${dedupeKey ?? null})
-    ON CONFLICT (dedupe_key) DO NOTHING
+
+  const user = await db.queryRow<{ email: string }>`
+    SELECT email
+    FROM users
+    WHERE id = ${userId}
   `;
+
+  if (!user?.email) {
+    return;
+  }
+
+  const { subject, text } = buildNotificationEmail(type, payload);
+  const sent = await sendNotificationEmail({
+    to: user.email,
+    subject,
+    text,
+  });
+
+  if (sent) {
+    await db.exec`
+      UPDATE notifications
+      SET sent_at = NOW()
+      WHERE id = ${notificationId}
+    `;
+  }
 }

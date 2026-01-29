@@ -125,8 +125,13 @@ export const cancel = api(
           requestId: id,
           userId: request.userId,
           userName: requester?.name,
+          type: updated?.type,
           startDate: updated?.startDate,
           endDate: updated?.endDate,
+          startTime: updated?.startTime,
+          endTime: updated?.endTime,
+          status: updated?.status,
+          computedHours: updated?.computedHours,
         },
         `leave_request:${id}:cancelled:${manager.id}`
       );

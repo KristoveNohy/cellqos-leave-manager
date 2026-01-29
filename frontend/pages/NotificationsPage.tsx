@@ -12,40 +12,60 @@ type NotificationWithDates = Notification & {
   payloadJson: any;
 };
 
+function formatDateTime(date?: string, time?: string) {
+  if (!date) {
+    return "?";
+  }
+  if (!time) {
+    return date;
+  }
+  return `${date} ${time}`;
+}
+
+function formatRequestRange(payload: any) {
+  const start = formatDateTime(payload.startDate, payload.startTime);
+  const end = formatDateTime(payload.endDate, payload.endTime);
+  return `${start} – ${end}`;
+}
+
+function formatTimeRange(payload: any) {
+  if (!payload.startTime && !payload.endTime) {
+    return null;
+  }
+  return `${payload.startTime ?? "?"} – ${payload.endTime ?? "?"}`;
+}
+
 function getNotificationContent(notification: NotificationWithDates) {
   const payload = notification.payloadJson ?? {};
+  const range = formatRequestRange(payload);
+  const timeRange = formatTimeRange(payload);
+  const rangeWithTime = timeRange ? `${range} • ${timeRange}` : range;
 
   switch (notification.type) {
     case "NEW_PENDING_REQUEST":
       return {
         title: "Nová žiadosť na schválenie",
-        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${
-          payload.startDate ?? "?"
-        } – ${payload.endDate ?? "?"}`,
+        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${rangeWithTime}`,
       };
     case "REQUEST_APPROVED":
       return {
         title: "Žiadosť schválená",
-        text: `${payload.startDate ?? "?"} – ${payload.endDate ?? "?"}`,
+        text: rangeWithTime,
       };
     case "REQUEST_REJECTED":
       return {
         title: "Žiadosť zamietnutá",
-        text: `${payload.startDate ?? "?"} – ${payload.endDate ?? "?"}`,
+        text: rangeWithTime,
       };
     case "REQUEST_UPDATED_BY_MANAGER":
       return {
         title: "Žiadosť upravená manažérom",
-        text: `Stav: ${payload.status ?? "nezmenený"} • ${
-          payload.startDate ?? "?"
-        } – ${payload.endDate ?? "?"}`,
+        text: `Stav: ${payload.status ?? "nezmenený"} • ${rangeWithTime}`,
       };
     case "REQUEST_CANCELLED":
       return {
         title: "Žiadosť zrušená",
-        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${
-          payload.startDate ?? "?"
-        } – ${payload.endDate ?? "?"}`,
+        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${rangeWithTime}`,
       };
     case "PASSWORD_RESET":
       return {
