@@ -14,6 +14,8 @@ import {
   computeCarryOverHours,
   getAnnualLeaveGroupAllowanceHours,
 } from "./shared/leave-entitlement";
+import { sendNotificationEmail } from "./shared/email";
+import { buildNotificationEmail } from "./shared/notification-email";
 import type {
   LeaveRequest,
   LeaveStatus,
@@ -499,24 +501,64 @@ async function createNotification(
   dedupeKey?: string | null
 ): Promise<void> {
   const supportsDedupeKey = await hasNotificationsDedupeKey();
+  let notificationId: number | null = null;
   if (supportsDedupeKey) {
-    await pool.query(
+    const inserted = await queryRow<{ id: number }>(
       `
         INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (dedupe_key) DO NOTHING
+        RETURNING id
       `,
       [userId, type, JSON.stringify(payload), dedupeKey ?? null]
     );
+    notificationId = inserted?.id ?? null;
+  } else {
+    const inserted = await queryRow<{ id: number }>(
+      `
+        INSERT INTO notifications (user_id, type, payload_json)
+        VALUES ($1, $2, $3)
+        RETURNING id
+      `,
+      [userId, type, JSON.stringify(payload)]
+    );
+    notificationId = inserted?.id ?? null;
+  }
+
+  if (!notificationId) {
     return;
   }
-  await pool.query(
+
+  const user = await queryRow<{ email: string }>(
     `
-      INSERT INTO notifications (user_id, type, payload_json)
-      VALUES ($1, $2, $3)
+      SELECT email
+      FROM users
+      WHERE id = $1
     `,
-    [userId, type, JSON.stringify(payload)]
+    [userId]
   );
+
+  if (!user?.email) {
+    return;
+  }
+
+  const { subject, text } = buildNotificationEmail(type, payload);
+  const sent = await sendNotificationEmail({
+    to: user.email,
+    subject,
+    text,
+  });
+
+  if (sent) {
+    await pool.query(
+      `
+        UPDATE notifications
+        SET sent_at = NOW()
+        WHERE id = $1
+      `,
+      [notificationId]
+    );
+  }
 }
 
 async function applyLeaveBalanceOverride(
