@@ -10,7 +10,10 @@ export function validateDateRange(startDate: string, endDate: string): void {
   }
 }
 
-export function validateNotInPast(date: string): void {
+export function validateNotInPast(date: string, options?: { allowPast?: boolean }): void {
+  if (options?.allowPast) {
+    return;
+  }
   const requestDate = parseDate(date);
   const today = new Date();
   today.setHours(0, 0, 0, 0);

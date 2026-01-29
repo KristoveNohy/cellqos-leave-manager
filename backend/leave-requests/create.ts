@@ -5,6 +5,7 @@ import { validateDateRange, validateNotInPast } from "../shared/validation";
 import { computeWorkingHours } from "../shared/date-utils";
 import { createAuditLog } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
+import { isAdmin, isManager } from "../shared/rbac";
 import type { LeaveRequest, LeaveType } from "../shared/types";
 
 interface CreateLeaveRequestRequest {
@@ -23,8 +24,9 @@ export const create = api(
   async (req: CreateLeaveRequestRequest): Promise<LeaveRequest> => {
     const auth = getAuthData()!;
     const userId = auth.userID;
+    const allowPast = isAdmin(auth.role) || isManager(auth.role);
     validateDateRange(req.startDate, req.endDate);
-    validateNotInPast(req.startDate);
+    validateNotInPast(req.startDate, { allowPast });
     
     // Get holidays for computation
     const holidayDates = new Set<string>();
