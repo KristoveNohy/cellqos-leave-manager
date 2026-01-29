@@ -30,6 +30,17 @@ export JWT_SECRET="change-me"
 export DATABASE_URL="postgresql://user:password@localhost:5432/cellqos"
 ```
 
+Ak chcete posielať notifikácie emailom cez SMTP, nastavte aj tieto premenne:
+
+```bash
+export SMTP_HOST="smtp.example.com"
+export SMTP_PORT="587"
+export SMTP_USER="smtp-user"
+export SMTP_PASS="smtp-pass"
+export SMTP_FROM="Leave Manager <no-reply@example.com>"
+# voliteľne: export SMTP_SECURE="true"
+```
+
 Následne skontrolujte, že databáza má zapnuté rozšírenie `pgcrypto` (kvôli heslám):
 
 ```sql
