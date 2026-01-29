@@ -128,6 +128,20 @@ export default function UserManagement() {
       });
     },
   });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (payload: { id: string }) => backend.users.resetPassword(payload),
+    onSuccess: () => {
+      toast({ title: "Heslo bolo resetované na predvolené." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Reset hesla zlyhal",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
   
   if (isLoading) {
     return <div className="text-center py-12">Načítava sa...</div>;
@@ -177,6 +191,15 @@ export default function UserManagement() {
     const confirmed = window.confirm(`Naozaj chcete odstrániť používateľa ${user.name}?`);
     if (confirmed) {
       deleteMutation.mutate({ id: user.id });
+    }
+  };
+
+  const handleResetPassword = (user: any) => {
+    const confirmed = window.confirm(
+      `Naozaj chcete resetovať heslo používateľa ${user.name}?`
+    );
+    if (confirmed) {
+      resetPasswordMutation.mutate({ id: user.id });
     }
   };
 
@@ -257,6 +280,14 @@ export default function UserManagement() {
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(user)}>
                       Upraviť
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleResetPassword(user)}
+                      disabled={resetPasswordMutation.isPending}
+                    >
+                      Reset hesla
                     </Button>
                     <Button
                       variant="destructive"

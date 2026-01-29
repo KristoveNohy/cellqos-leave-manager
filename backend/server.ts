@@ -1059,6 +1059,59 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   res.json(user);
 }));
 
+app.post("/users/:id/reset-password", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  requireAdmin(auth.role);
+  const { id } = req.params;
+
+  const targetUser = await queryRow<{ id: string; name: string; email: string }>(
+    `
+      SELECT id, name, email
+      FROM users
+      WHERE id = $1
+    `,
+    [id]
+  );
+
+  if (!targetUser) {
+    throw new HttpError(404, "User not found");
+  }
+
+  const defaultPassword = "Password123!";
+
+  await pool.query(
+    `
+      UPDATE users
+      SET password_hash = crypt($1, gen_salt('bf')),
+          must_change_password = true
+      WHERE id = $2
+    `,
+    [defaultPassword, id]
+  );
+
+  const adminUser = await queryRow<{ name: string; email: string }>(
+    `
+      SELECT name, email
+      FROM users
+      WHERE id = $1
+    `,
+    [auth.userID]
+  );
+
+  await createEntityAuditLog(auth.userID, "users", id, "RESET_PASSWORD", null, {
+    mustChangePassword: true,
+  });
+
+  await createNotification(targetUser.id, "PASSWORD_RESET", {
+    adminName: adminUser?.name ?? "Admin",
+    adminEmail: adminUser?.email ?? null,
+    userName: targetUser.name,
+    userEmail: targetUser.email,
+  });
+
+  res.json({ ok: true });
+}));
+
 app.delete("/users/:id", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireAdmin(auth.role);

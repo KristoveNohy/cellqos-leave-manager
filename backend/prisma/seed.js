@@ -61,25 +61,6 @@ async function main() {
     },
   });
 
-  await prisma.user.upsert({
-    where: { id: "user_admin_placeholder" },
-    update: {
-      passwordHash: hash,
-      role: "ADMIN",
-      teamId: null,
-      isActive: true,
-    },
-    create: {
-      id: "user_admin_placeholder",
-      email: "admin@cellqos.com",
-      name: "Admin User",
-      role: "ADMIN",
-      teamId: null,
-      isActive: true,
-      passwordHash: hash,
-    },
-  });
-
   const employees = [
     { id: "user_anna_placeholder", email: "anna@cellqos.com", name: "Anna Novakova" },
     { id: "user_peter_placeholder", email: "peter@cellqos.com", name: "Peter Horvath" },

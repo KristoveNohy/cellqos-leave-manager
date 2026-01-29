@@ -47,6 +47,13 @@ function getNotificationContent(notification: NotificationWithDates) {
           payload.startDate ?? "?"
         } – ${payload.endDate ?? "?"}`,
       };
+    case "PASSWORD_RESET":
+      return {
+        title: "Heslo bolo resetované",
+        text: `Reset vykonal ${payload.adminName ?? "admin"}${
+          payload.adminEmail ? ` (${payload.adminEmail})` : ""
+        }`,
+      };
     default:
       return {
         title: "Notifikácia",

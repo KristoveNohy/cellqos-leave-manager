@@ -90,6 +90,8 @@ export function createApiClient(token: string | null) {
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>
         apiRequest<any>(`/users/${data.id}`, { method: "PATCH", body: data, token }),
+      resetPassword: (data: { id: string }) =>
+        apiRequest<{ ok: true }>(`/users/${data.id}/reset-password`, { method: "POST", token }),
       remove: (data: { id: string }) =>
         apiRequest<any>(`/users/${data.id}`, { method: "DELETE", token }),
     },
