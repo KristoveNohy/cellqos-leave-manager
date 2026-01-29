@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -137,6 +137,7 @@ export default function StatsTable({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Prehľad člena</DialogTitle>
+            <DialogDescription>Rozpad udalostí a dní za zvolené obdobie.</DialogDescription>
           </DialogHeader>
           {selectedRow && (
             <div className="space-y-3 text-sm">

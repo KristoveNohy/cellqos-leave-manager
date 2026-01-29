@@ -28,7 +28,7 @@ interface StatsFiltersProps {
 }
 
 const monthOptions = [
-  { value: "", label: "Celý rok" },
+  { value: "all", label: "Celý rok" },
   { value: "1", label: "Január" },
   { value: "2", label: "Február" },
   { value: "3", label: "Marec" },
@@ -44,7 +44,7 @@ const monthOptions = [
 ];
 
 const quarterOptions = [
-  { value: "", label: "Bez kvartálu" },
+  { value: "all", label: "Bez kvartálu" },
   { value: "1", label: "Q1" },
   { value: "2", label: "Q2" },
   { value: "3", label: "Q3" },
@@ -68,11 +68,11 @@ export default function StatsFilters({
   };
 
   const handleMonthChange = (value: string) => {
-    update({ month: value ? Number(value) : undefined, quarter: undefined });
+    update({ month: value !== "all" ? Number(value) : undefined, quarter: undefined });
   };
 
   const handleQuarterChange = (value: string) => {
-    update({ quarter: value ? Number(value) : undefined, month: undefined });
+    update({ quarter: value !== "all" ? Number(value) : undefined, month: undefined });
   };
 
   const handleMembersChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -114,7 +114,7 @@ export default function StatsFilters({
 
         <div className="space-y-2">
           <Label>Mesiac</Label>
-          <Select value={filters.month ? String(filters.month) : ""} onValueChange={handleMonthChange}>
+          <Select value={filters.month ? String(filters.month) : "all"} onValueChange={handleMonthChange}>
             <SelectTrigger>
               <SelectValue placeholder="Celý rok" />
             </SelectTrigger>
@@ -130,7 +130,7 @@ export default function StatsFilters({
 
         <div className="space-y-2">
           <Label>Kvartál</Label>
-          <Select value={filters.quarter ? String(filters.quarter) : ""} onValueChange={handleQuarterChange}>
+          <Select value={filters.quarter ? String(filters.quarter) : "all"} onValueChange={handleQuarterChange}>
             <SelectTrigger>
               <SelectValue placeholder="Bez kvartálu" />
             </SelectTrigger>

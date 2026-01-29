@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { StatsCalendarResponse } from "~backend/shared/types";
@@ -193,6 +193,7 @@ export default function StatsCalendar({ data, isLoading, error, highlightMemberI
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Detail dňa {selectedDay?.date}</DialogTitle>
+            <DialogDescription>Zoznam členov a typ udalosti pre zvolený deň.</DialogDescription>
           </DialogHeader>
           {selectedDay && (
             <div className="space-y-2 text-sm">
