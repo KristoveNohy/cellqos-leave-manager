@@ -103,7 +103,17 @@ export const reject = api<RejectLeaveRequestParams, LeaveRequest>(
     await createNotification(
       request.userId,
       "REQUEST_REJECTED",
-      { requestId: id, startDate: updated?.startDate, endDate: updated?.endDate },
+      {
+        requestId: id,
+        type: updated?.type,
+        startDate: updated?.startDate,
+        endDate: updated?.endDate,
+        startTime: updated?.startTime,
+        endTime: updated?.endTime,
+        status: updated?.status,
+        computedHours: updated?.computedHours,
+        managerComment: updated?.managerComment,
+      },
       `leave_request:${id}:rejected`
     );
     

@@ -2155,9 +2155,14 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
       {
         requestId: id,
         updatedBy: auth.userID,
+        type: after?.type,
         startDate: after?.startDate,
         endDate: after?.endDate,
+        startTime: after?.startTime,
+        endTime: after?.endTime,
         status: after?.status,
+        computedHours: after?.computedHours,
+        managerComment: after?.managerComment,
       },
       `leave_request:${id}:manager-update:${after?.updatedAt}`
     );
@@ -2355,8 +2360,13 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
         requestId: id,
         userId: request.userId,
         userName: requester?.name,
+        type: updated?.type,
         startDate: updated?.startDate,
         endDate: updated?.endDate,
+        startTime: updated?.startTime,
+        endTime: updated?.endTime,
+        status: updated?.status,
+        computedHours: updated?.computedHours,
       },
       `leave_request:${id}:submitted:${manager.id}`
     );
@@ -2493,7 +2503,17 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
   await createNotification(
     request.userId,
     "REQUEST_APPROVED",
-    { requestId: id, startDate: updated?.startDate, endDate: updated?.endDate },
+    {
+      requestId: id,
+      type: updated?.type,
+      startDate: updated?.startDate,
+      endDate: updated?.endDate,
+      startTime: updated?.startTime,
+      endTime: updated?.endTime,
+      status: updated?.status,
+      computedHours: updated?.computedHours,
+      managerComment: updated?.managerComment,
+    },
     `leave_request:${id}:approved`
   );
 
@@ -2597,7 +2617,17 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
   await createNotification(
     request.userId,
     "REQUEST_REJECTED",
-    { requestId: id, startDate: updated?.startDate, endDate: updated?.endDate },
+    {
+      requestId: id,
+      type: updated?.type,
+      startDate: updated?.startDate,
+      endDate: updated?.endDate,
+      startTime: updated?.startTime,
+      endTime: updated?.endTime,
+      status: updated?.status,
+      computedHours: updated?.computedHours,
+      managerComment: updated?.managerComment,
+    },
     `leave_request:${id}:rejected`
   );
 
@@ -2712,8 +2742,13 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
         requestId: id,
         userId: request.userId,
         userName: requester?.name,
+        type: updated?.type,
         startDate: updated?.startDate,
         endDate: updated?.endDate,
+        startTime: updated?.startTime,
+        endTime: updated?.endTime,
+        status: updated?.status,
+        computedHours: updated?.computedHours,
       },
       `leave_request:${id}:cancelled:${manager.id}`
     );

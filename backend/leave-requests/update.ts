@@ -234,9 +234,14 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
         {
           requestId: id,
           updatedBy: auth.userID,
+          type: after?.type,
           startDate: after?.startDate,
           endDate: after?.endDate,
+          startTime: after?.startTime,
+          endTime: after?.endTime,
           status: after?.status,
+          computedHours: after?.computedHours,
+          managerComment: after?.managerComment,
         },
         `leave_request:${id}:manager-update:${after?.updatedAt}`
       );
