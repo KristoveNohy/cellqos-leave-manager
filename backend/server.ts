@@ -2827,7 +2827,7 @@ app.get("/stats/dashboard", asyncHandler(async (req, res) => {
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
@@ -3028,24 +3028,30 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
     res.json(response);
     return;
   }
+  const buildUserConditions = (targetValues: any[]) => {
+    const conditions = ["u.is_active = true"];
+
+    if (scope.teamId) {
+      conditions.push(`u.team_id = $${targetValues.length + 1}`);
+      targetValues.push(scope.teamId);
+    }
+
+    if (scope.members.length > 0) {
+      const scopedIds = scope.members.map((member) => member.id);
+      conditions.push(`u.id = ANY($${targetValues.length + 1}::text[])`);
+      targetValues.push(scopedIds);
+    }
+
+    if (search) {
+      conditions.push(`u.name ILIKE $${targetValues.length + 1}`);
+      targetValues.push(`%${search}%`);
+    }
+
+    return conditions;
+  };
+
   const values: any[] = [range.startDate, range.endDate];
-  const userConditions = ["u.is_active = true"];
-
-  if (scope.teamId) {
-    userConditions.push(`u.team_id = $${values.length + 1}`);
-    values.push(scope.teamId);
-  }
-
-  if (scope.members.length > 0) {
-    const scopedIds = scope.members.map((member) => member.id);
-    userConditions.push(`u.id = ANY($${values.length + 1}::text[])`);
-    values.push(scopedIds);
-  }
-
-  if (search) {
-    userConditions.push(`u.name ILIKE $${values.length + 1}`);
-    values.push(`%${search}%`);
-  }
+  const userConditions = buildUserConditions(values);
 
   const leaveConditions = [
     "lr.start_date <= $2",
@@ -3054,17 +3060,19 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
   ];
 
   if (eventTypes.length > 0) {
-    leaveConditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    leaveConditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
+  const totalValues: any[] = [];
+  const totalConditions = buildUserConditions(totalValues);
   const totalRow = await queryRow<{ total: string }>(
     `
       SELECT COUNT(*) as total
       FROM users u
-      WHERE ${userConditions.join(" AND ")}
+      WHERE ${totalConditions.join(" AND ")}
     `,
-    values
+    totalValues
   );
 
   const sortMap: Record<string, string> = {
@@ -3205,7 +3213,7 @@ app.get("/stats/calendar", asyncHandler(async (req, res) => {
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
