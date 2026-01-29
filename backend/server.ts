@@ -183,7 +183,58 @@ type VacationPolicyColumnSupport = {
 };
 
 const columnSupportCache = new Map<string, boolean>();
-const statsExportJobs = new Map<string, StatsExportJob & { content?: string | null }>();
+const statsExportJobs = new Map<
+  string,
+  StatsExportJob & { content?: Buffer | string | null; contentType?: string }
+>();
+
+function escapePdfText(value: string) {
+  return value.replace(/[()\\]/g, "\\$&");
+}
+
+function buildSimplePdf(lines: string[]): Buffer {
+  const fontSize = 12;
+  const startX = 50;
+  const startY = 800;
+  const lineHeight = 16;
+  const contentLines = [
+    "BT",
+    `/F1 ${fontSize} Tf`,
+    `${startX} ${startY} Td`,
+    ...lines.flatMap((line, index) => {
+      const escaped = escapePdfText(line);
+      if (index === 0) {
+        return [`(${escaped}) Tj`];
+      }
+      return [`0 -${lineHeight} Td`, `(${escaped}) Tj`];
+    }),
+    "ET",
+  ];
+  const contentStream = contentLines.join("\n");
+
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    `5 0 obj\n<< /Length ${Buffer.byteLength(contentStream)} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (const obj of objects) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += obj;
+  }
+
+  const xrefStart = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+  return Buffer.from(pdf, "utf-8");
+}
 
 async function columnExists(table: string, column: string): Promise<boolean> {
   const cacheKey = `${table}.${column}`;
@@ -1666,7 +1717,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   if (type) {
-    conditions.push(`lr.type = $${values.length + 1}`);
+    conditions.push(`lr.type = $${values.length + 1}::leave_type`);
     values.push(type);
   }
 
@@ -1920,24 +1971,24 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   const before = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2130,24 +2181,24 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
   const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2188,24 +2239,24 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
   const request = await queryRow<LeaveRequest & { teamId: number | null }>(
     `
       SELECT 
-        id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
-        status, reason, manager_comment as "managerComment",
-        approved_by as "approvedBy",
-        approved_at as "approvedAt",
-        computed_hours as "computedHours",
-        attachment_url as "attachmentUrl",
-        created_at as "createdAt",
-        updated_at as "updatedAt",
+        lr.id, lr.user_id as "userId", lr.type,
+        lr.start_date::text as "startDate",
+        lr.end_date::text as "endDate",
+        lr.start_time::text as "startTime",
+        lr.end_time::text as "endTime",
+        lr.is_half_day_start as "isHalfDayStart",
+        lr.is_half_day_end as "isHalfDayEnd",
+        lr.status, lr.reason, lr.manager_comment as "managerComment",
+        lr.approved_by as "approvedBy",
+        lr.approved_at as "approvedAt",
+        lr.computed_hours as "computedHours",
+        lr.attachment_url as "attachmentUrl",
+        lr.created_at as "createdAt",
+        lr.updated_at as "updatedAt",
         u.team_id as "teamId"
-      FROM leave_requests
-      JOIN users u ON leave_requests.user_id = u.id
-      WHERE id = $1
+      FROM leave_requests lr
+      JOIN users u ON lr.user_id = u.id
+      WHERE lr.id = $1
     `,
     [id]
   );
@@ -2827,7 +2878,7 @@ app.get("/stats/dashboard", asyncHandler(async (req, res) => {
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
@@ -3028,25 +3079,30 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
     res.json(response);
     return;
   }
-  const values: any[] = [range.startDate, range.endDate];
-  const userConditions = ["u.is_active = true"];
+  const buildUserConditions = (startIndex: number) => {
+    const conditions = ["u.is_active = true"];
+    const values: any[] = [];
 
-  if (scope.teamId) {
-    userConditions.push(`u.team_id = $${values.length + 1}`);
-    values.push(scope.teamId);
-  }
+    if (scope.teamId) {
+      conditions.push(`u.team_id = $${startIndex + values.length}`);
+      values.push(scope.teamId);
+    }
 
-  if (scope.members.length > 0) {
-    const scopedIds = scope.members.map((member) => member.id);
-    userConditions.push(`u.id = ANY($${values.length + 1}::text[])`);
-    values.push(scopedIds);
-  }
+    if (scope.members.length > 0) {
+      const scopedIds = scope.members.map((member) => member.id);
+      conditions.push(`u.id = ANY($${startIndex + values.length}::text[])`);
+      values.push(scopedIds);
+    }
 
-  if (search) {
-    userConditions.push(`u.name ILIKE $${values.length + 1}`);
-    values.push(`%${search}%`);
-  }
+    if (search) {
+      conditions.push(`u.name ILIKE $${startIndex + values.length}`);
+      values.push(`%${search}%`);
+    }
 
+    return { conditions, values };
+  };
+
+  const leaveValues: any[] = [range.startDate, range.endDate];
   const leaveConditions = [
     "lr.start_date <= $2",
     "lr.end_date >= $1",
@@ -3054,17 +3110,18 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
   ];
 
   if (eventTypes.length > 0) {
-    leaveConditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
-    values.push(eventTypes);
+    leaveConditions.push(`lr.type = ANY($${leaveValues.length + 1}::leave_type[])`);
+    leaveValues.push(eventTypes);
   }
 
+  const { conditions: totalConditions, values: totalValues } = buildUserConditions(1);
   const totalRow = await queryRow<{ total: string }>(
     `
       SELECT COUNT(*) as total
       FROM users u
-      WHERE ${userConditions.join(" AND ")}
+      WHERE ${totalConditions.join(" AND ")}
     `,
-    values
+    totalValues
   );
 
   const sortMap: Record<string, string> = {
@@ -3075,6 +3132,8 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
   };
   const sortColumn = sortMap[sortBy] ?? sortMap.totalDays;
 
+  const { conditions: userConditions, values: userValues } = buildUserConditions(leaveValues.length + 1);
+  const dataValues = [...leaveValues, ...userValues];
   const dataRows = await queryRows<{
     memberId: string;
     memberName: string;
@@ -3096,10 +3155,10 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
       WHERE ${userConditions.join(" AND ")}
       GROUP BY u.id, u.name
       ORDER BY ${sortColumn} ${sortDir}
-      LIMIT $${values.length + 1}
-      OFFSET $${values.length + 2}
+      LIMIT $${dataValues.length + 1}
+      OFFSET $${dataValues.length + 2}
     `,
-    [...values, pageSize, (page - 1) * pageSize]
+    [...dataValues, pageSize, (page - 1) * pageSize]
   );
 
   const memberIdsPage = dataRows.map((row) => row.memberId);
@@ -3119,10 +3178,10 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
               COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
             FROM leave_requests lr
             WHERE ${leaveConditions.join(" AND ")}
-              AND lr.user_id = ANY($${values.length + 1}::text[])
+              AND lr.user_id = ANY($${leaveValues.length + 1}::text[])
             GROUP BY lr.user_id, lr.type
           `,
-          [...values, memberIdsPage]
+          [...leaveValues, memberIdsPage]
         )
       : [];
 
@@ -3205,7 +3264,7 @@ app.get("/stats/calendar", asyncHandler(async (req, res) => {
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::text[])`);
+    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
     values.push(eventTypes);
   }
 
@@ -3321,12 +3380,17 @@ app.post("/stats/exports", asyncHandler(async (req, res) => {
     }
   }
 
-  await resolveStatsScope(auth, filters.teamId ?? null, memberIds);
+  const range = buildStatsDateRange({
+    year: filters.year ?? new Date().getFullYear(),
+    month: filters.month,
+    quarter: filters.quarter,
+  });
+  const scope = await resolveStatsScope(auth, filters.teamId ?? null, memberIds);
 
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   const downloadUrl = `/stats/exports/${id}/download`;
-  const job: StatsExportJob & { content?: string | null } = {
+  const job: StatsExportJob & { content?: Buffer | string | null; contentType?: string } = {
     id,
     createdAt,
     createdBy: auth.userID,
@@ -3344,10 +3408,221 @@ app.post("/stats/exports", asyncHandler(async (req, res) => {
     downloadUrl,
   };
 
-  if (format === "CSV") {
-    job.content = "id,status\nsample,ready\n";
+  const eventTypes = (filters.eventTypes ?? []).filter(isValidLeaveType);
+  const hasScopedMembers = scope.members.length > 0;
+  const baseConditions = [
+    "lr.start_date <= $2",
+    "lr.end_date >= $1",
+    "lr.status NOT IN ('DRAFT', 'REJECTED', 'CANCELLED')",
+  ];
+  const baseValues: any[] = [range.startDate, range.endDate];
+
+  if (scope.teamId) {
+    baseConditions.push(`u.team_id = $${baseValues.length + 1}`);
+    baseValues.push(scope.teamId);
+  }
+
+  if (hasScopedMembers) {
+    const scopedIds = scope.members.map((member) => member.id);
+    baseConditions.push(`lr.user_id = ANY($${baseValues.length + 1}::text[])`);
+    baseValues.push(scopedIds);
+  }
+
+  if (eventTypes.length > 0) {
+    baseConditions.push(`lr.type = ANY($${baseValues.length + 1}::leave_type[])`);
+    baseValues.push(eventTypes);
+  }
+
+  const createCsvContent = (rows: string[][]) => {
+    const csvRows = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, "\"\"")}"`).join(","));
+    return `\uFEFF${csvRows.join("\n")}\n`;
+  };
+
+  if (!hasScopedMembers) {
+    const emptyMessage = "Export neobsahuje žiadne dáta pre zvolené filtre.";
+    if (format === "PDF") {
+      job.content = buildSimplePdf([emptyMessage]);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([["message"], [emptyMessage]]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
+  } else if (reportType === "DASHBOARD_SUMMARY") {
+    const totalsRow = await queryRow<{ totalEvents: string; totalHours: string }>(
+      `
+        SELECT
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE ${baseConditions.join(" AND ")}
+      `,
+      baseValues
+    );
+
+    const typeRows = await queryRows<{ type: LeaveType; totalEvents: string; totalHours: string }>(
+      `
+        SELECT
+          lr.type,
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE ${baseConditions.join(" AND ")}
+        GROUP BY lr.type
+        ORDER BY COALESCE(SUM(lr.computed_hours), 0) DESC
+      `,
+      baseValues
+    );
+
+    const totalEvents = Number(totalsRow?.totalEvents ?? 0);
+    const totalHours = Number(totalsRow?.totalHours ?? 0);
+    const totalDays = totalHours / HOURS_PER_WORKDAY;
+
+    const lines = [
+      "Dashboard – súhrn",
+      `Obdobie: ${range.startDate} až ${range.endDate}`,
+      `Počet udalostí: ${totalEvents}`,
+      `Počet dní: ${totalDays.toFixed(1)}`,
+      "Rozdelenie podľa typu:",
+      ...typeRows.map((row) => {
+        const days = Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY;
+        return `- ${row.type}: ${Number(row.totalEvents ?? 0)} udalostí, ${days.toFixed(1)} dní`;
+      }),
+    ];
+
+    if (format === "PDF") {
+      job.content = buildSimplePdf(lines);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([
+        ["metric", "value"],
+        ["period_start", range.startDate],
+        ["period_end", range.endDate],
+        ["total_events", totalEvents],
+        ["total_days", totalDays.toFixed(2)],
+        ...typeRows.map((row) => [
+          `type_${row.type.toLowerCase()}`,
+          `${Number(row.totalEvents ?? 0)} events / ${(Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY).toFixed(2)} days`,
+        ]),
+      ]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
+  } else if (reportType === "TABLE_DETAIL") {
+    const userConditions = ["u.is_active = true"];
+    const userValues: any[] = [];
+    if (scope.teamId) {
+      userConditions.push(`u.team_id = $${userValues.length + 1}`);
+      userValues.push(scope.teamId);
+    }
+    if (hasScopedMembers) {
+      const scopedIds = scope.members.map((member) => member.id);
+      userConditions.push(`u.id = ANY($${userValues.length + 1}::text[])`);
+      userValues.push(scopedIds);
+    }
+
+    const dataRows = await queryRows<{
+      memberId: string;
+      memberName: string;
+      totalEvents: string;
+      totalHours: string;
+      lastEventDate: string | null;
+    }>(
+      `
+        SELECT
+          u.id as "memberId",
+          u.name as "memberName",
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours",
+          MAX(lr.end_date)::text as "lastEventDate"
+        FROM users u
+        LEFT JOIN leave_requests lr
+          ON u.id = lr.user_id
+          AND ${baseConditions.join(" AND ")}
+        WHERE ${userConditions.join(" AND ")}
+        GROUP BY u.id, u.name
+        ORDER BY COALESCE(SUM(lr.computed_hours), 0) DESC, u.name ASC
+      `,
+      [...baseValues, ...userValues]
+    );
+
+    if (format === "PDF") {
+      const lines = [
+        "Tabuľka – detail",
+        `Obdobie: ${range.startDate} až ${range.endDate}`,
+        ...dataRows.map((row) => {
+          const days = Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY;
+          const lastEvent = row.lastEventDate ? `, posledné: ${row.lastEventDate}` : "";
+          return `${row.memberName}: ${Number(row.totalEvents ?? 0)} udalostí, ${days.toFixed(1)} dní${lastEvent}`;
+        }),
+      ];
+      job.content = buildSimplePdf(lines);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([
+        ["member", "total_events", "total_days", "last_event_date"],
+        ...dataRows.map((row) => [
+          row.memberName,
+          Number(row.totalEvents ?? 0),
+          (Number(row.totalHours ?? 0) / HOURS_PER_WORKDAY).toFixed(2),
+          row.lastEventDate ?? "",
+        ]),
+      ]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
   } else {
-    job.content = "Export ready.";
+    const eventRows = await queryRows<{
+      memberId: string;
+      memberName: string;
+      type: LeaveType;
+      startDate: string;
+      endDate: string;
+    }>(
+      `
+        SELECT
+          lr.user_id as "memberId",
+          u.name as "memberName",
+          lr.type,
+          lr.start_date::text as "startDate",
+          lr.end_date::text as "endDate"
+        FROM leave_requests lr
+        JOIN users u ON lr.user_id = u.id
+        WHERE ${baseConditions.join(" AND ")}
+        ORDER BY lr.start_date ASC
+      `,
+      baseValues
+    );
+
+    const dayMap = new Map<string, { totalOut: number; typeCounts: Map<LeaveType, number> }>();
+    for (const event of eventRows) {
+      let current = parseDate(event.startDate);
+      const end = parseDate(event.endDate);
+      while (current <= end) {
+        const dateStr = formatDate(current);
+        const existing = dayMap.get(dateStr) ?? { totalOut: 0, typeCounts: new Map() };
+        existing.totalOut += 1;
+        existing.typeCounts.set(event.type, (existing.typeCounts.get(event.type) ?? 0) + 1);
+        dayMap.set(dateStr, existing);
+        current = addDays(current, 1);
+      }
+    }
+
+    const days = Array.from(dayMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+    if (format === "PDF") {
+      const lines = [
+        "Rokový kalendár",
+        `Obdobie: ${range.startDate} až ${range.endDate}`,
+        ...days.map(([date, info]) => `${date}: ${info.totalOut} mimo tímu`),
+      ];
+      job.content = buildSimplePdf(lines);
+      job.contentType = "application/pdf";
+    } else {
+      job.content = createCsvContent([
+        ["date", "total_out"],
+        ...days.map(([date, info]) => [date, info.totalOut]),
+      ]);
+      job.contentType = "text/csv; charset=utf-8";
+    }
   }
 
   statsExportJobs.set(id, job);
@@ -3387,8 +3662,8 @@ app.get("/stats/exports/:id/download", asyncHandler(async (req, res) => {
     "Content-Disposition",
     `attachment; filename=stats-export-${job.id}.${job.format.toLowerCase()}`
   );
-  res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.send(job.content ?? \"Export ready.\");
+  res.setHeader("Content-Type", job.contentType ?? "text/plain; charset=utf-8");
+  res.send(job.content ?? "Export ready.");
 }));
 
 app.get("/audit", asyncHandler(async (req, res) => {
