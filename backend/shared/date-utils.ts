@@ -47,8 +47,6 @@ function parseTimeToMinutes(time: string): number | null {
 export function computeWorkingHours(
   startDate: string,
   endDate: string,
-  isHalfDayStart: boolean,
-  isHalfDayEnd: boolean,
   holidays: Set<string>,
   startTime?: string | null,
   endTime?: string | null
@@ -78,14 +76,6 @@ export function computeWorkingHours(
       workingDays += 1;
     }
     currentDate = addDays(currentDate, 1);
-  }
-  
-  // Adjust for half-days
-  if (isHalfDayStart && workingDays > 0) {
-    workingDays -= 0.5;
-  }
-  if (isHalfDayEnd && workingDays > 0) {
-    workingDays -= 0.5;
   }
   
   const workingHours = workingDays * HOURS_PER_WORKDAY;

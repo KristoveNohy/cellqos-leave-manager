@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
 
 interface RequestFormDialogProps {
@@ -68,8 +67,6 @@ export default function RequestFormDialog({
       endDate: formatDateValue(request?.endDate || initialEndDate),
       startTime: defaultStartTime,
       endTime: defaultEndTime,
-      isHalfDayStart: request?.isHalfDayStart || false,
-      isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
     },
   });
@@ -88,8 +85,6 @@ export default function RequestFormDialog({
       endDate: formatDateValue(request?.endDate || initialEndDate),
       startTime: defaultStartTime,
       endTime: defaultEndTime,
-      isHalfDayStart: request?.isHalfDayStart || false,
-      isHalfDayEnd: request?.isHalfDayEnd || false,
       reason: request?.reason || "",
     });
   }, [defaultEndTime, defaultStartTime, initialEndDate, initialStartDate, request, reset, user?.id]);
@@ -256,16 +251,6 @@ export default function RequestFormDialog({
                 type="time"
                 {...register("startTime")}
               />
-              <div className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  id="halfDayStart"
-                  checked={watch("isHalfDayStart")}
-                  onCheckedChange={(checked) => setValue("isHalfDayStart", checked as boolean)}
-                />
-                <Label htmlFor="halfDayStart" className="font-normal">
-                  Poldeň (začiatok)
-                </Label>
-              </div>
             </div>
             <div className="space-y-2">
               <Label className={isSameDay ? "text-foreground" : undefined}>Odchod</Label>
@@ -274,16 +259,6 @@ export default function RequestFormDialog({
                 type="time"
                 {...register("endTime")}
               />
-              <div className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  id="halfDayEnd"
-                  checked={watch("isHalfDayEnd")}
-                  onCheckedChange={(checked) => setValue("isHalfDayEnd", checked as boolean)}
-                />
-                <Label htmlFor="halfDayEnd" className="font-normal">
-                  Poldeň (koniec)
-                </Label>
-              </div>
             </div>
           </div>
           {holidaysInRange.length > 0 && (

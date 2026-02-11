@@ -19,12 +19,12 @@ export const cancel = api(
     const request = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -76,12 +76,12 @@ export const cancel = api(
     const updated = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -140,3 +140,5 @@ export const cancel = api(
     return updated!;
   }
 );
+
+

@@ -81,8 +81,6 @@ model LeaveRequest {
   endDate        DateTime    @map("end_date")
   startTime      DateTime?   @map("start_time") @db.Time
   endTime        DateTime?   @map("end_time") @db.Time
-  isHalfDayStart Boolean     @default(false) @map("is_half_day_start")
-  isHalfDayEnd   Boolean     @default(false) @map("is_half_day_end")
   status         LeaveStatus @default(DRAFT)
   reason         String?
   managerComment String?     @map("manager_comment")

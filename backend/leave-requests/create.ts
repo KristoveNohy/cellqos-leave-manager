@@ -14,8 +14,6 @@ interface CreateLeaveRequestRequest {
   endDate: string;
   startTime?: string | null;
   endTime?: string | null;
-  isHalfDayStart?: boolean;
-  isHalfDayEnd?: boolean;
   reason?: string;
 }
 
@@ -41,8 +39,6 @@ export const create = api(
     const computedHours = computeWorkingHours(
       req.startDate,
       req.endDate,
-      req.isHalfDayStart || false,
-      req.isHalfDayEnd || false,
       holidayDates,
       req.startTime || null,
       req.endTime || null
@@ -59,7 +55,6 @@ export const create = api(
     const result = await db.queryRow<{ id: number }>`
       INSERT INTO leave_requests (
         user_id, type, start_date, end_date, start_time, end_time,
-        is_half_day_start, is_half_day_end,
         reason, computed_hours, status,
         created_at, updated_at
       ) VALUES (
@@ -69,8 +64,6 @@ export const create = api(
         ${req.endDate},
         ${req.startTime || null},
         ${req.endTime || null},
-        ${req.isHalfDayStart || false},
-        ${req.isHalfDayEnd || false},
         ${req.reason || null},
         ${computedHours},
         'DRAFT',
@@ -83,12 +76,10 @@ export const create = api(
     const leaveRequest = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -112,3 +103,4 @@ export const create = api(
     return leaveRequest!;
   }
 );
+

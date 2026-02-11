@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
+import { formatRequestRange } from "@/lib/requestDateTime";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,34 +13,10 @@ type NotificationWithDates = Notification & {
   payloadJson: any;
 };
 
-function formatDateTime(date?: string, time?: string) {
-  if (!date) {
-    return "?";
-  }
-  if (!time) {
-    return date;
-  }
-  return `${date} ${time}`;
-}
-
-function formatRequestRange(payload: any) {
-  const start = formatDateTime(payload.startDate, payload.startTime);
-  const end = formatDateTime(payload.endDate, payload.endTime);
-  return `${start} – ${end}`;
-}
-
-function formatTimeRange(payload: any) {
-  if (!payload.startTime && !payload.endTime) {
-    return null;
-  }
-  return `${payload.startTime ?? "?"} – ${payload.endTime ?? "?"}`;
-}
-
 function getNotificationContent(notification: NotificationWithDates) {
   const payload = notification.payloadJson ?? {};
-  const range = formatRequestRange(payload);
-  const timeRange = formatTimeRange(payload);
-  const rangeWithTime = timeRange ? `${range} • ${timeRange}` : range;
+  const range = formatRequestRange(payload) || "?";
+  const rangeWithTime = range;
 
   switch (notification.type) {
     case "NEW_PENDING_REQUEST":
