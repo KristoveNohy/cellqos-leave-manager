@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
 import { formatLeaveHours } from "@/lib/leaveFormat";
+import { formatRequestRange } from "@/lib/requestDateTime";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -213,7 +214,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
 
                 <div className="text-sm text-muted-foreground space-y-1">
                   <div>
-                    {request.startDate} – {request.endDate} ({formatLeaveHours(request.computedHours)})
+                    {formatRequestRange(request)} ({formatLeaveHours(request.computedHours)})
                   </div>
                   {request.userName && (
                     <div>Žiadateľ: {request.userName}</div>

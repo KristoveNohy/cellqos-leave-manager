@@ -14,11 +14,11 @@
     "@prisma/client": "^6.16.1",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
+    "encore.dev": "^1.53.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.14",
-    "pg": "^8.13.1",
-    "encore.dev": "^1.53.7"
+    "nodemailer": "^8.0.1",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/body-parser": "^1.19.6",

@@ -51,8 +51,6 @@ export interface LeaveRequest {
   endDate: string;
   startTime?: string | null;
   endTime?: string | null;
-  isHalfDayStart: boolean;
-  isHalfDayEnd: boolean;
   status: LeaveStatus;
   reason: string | null;
   managerComment: string | null;

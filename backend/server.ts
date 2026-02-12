@@ -1741,12 +1741,12 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
         u.name as "userName",
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate",
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate",
         lr.start_time::text as "startTime",
         lr.end_time::text as "endTime",
-        lr.is_half_day_start as "isHalfDayStart",
-        lr.is_half_day_end as "isHalfDayEnd",
+        
+        
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
@@ -1815,8 +1815,8 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     endDate,
     startTime,
     endTime,
-    isHalfDayStart,
-    isHalfDayEnd,
+    
+    
     reason,
     userId,
   } = req.body as {
@@ -1825,8 +1825,8 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     endDate: string;
     startTime?: string | null;
     endTime?: string | null;
-    isHalfDayStart?: boolean;
-    isHalfDayEnd?: boolean;
+    
+    
     reason?: string;
     userId?: string;
   };
@@ -1873,8 +1873,6 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   const computedHours = computeWorkingHours(
     startDate,
     endDate,
-    isHalfDayStart ?? false,
-    isHalfDayEnd ?? false,
     holidayDates,
     startTime ?? null,
     endTime ?? null
@@ -1884,10 +1882,9 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     `
       INSERT INTO leave_requests (
         user_id, type, start_date, end_date, start_time, end_time,
-        is_half_day_start, is_half_day_end,
         reason, computed_hours, status,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'DRAFT', NOW(), NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT', NOW(), NOW())
       RETURNING id
     `,
     [
@@ -1897,8 +1894,6 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
       endDate,
       startTime ?? null,
       endTime ?? null,
-      isHalfDayStart ?? false,
-      isHalfDayEnd ?? false,
       reason ?? null,
       computedHours,
     ]
@@ -1908,12 +1903,12 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -1950,8 +1945,8 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     endDate,
     startTime,
     endTime,
-    isHalfDayStart,
-    isHalfDayEnd,
+    
+    
     reason,
     managerComment,
   } = req.body as {
@@ -1960,8 +1955,8 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     endDate?: string;
     startTime?: string | null;
     endTime?: string | null;
-    isHalfDayStart?: boolean;
-    isHalfDayEnd?: boolean;
+    
+    
     reason?: string;
     managerComment?: string;
   };
@@ -1970,12 +1965,12 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate",
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate",
         lr.start_time::text as "startTime",
         lr.end_time::text as "endTime",
-        lr.is_half_day_start as "isHalfDayStart",
-        lr.is_half_day_end as "isHalfDayEnd",
+        
+        
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
@@ -2040,8 +2035,6 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   if (
     startDate ||
     endDate ||
-    isHalfDayStart !== undefined ||
-    isHalfDayEnd !== undefined ||
     startTime !== undefined ||
     endTime !== undefined
   ) {
@@ -2058,8 +2051,6 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     computedHours = computeWorkingHours(
       newStartDate,
       newEndDate,
-      isHalfDayStart ?? before.isHalfDayStart,
-      isHalfDayEnd ?? before.isHalfDayEnd,
       holidayDates,
       startTime ?? before.startTime,
       endTime ?? before.endTime
@@ -2089,14 +2080,6 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     updates.push(`end_time = $${values.length + 1}`);
     values.push(endTime || null);
   }
-  if (isHalfDayStart !== undefined) {
-    updates.push(`is_half_day_start = $${values.length + 1}`);
-    values.push(isHalfDayStart);
-  }
-  if (isHalfDayEnd !== undefined) {
-    updates.push(`is_half_day_end = $${values.length + 1}`);
-    values.push(isHalfDayEnd);
-  }
   if (reason !== undefined) {
     updates.push(`reason = $${values.length + 1}`);
     values.push(reason || null);
@@ -2120,12 +2103,12 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -2185,12 +2168,12 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate",
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate",
         lr.start_time::text as "startTime",
         lr.end_time::text as "endTime",
-        lr.is_half_day_start as "isHalfDayStart",
-        lr.is_half_day_end as "isHalfDayEnd",
+        
+        
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
@@ -2243,12 +2226,12 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate",
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate",
         lr.start_time::text as "startTime",
         lr.end_time::text as "endTime",
-        lr.is_half_day_start as "isHalfDayStart",
-        lr.is_half_day_end as "isHalfDayEnd",
+        
+        
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
@@ -2314,12 +2297,12 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -2387,12 +2370,12 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate",
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate",
         lr.start_time::text as "startTime",
         lr.end_time::text as "endTime",
-        lr.is_half_day_start as "isHalfDayStart",
-        lr.is_half_day_end as "isHalfDayEnd",
+        
+        
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
@@ -2472,12 +2455,12 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -2532,12 +2515,12 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -2586,12 +2569,12 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -2644,12 +2627,12 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -2696,12 +2679,12 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -2811,12 +2794,12 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const query = `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate",
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate",
         lr.start_time::text as "startTime",
         lr.end_time::text as "endTime",
-        lr.is_half_day_start as "isHalfDayStart",
-        lr.is_half_day_end as "isHalfDayEnd",
+        
+        
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
@@ -3314,8 +3297,8 @@ app.get("/stats/calendar", asyncHandler(async (req, res) => {
         lr.user_id as "memberId",
         u.name as "memberName",
         lr.type,
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate"
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate"
       FROM leave_requests lr
       JOIN users u ON lr.user_id = u.id
       WHERE ${conditions.join(" AND ")}
@@ -3831,3 +3814,5 @@ startServer().catch((err) => {
   console.error("Failed to start server", err);
   process.exit(1);
 });
+
+

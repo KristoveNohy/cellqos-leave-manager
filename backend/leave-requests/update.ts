@@ -15,8 +15,6 @@ interface UpdateLeaveRequestParams {
   endDate?: string;
   startTime?: string | null;
   endTime?: string | null;
-  isHalfDayStart?: boolean;
-  isHalfDayEnd?: boolean;
   reason?: string;
   managerComment?: string;
 }
@@ -31,8 +29,6 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       endDate,
       startTime,
       endTime,
-      isHalfDayStart,
-      isHalfDayEnd,
       reason,
       managerComment,
     } = req;
@@ -42,12 +38,10 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     const before = await db.queryRow<LeaveRequest & { teamId: number | null }>`
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -111,8 +105,6 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     if (
       startDate ||
       endDate ||
-      isHalfDayStart !== undefined ||
-      isHalfDayEnd !== undefined ||
       startTime !== undefined ||
       endTime !== undefined
     ) {
@@ -128,8 +120,6 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       computedHours = computeWorkingHours(
         newStartDate,
         newEndDate,
-        isHalfDayStart ?? before.isHalfDayStart,
-        isHalfDayEnd ?? before.isHalfDayEnd,
         holidayDates,
         startTime ?? before.startTime,
         endTime ?? before.endTime
@@ -169,14 +159,6 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
       updates.push(`end_time = $${values.length + 1}`);
       values.push(endTime || null);
     }
-    if (isHalfDayStart !== undefined) {
-      updates.push(`is_half_day_start = $${values.length + 1}`);
-      values.push(isHalfDayStart);
-    }
-    if (isHalfDayEnd !== undefined) {
-      updates.push(`is_half_day_end = $${values.length + 1}`);
-      values.push(isHalfDayEnd);
-    }
     if (reason !== undefined) {
       updates.push(`reason = $${values.length + 1}`);
       values.push(reason || null);
@@ -201,12 +183,10 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     const after = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -250,3 +230,4 @@ export const update = api<UpdateLeaveRequestParams, LeaveRequest>(
     return after!;
   }
 );
+

@@ -23,12 +23,12 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
     const request = await db.queryRow<LeaveRequest & { teamId: number | null }>`
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::text as "startDate",
-        lr.end_date::text as "endDate",
+        lr.start_date::date::text as "startDate",
+        lr.end_date::date::text as "endDate",
         lr.start_time::text as "startTime",
         lr.end_time::text as "endTime",
-        lr.is_half_day_start as "isHalfDayStart",
-        lr.is_half_day_end as "isHalfDayEnd",
+        
+        
         lr.status, lr.reason, lr.manager_comment as "managerComment",
         lr.approved_by as "approvedBy",
         lr.approved_at as "approvedAt",
@@ -112,12 +112,12 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
     const updated = await db.queryRow<LeaveRequest>`
       SELECT 
         id, user_id as "userId", type,
-        start_date::text as "startDate",
-        end_date::text as "endDate",
+        start_date::date::text as "startDate",
+        end_date::date::text as "endDate",
         start_time::text as "startTime",
         end_time::text as "endTime",
-        is_half_day_start as "isHalfDayStart",
-        is_half_day_end as "isHalfDayEnd",
+        
+        
         status, reason, manager_comment as "managerComment",
         approved_by as "approvedBy",
         approved_at as "approvedAt",
@@ -158,3 +158,5 @@ export const approve = api<ApproveLeaveRequestParams, LeaveRequest>(
     return updated!;
   }
 );
+
+

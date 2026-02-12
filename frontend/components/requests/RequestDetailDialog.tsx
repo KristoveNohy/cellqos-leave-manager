@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useBackend } from "@/lib/backend";
 import { useAuth } from "@/lib/auth";
 import { formatLeaveHours } from "@/lib/leaveFormat";
+import { formatRequestDateTime } from "@/lib/requestDateTime";
 import {
   Dialog,
   DialogContent,
@@ -37,24 +38,8 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   const isManager = user?.role === "MANAGER" || user?.role === "ADMIN";
   const { toast } = useToast();
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const formatDateTime = (dateValue?: string | null, timeValue?: string | null) => {
-    if (!dateValue) {
-      return "";
-    }
-
-    const datePart = dateValue.slice(0, 10);
-    const timePart = timeValue
-      ? timeValue.length === 5
-        ? `${timeValue}:00`
-        : timeValue.slice(0, 8)
-      : dateValue.length >= 19
-        ? dateValue.slice(11, 19)
-        : "00:00:00";
-
-    return `${datePart} ${timePart}`;
-  };
-  const startDateLabel = formatDateTime(request.startDate, request.startTime);
-  const endDateLabel = formatDateTime(request.endDate, request.endTime);
+  const startDateLabel = formatRequestDateTime(request.startDate, request.startTime);
+  const endDateLabel = formatRequestDateTime(request.endDate, request.endTime);
   const startTimeLabel = request.startTime ? request.startTime.slice(0, 5) : null;
   const endTimeLabel = request.endTime ? request.endTime.slice(0, 5) : null;
   const timeRangeLabel =
@@ -170,8 +155,8 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
   const formatHistoryEntry = (entry: AuditLogEntry) => {
     const before = entry.beforeJson ?? {};
     const after = entry.afterJson ?? {};
-    const startDate = formatDateTime(after.startDate ?? before.startDate, after.startTime ?? before.startTime);
-    const endDate = formatDateTime(after.endDate ?? before.endDate, after.endTime ?? before.endTime);
+    const startDate = formatRequestDateTime(after.startDate ?? before.startDate, after.startTime ?? before.startTime);
+    const endDate = formatRequestDateTime(after.endDate ?? before.endDate, after.endTime ?? before.endTime);
     const beforeStatus = before.status;
     const afterStatus = after.status;
     const statusChange =
@@ -225,9 +210,6 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
               <div className="flex flex-wrap items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span className="break-all">{startDateLabel}</span>
-                {request.isHalfDayStart && (
-                  <Badge variant="outline" className="text-xs">Poldeň</Badge>
-                )}
               </div>
             </div>
             <div>
@@ -235,9 +217,6 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
               <div className="flex flex-wrap items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span className="break-all">{endDateLabel}</span>
-                {request.isHalfDayEnd && (
-                  <Badge variant="outline" className="text-xs">Poldeň</Badge>
-                )}
               </div>
             </div>
           </div>
