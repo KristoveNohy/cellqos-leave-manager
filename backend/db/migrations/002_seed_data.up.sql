@@ -60,7 +60,7 @@ INSERT INTO leave_requests (
 ) VALUES
   -- Anna's approved vacation
   ('user_anna_placeholder', 'ANNUAL_LEAVE', '2024-12-23', '2024-12-27', 
-   'APPROVED', 'Christmas vacation', 24, 'user_manager_placeholder', NOW() - INTERVAL '2 days'),
+   'APPROVED', 'Christmas vacation', 24, 'user_manager_placeholder', NOW() - INTERVAL 2 DAY),
   
   -- Peter's pending request
   ('user_peter_placeholder', 'ANNUAL_LEAVE', '2025-01-13', '2025-01-17',
@@ -72,8 +72,8 @@ INSERT INTO leave_requests (
   
   -- Anna's half-day sick leave
   ('user_anna_placeholder', 'SICK_LEAVE', '2024-12-15', '2024-12-15',
-   'APPROVED', 'Doctor appointment', 4, 'user_manager_placeholder', NOW() - INTERVAL '5 days'),
+   'APPROVED', 'Doctor appointment', 4, 'user_manager_placeholder', NOW() - INTERVAL 5 DAY),
   
   -- Peter's rejected request (overlapping with team limit)
   ('user_peter_placeholder', 'ANNUAL_LEAVE', '2024-12-23', '2024-12-27',
-   'REJECTED', 'Holiday season', 24, 'user_manager_placeholder', NOW() - INTERVAL '3 days');
+   'REJECTED', 'Holiday season', 24, 'user_manager_placeholder', NOW() - INTERVAL 3 DAY);

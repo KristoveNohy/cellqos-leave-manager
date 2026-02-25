@@ -27,14 +27,10 @@ Set the JWT secret and database URL for the API server:
 
 ```bash
 export JWT_SECRET="change-me"
-export DATABASE_URL="postgresql://user:password@localhost:5432/cellqos"
+export DATABASE_URL="mysql://user:password@localhost:3306/cellqos"
 ```
 
-Ensure the database has `pgcrypto` enabled for password hashing:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-```
+Ensure the `cellqos` database exists and the user has privileges to create tables.
 
 Generate the Prisma client, run migrations, and seed data:
 

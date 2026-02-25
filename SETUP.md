@@ -27,7 +27,7 @@ Prisma schéma sa nachádza v `backend/prisma/schema.prisma`. Pred prvým spuste
 
 ```bash
 export JWT_SECRET="change-me"
-export DATABASE_URL="postgresql://user:password@localhost:5432/cellqos"
+export DATABASE_URL="mysql://user:password@localhost:3306/cellqos"
 ```
 
 Ak chcete posielať notifikácie emailom cez SMTP, nastavte aj tieto premenne:
@@ -41,11 +41,7 @@ export SMTP_FROM="Leave Manager <no-reply@example.com>"
 # voliteľne: export SMTP_SECURE="true"
 ```
 
-Následne skontrolujte, že databáza má zapnuté rozšírenie `pgcrypto` (kvôli heslám):
-
-```sql
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-```
+Uistite sa, ze databaza `cellqos` existuje a pouzivatel ma prava na vytvaranie tabuliek.
 
 Migrácie a seed spustite v `backend`:
 

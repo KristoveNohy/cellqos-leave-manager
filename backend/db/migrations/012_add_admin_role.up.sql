@@ -1,1 +1,1 @@
-ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'ADMIN';
+-- No-op for MySQL: admin role is included in the ENUM definition.

@@ -4,6 +4,7 @@ import db from "../db";
 import { signAuthToken } from "./jwt";
 import { validateEmail } from "../shared/validation";
 import type { UserRole } from "../shared/types";
+import bcrypt from "bcryptjs";
 
 interface RegisterRequest {
   email: string;
@@ -37,12 +38,8 @@ export const register = api(
     const userId = randomUUID();
     const role: UserRole = "EMPLOYEE";
 
-    const user = await db.queryRow<{
-      id: string;
-      email: string;
-      name: string;
-      role: UserRole;
-    }>`
+    const passwordHash = await bcrypt.hash(req.password, 10);
+    await db.exec`
       INSERT INTO users (id, email, name, role, team_id, password_hash)
       VALUES (
         ${userId},
@@ -50,9 +47,19 @@ export const register = api(
         ${req.name},
         ${role},
         ${req.teamId ?? null},
-        crypt(${req.password}, gen_salt('bf'))
+        ${passwordHash}
       )
-      RETURNING id, email, name, role
+    `;
+
+    const user = await db.queryRow<{
+      id: string;
+      email: string;
+      name: string;
+      role: UserRole;
+    }>`
+      SELECT id, email, name, role
+      FROM users
+      WHERE id = ${userId}
     `;
 
     const token = signAuthToken({

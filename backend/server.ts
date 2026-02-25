@@ -1,7 +1,8 @@
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
-import { Pool, type PoolClient, type QueryResultRow } from "pg";
+import { createPool, type PoolConnection, type RowDataPacket, type ResultSetHeader } from "mysql2/promise";
+import bcrypt from "bcryptjs";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { randomBytes, createHash, randomUUID } from "crypto";
 import { computeWorkingHours, parseDate, formatDate, addDays, HOURS_PER_WORKDAY } from "./shared/date-utils";
@@ -38,7 +39,28 @@ import type {
 import { HttpError } from "./shared/http-error";
 
 const app = express();
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is required");
+}
+const parsedDatabaseUrl = new URL(databaseUrl);
+const pool = createPool({
+  host: parsedDatabaseUrl.hostname,
+  port: parsedDatabaseUrl.port ? Number(parsedDatabaseUrl.port) : 3306,
+  user: decodeURIComponent(parsedDatabaseUrl.username),
+  password: decodeURIComponent(parsedDatabaseUrl.password),
+  database: parsedDatabaseUrl.pathname.replace(/^\//, ""),
+  connectionLimit: 10,
+  dateStrings: true,
+  decimalNumbers: true,
+  supportBigNumbers: true,
+  typeCast: (field, next) => {
+    if (field.type === "TINY" && field.length === 1) {
+      return field.string() === "1";
+    }
+    return next();
+  },
+});
 const jwtSecret = process.env.JWT_SECRET;
 
 if (!jwtSecret) {
@@ -100,14 +122,50 @@ function signAuthToken(
   return jwt.sign(payload, jwtSecretValue, options);
 }
 
-async function queryRow<T extends QueryResultRow>(text: string, values: any[] = []): Promise<T | null> {
-  const result = await pool.query<T>(text, values);
-  return result.rows[0] ?? null;
+type QueryExecutor = {
+  execute: (sql: string, params: any[]) => Promise<[any, any]>;
+};
+
+function prepareSql(text: string, values: any[]) {
+  if (values.length === 0) {
+    return { sql: text, params: [] as any[] };
+  }
+  const params: any[] = [];
+  const sql = text.replace(/\$(\d+)/g, (_match, index) => {
+    const valueIndex = Number(index) - 1;
+    params.push(valueIndex < values.length ? values[valueIndex] : null);
+    return "?";
+  });
+  return { sql, params };
 }
 
-async function queryRows<T extends QueryResultRow>(text: string, values: any[] = []): Promise<T[]> {
-  const result = await pool.query<T>(text, values);
-  return result.rows;
+async function runQuery<T extends RowDataPacket>(
+  text: string,
+  values: any[] = [],
+  executor: QueryExecutor = pool
+): Promise<T[]> {
+  const { sql, params } = prepareSql(text, values);
+  const [rows] = await executor.execute<RowDataPacket[]>(sql, params);
+  return rows as T[];
+}
+
+async function runExec(
+  text: string,
+  values: any[] = [],
+  executor: QueryExecutor = pool
+): Promise<ResultSetHeader> {
+  const { sql, params } = prepareSql(text, values);
+  const [result] = await executor.execute<ResultSetHeader>(sql, params);
+  return result;
+}
+
+async function queryRow<T extends RowDataPacket>(text: string, values: any[] = []): Promise<T | null> {
+  const rows = await runQuery<T>(text, values);
+  return rows[0] ?? null;
+}
+
+async function queryRows<T extends RowDataPacket>(text: string, values: any[] = []): Promise<T[]> {
+  return runQuery<T>(text, values);
 }
 
 async function createAuditLog(
@@ -115,7 +173,7 @@ async function createAuditLog(
   action: string,
   details: Record<string, unknown>
 ): Promise<void> {
-  await pool.query(
+  await runExec(
     `
       INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, after_json)
       VALUES ($1, 'database', 'full', $2, $3)
@@ -132,7 +190,7 @@ async function createEntityAuditLog(
   before: unknown | null,
   after: unknown | null
 ): Promise<void> {
-  await pool.query(
+  await runExec(
     `
       INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, before_json, after_json)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -203,12 +261,11 @@ async function columnExists(table: string, column: string): Promise<boolean> {
 
   const result = await queryRow<{ exists: boolean }>(
     `
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = $1
-          AND column_name = $2
-      ) as "exists"
+      SELECT COUNT(*) > 0 as "exists"
+      FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = $1
+        AND column_name = $2
     `,
     [table, column]
   );
@@ -337,9 +394,9 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number)
     manualLeaveAllowanceHours: number | null;
   }>(
     `
-      SELECT birth_date::text as "birthDate",
+      SELECT DATE_FORMAT(birth_date, '%Y-%m-%d') as "birthDate",
         has_child as "hasChild",
-        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
+        ${columnSupport.employmentStartDate ? `DATE_FORMAT(employment_start_date, '%Y-%m-%d')` : "NULL"} as "employmentStartDate",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours"
       FROM users
       WHERE id = $1
@@ -431,13 +488,44 @@ function parseBooleanFlag(value: unknown): boolean {
   return value === "true" || value === "1" || value === true;
 }
 
+function appendInClause(
+  column: string,
+  items: Array<string | number>,
+  values: any[],
+  conditions: string[]
+): void {
+  if (items.length === 0) {
+    return;
+  }
+  const placeholders = items.map((item) => {
+    values.push(item);
+    return `$${values.length}`;
+  });
+  conditions.push(`${column} IN (${placeholders.join(", ")})`);
+}
+
+function appendInClauseWithOffset(
+  column: string,
+  items: Array<string | number>,
+  values: any[],
+  conditions: string[],
+  startIndex: number
+): void {
+  if (items.length === 0) {
+    return;
+  }
+  const placeholders = items.map((_item, index) => `$${startIndex + values.length + index}`);
+  values.push(...items);
+  conditions.push(`${column} IN (${placeholders.join(", ")})`);
+}
+
 async function ensureSlovakHolidaysForYear(year: number, actorUserId: string): Promise<void> {
   const seeds = getSlovakHolidaySeeds(year);
   const existingRows = await queryRows<{ date: string }>(
     `
-      SELECT date::date::text as date
+      SELECT DATE_FORMAT(date, '%Y-%m-%d') as date
       FROM holidays
-      WHERE EXTRACT(YEAR FROM date) = $1
+      WHERE YEAR(date) = $1
     `,
     [year]
   );
@@ -448,18 +536,28 @@ async function ensureSlovakHolidaysForYear(year: number, actorUserId: string): P
       continue;
     }
 
-    const holiday = await queryRow<Holiday>(
+    const result = await runExec(
       `
-        INSERT INTO holidays (date, name, is_company_holiday, is_active)
+        INSERT IGNORE INTO holidays (date, name, is_company_holiday, is_active)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT (date) DO NOTHING
-        RETURNING id, date::date::text as date, name,
-          is_company_holiday as "isCompanyHoliday",
-          is_active as "isActive",
-          created_at as "createdAt"
       `,
       [seed.date, seed.name, seed.isCompanyHoliday, true]
     );
+    const holiday = result.insertId
+      ? await queryRow<Holiday>(
+          `
+            SELECT id,
+              DATE_FORMAT(date, '%Y-%m-%d') as date,
+              name,
+              is_company_holiday as "isCompanyHoliday",
+              is_active as "isActive",
+              created_at as "createdAt"
+            FROM holidays
+            WHERE id = $1
+          `,
+          [result.insertId]
+        )
+      : null;
 
     if (holiday) {
       await createEntityAuditLog(
@@ -480,17 +578,16 @@ async function hasNotificationsDedupeKey(): Promise<boolean> {
   if (notificationsDedupeKeySupported !== null) {
     return notificationsDedupeKeySupported;
   }
-  const result = await pool.query<{ exists: boolean }>(
+  const result = await queryRow<{ exists: number }>(
     `
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'notifications'
-          AND column_name = 'dedupe_key'
-      ) as "exists"
+      SELECT COUNT(*) > 0 as "exists"
+      FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'notifications'
+        AND column_name = 'dedupe_key'
     `
   );
-  notificationsDedupeKeySupported = result.rows[0]?.exists ?? false;
+  notificationsDedupeKeySupported = Boolean(result?.exists ?? false);
   return notificationsDedupeKeySupported;
 }
 
@@ -503,26 +600,23 @@ async function createNotification(
   const supportsDedupeKey = await hasNotificationsDedupeKey();
   let notificationId: number | null = null;
   if (supportsDedupeKey) {
-    const inserted = await queryRow<{ id: number }>(
+    const result = await runExec(
       `
-        INSERT INTO notifications (user_id, type, payload_json, dedupe_key)
+        INSERT IGNORE INTO notifications (user_id, type, payload_json, dedupe_key)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT (dedupe_key) DO NOTHING
-        RETURNING id
       `,
       [userId, type, JSON.stringify(payload), dedupeKey ?? null]
     );
-    notificationId = inserted?.id ?? null;
+    notificationId = result.insertId ? Number(result.insertId) : null;
   } else {
-    const inserted = await queryRow<{ id: number }>(
+    const result = await runExec(
       `
         INSERT INTO notifications (user_id, type, payload_json)
         VALUES ($1, $2, $3)
-        RETURNING id
       `,
       [userId, type, JSON.stringify(payload)]
     );
-    notificationId = inserted?.id ?? null;
+    notificationId = result.insertId ? Number(result.insertId) : null;
   }
 
   if (!notificationId) {
@@ -550,7 +644,7 @@ async function createNotification(
   });
 
   if (sent) {
-    await pool.query(
+    await runExec(
       `
         UPDATE notifications
         SET sent_at = NOW()
@@ -581,13 +675,12 @@ async function applyLeaveBalanceOverride(
   const usedHours = Number(booked?.total ?? 0);
   const allowanceBefore = await getAnnualLeaveAllowanceHoursForUser(userId, currentYear);
 
-  await pool.query(
+  await runExec(
     `
       INSERT INTO leave_balances (user_id, year, allowance_hours, used_hours, created_at, updated_at)
       VALUES ($1, $2, $3, $4, NOW(), NOW())
-      ON CONFLICT (user_id, year)
-      DO UPDATE SET allowance_hours = EXCLUDED.allowance_hours,
-        used_hours = EXCLUDED.used_hours,
+      ON DUPLICATE KEY UPDATE allowance_hours = VALUES(allowance_hours),
+        used_hours = VALUES(used_hours),
         updated_at = NOW()
     `,
     [userId, currentYear, usedHours + overrideHours, usedHours]
@@ -657,7 +750,7 @@ type DatabaseBackup = {
 };
 
 async function insertRows(
-  client: PoolClient,
+  client: PoolConnection,
   table: string,
   rows: Record<string, unknown>[]
 ): Promise<void> {
@@ -683,37 +776,43 @@ async function insertRows(
     .join(", ");
 
   const query = `INSERT INTO ${table} (${columns.join(", ")}) VALUES ${placeholders}`;
-  await client.query(query, values);
+  await runExec(query, values, client);
 }
 
-async function resetSerialSequence(client: PoolClient, table: string, column: string): Promise<void> {
-  await client.query(
-    `
-      SELECT setval(
-        pg_get_serial_sequence('${table}', '${column}'),
-        COALESCE(MAX(${column}), 1),
-        MAX(${column}) IS NOT NULL
-      )
-      FROM ${table}
-    `
+async function resetSerialSequence(client: PoolConnection, table: string, column: string): Promise<void> {
+  const rows = await runQuery<{ maxId: number | null }>(
+    `SELECT MAX(${column}) as maxId FROM ${table}`,
+    [],
+    client
   );
+  const maxId = rows[0]?.maxId ?? 0;
+  const nextId = Number(maxId) + 1;
+  await runExec(`ALTER TABLE ${table} AUTO_INCREMENT = ${nextId}`, [], client);
 }
 
 app.post("/auth/login", asyncHandler(async (req, res) => {
   const { email, password } = req.body as { email: string; password: string };
-  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole; mustChangePassword: boolean }>(
+  const user = await queryRow<{
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    mustChangePassword: boolean;
+    passwordHash: string | null;
+  }>(
     `
-      SELECT id, email, name, role, must_change_password as "mustChangePassword"
+      SELECT id, email, name, role,
+        must_change_password as "mustChangePassword",
+        password_hash as "passwordHash"
       FROM users
       WHERE email = $1
         AND is_active = true
         AND password_hash IS NOT NULL
-        AND password_hash = crypt($2, password_hash)
     `,
-    [email, password]
+    [email]
   );
 
-  if (!user) {
+  if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     throw new HttpError(401, "Invalid email or password");
   }
 
@@ -739,13 +838,24 @@ app.post("/auth/register", asyncHandler(async (req, res) => {
   const userId = randomUUID();
   const role: UserRole = "EMPLOYEE";
 
-  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole }>(
+  const passwordHash = await bcrypt.hash(password, 10);
+  const result = await runExec(
     `
       INSERT INTO users (id, email, name, role, team_id, password_hash)
-      VALUES ($1, $2, $3, $4, $5, crypt($6, gen_salt('bf')))
-      RETURNING id, email, name, role
+      VALUES ($1, $2, $3, $4, $5, $6)
     `,
-    [userId, email, name, role, teamId ?? null, password]
+    [userId, email, name, role, teamId ?? null, passwordHash]
+  );
+  if (!result.affectedRows) {
+    throw new HttpError(500, "Registration failed");
+  }
+  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole }>(
+    `
+      SELECT id, email, name, role
+      FROM users
+      WHERE id = $1
+    `,
+    [userId]
   );
 
   if (!user) {
@@ -770,20 +880,30 @@ app.post("/auth/change-password", asyncHandler(async (req, res) => {
     throw new HttpError(400, "Current and new password are required");
   }
 
-  const updated = await queryRow<{ id: string }>(
+  const existing = await queryRow<{ passwordHash: string | null }>(
+    `
+      SELECT password_hash as "passwordHash"
+      FROM users
+      WHERE id = $1
+        AND password_hash IS NOT NULL
+    `,
+    [auth.userID]
+  );
+  if (!existing?.passwordHash || !(await bcrypt.compare(currentPassword, existing.passwordHash))) {
+    throw new HttpError(400, "Current password is incorrect");
+  }
+  const newHash = await bcrypt.hash(newPassword, 10);
+  const updated = await runExec(
     `
       UPDATE users
-      SET password_hash = crypt($1, gen_salt('bf')),
+      SET password_hash = $1,
           must_change_password = false
       WHERE id = $2
-        AND password_hash IS NOT NULL
-        AND password_hash = crypt($3, password_hash)
-      RETURNING id
     `,
-    [newPassword, auth.userID, currentPassword]
+    [newHash, auth.userID]
   );
 
-  if (!updated) {
+  if (!updated.affectedRows) {
     throw new HttpError(400, "Current password is incorrect");
   }
 
@@ -804,11 +924,11 @@ app.post("/auth/magic-link", asyncHandler(async (req, res) => {
   const token = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
-  await pool.query(
+  await runExec(
     `
       UPDATE users
       SET magic_link_token_hash = $1,
-          magic_link_expires_at = NOW() + INTERVAL '15 minutes'
+          magic_link_expires_at = NOW() + INTERVAL 15 MINUTE
       WHERE id = $2
     `,
     [tokenHash, user.id]
@@ -838,7 +958,7 @@ app.post("/auth/magic-link/verify", asyncHandler(async (req, res) => {
     throw new HttpError(401, "Invalid or expired magic link");
   }
 
-  await pool.query(
+  await runExec(
     `
       UPDATE users
       SET magic_link_token_hash = NULL,
@@ -865,8 +985,8 @@ app.get("/users/me", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
-        birth_date::text as "birthDate",
+        ${columnSupport.employmentStartDate ? `DATE_FORMAT(employment_start_date, '%Y-%m-%d')` : "NULL"} as "employmentStartDate",
+        DATE_FORMAT(birth_date, '%Y-%m-%d') as "birthDate",
         has_child as "hasChild",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         is_active as "isActive",
@@ -936,11 +1056,11 @@ app.get("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
-        birth_date::text as "birthDate",
+        ${columnSupport.employmentStartDate ? `DATE_FORMAT(employment_start_date, '%Y-%m-%d')` : "NULL"} as "employmentStartDate",
+        DATE_FORMAT(birth_date, '%Y-%m-%d') as "birthDate",
         has_child as "hasChild",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
-        NULL::double precision as "remainingLeaveHours",
+        NULL as "remainingLeaveHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1007,10 +1127,7 @@ app.post("/users", asyncHandler(async (req, res) => {
   const userRole: UserRole = role ?? "EMPLOYEE";
   const resolvedTeamId = userRole === "ADMIN" ? null : teamId ?? null;
   const defaultPassword = "Password123!";
-  const passwordRow = await queryRow<{ hash: string }>(
-    "SELECT crypt($1, gen_salt('bf')) as hash",
-    [defaultPassword]
-  );
+  const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
   if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
     if (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0) {
@@ -1040,7 +1157,7 @@ app.post("/users", asyncHandler(async (req, res) => {
       resolvedTeamId,
       birthDate ?? null,
       hasChild ?? false,
-      passwordRow?.hash ?? null,
+      passwordHash,
       true,
     ];
 
@@ -1052,7 +1169,7 @@ app.post("/users", asyncHandler(async (req, res) => {
     const placeholders: string[] = values.map((_value, index) => `$${index + 1}`);
     placeholders.push("NOW()", "NOW()");
 
-    await pool.query(
+    await runExec(
       `
         INSERT INTO users (${columns.join(", ")})
         VALUES (${placeholders.join(", ")})
@@ -1060,7 +1177,7 @@ app.post("/users", asyncHandler(async (req, res) => {
       values
     );
   } catch (error) {
-    if (error instanceof Error && error.message.includes("duplicate key")) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY") {
       throw new HttpError(409, "User already exists");
     }
     throw error;
@@ -1070,8 +1187,8 @@ app.post("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
-        birth_date::text as "birthDate",
+        ${columnSupport.employmentStartDate ? `DATE_FORMAT(employment_start_date, '%Y-%m-%d')` : "NULL"} as "employmentStartDate",
+        DATE_FORMAT(birth_date, '%Y-%m-%d') as "birthDate",
         has_child as "hasChild",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         is_active as "isActive",
@@ -1167,7 +1284,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   if (updates.length > 0) {
     values.push(id);
     updates.push(`updated_at = NOW()`);
-    await pool.query(
+    await runExec(
       `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length}`,
       values
     );
@@ -1177,8 +1294,8 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
-        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
-        birth_date::text as "birthDate",
+        ${columnSupport.employmentStartDate ? `DATE_FORMAT(employment_start_date, '%Y-%m-%d')` : "NULL"} as "employmentStartDate",
+        DATE_FORMAT(birth_date, '%Y-%m-%d') as "birthDate",
         has_child as "hasChild",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         is_active as "isActive",
@@ -1222,15 +1339,16 @@ app.post("/users/:id/reset-password", asyncHandler(async (req, res) => {
   }
 
   const defaultPassword = "Password123!";
+  const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
-  await pool.query(
+  await runExec(
     `
       UPDATE users
-      SET password_hash = crypt($1, gen_salt('bf')),
+      SET password_hash = $1,
           must_change_password = true
       WHERE id = $2
     `,
-    [defaultPassword, id]
+    [passwordHash, id]
   );
 
   const adminUser = await queryRow<{ name: string; email: string }>(
@@ -1287,7 +1405,7 @@ app.delete("/users/:id", asyncHandler(async (req, res) => {
     throw new HttpError(409, "Cannot delete user with related data. Remove related records first.");
   }
 
-  await pool.query("DELETE FROM users WHERE id = $1", [id]);
+  await runExec("DELETE FROM users WHERE id = $1", [id]);
   await createEntityAuditLog(auth.userID, "users", id, "DELETE", before, null);
 
   res.json({ ok: true });
@@ -1322,25 +1440,22 @@ app.post("/teams", asyncHandler(async (req, res) => {
     throw new HttpError(400, "Team name is required");
   }
 
-  let result: { id: number } | null = null;
   try {
-    result = await queryRow<{ id: number }>(
+    const result = await runExec(
       `
         INSERT INTO teams (name, max_concurrent_leaves, created_at, updated_at)
         VALUES ($1, $2, NOW(), NOW())
-        RETURNING id
       `,
       [name, maxConcurrentLeaves ?? null]
     );
+    if (!result.insertId) {
+      throw new HttpError(500, "Team creation failed");
+    }
   } catch (error) {
-    if (error instanceof Error && error.message.includes("duplicate key")) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY") {
       throw new HttpError(409, "Team with this name already exists");
     }
     throw error;
-  }
-
-  if (!result) {
-    throw new HttpError(500, "Team creation failed");
   }
 
   const team = await queryRow<Team>(
@@ -1350,9 +1465,9 @@ app.post("/teams", asyncHandler(async (req, res) => {
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM teams
-      WHERE id = $1
+      WHERE id = LAST_INSERT_ID()
     `,
-    [result.id]
+    []
   );
 
   if (!team) {
@@ -1394,9 +1509,9 @@ app.patch("/teams/:id", asyncHandler(async (req, res) => {
     values.push(id);
     updates.push(`updated_at = NOW()`);
     try {
-      await pool.query(`UPDATE teams SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
+      await runExec(`UPDATE teams SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
     } catch (error) {
-      if (error instanceof Error && error.message.includes("duplicate key")) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY") {
         throw new HttpError(409, "Team with this name already exists");
       }
       throw error;
@@ -1443,7 +1558,7 @@ app.delete("/teams/:id", asyncHandler(async (req, res) => {
     throw new HttpError(409, "Cannot delete team with active users. Reassign users first.");
   }
 
-  await pool.query("DELETE FROM teams WHERE id = $1", [id]);
+  await runExec("DELETE FROM teams WHERE id = $1", [id]);
   await createEntityAuditLog(auth.userID, "teams", id, "DELETE", before, null);
 
   res.json({ ok: true });
@@ -1477,7 +1592,7 @@ app.get("/holidays", asyncHandler(async (req, res) => {
 
   const holidays = await queryRows<Holiday>(
     `
-      SELECT id, date::date::text as date, name,
+      SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date, name,
         is_company_holiday as "isCompanyHoliday",
         is_active as "isActive",
         created_at as "createdAt"
@@ -1515,37 +1630,34 @@ app.post("/holidays", asyncHandler(async (req, res) => {
     throw new HttpError(400, error instanceof Error ? error.message : "Invalid date");
   }
 
-  let result: { id: number } | null = null;
   try {
-    result = await queryRow<{ id: number }>(
+    const result = await runExec(
       `
         INSERT INTO holidays (date, name, is_company_holiday, is_active)
         VALUES ($1, $2, $3, $4)
-        RETURNING id
       `,
       [date, name, isCompanyHoliday ?? true, isActive ?? true]
     );
+    if (!result.insertId) {
+      throw new HttpError(500, "Holiday creation failed");
+    }
   } catch (error) {
-    if (error instanceof Error && error.message.includes("duplicate key")) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY") {
       throw new HttpError(409, "Holiday for this date already exists");
     }
     throw error;
   }
 
-  if (!result) {
-    throw new HttpError(500, "Holiday creation failed");
-  }
-
   const holiday = await queryRow<Holiday>(
     `
-      SELECT id, date::date::text as date, name,
+      SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date, name,
         is_company_holiday as "isCompanyHoliday",
         is_active as "isActive",
         created_at as "createdAt"
       FROM holidays
-      WHERE id = $1
+      WHERE id = LAST_INSERT_ID()
     `,
-    [result.id]
+    []
   );
 
   if (!holiday) {
@@ -1607,12 +1719,12 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
   if (updates.length > 0) {
     values.push(id);
     try {
-      await pool.query(
+      await runExec(
         `UPDATE holidays SET ${updates.join(", ")} WHERE id = $${values.length}`,
         values
       );
     } catch (error) {
-      if (error instanceof Error && error.message.includes("duplicate key")) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ER_DUP_ENTRY") {
         throw new HttpError(409, "Holiday for this date already exists");
       }
       throw error;
@@ -1621,7 +1733,7 @@ app.patch("/holidays/:id", asyncHandler(async (req, res) => {
 
   const holiday = await queryRow<Holiday>(
     `
-      SELECT id, date::date::text as date, name,
+      SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date, name,
         is_company_holiday as "isCompanyHoliday",
         is_active as "isActive",
         created_at as "createdAt"
@@ -1650,7 +1762,7 @@ app.delete("/holidays/:id", asyncHandler(async (req, res) => {
     throw new HttpError(404, "Holiday not found");
   }
 
-  await pool.query("DELETE FROM holidays WHERE id = $1", [id]);
+  await runExec("DELETE FROM holidays WHERE id = $1", [id]);
   await createEntityAuditLog(auth.userID, "holidays", id, "DELETE", before, null);
 
   res.json({ ok: true });
@@ -1715,7 +1827,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   if (type) {
-    conditions.push(`lr.type = $${values.length + 1}::leave_type`);
+    conditions.push(`lr.type = $${values.length + 1}`);
     values.push(type);
   }
 
@@ -1741,10 +1853,10 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
         u.name as "userName",
-        lr.start_date::date::text as "startDate",
-        lr.end_date::date::text as "endDate",
-        lr.start_time::text as "startTime",
-        lr.end_time::text as "endTime",
+        DATE_FORMAT(lr.start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(lr.end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(lr.start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(lr.end_time, '%H:%i:%s') as "endTime",
         
         
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -1862,7 +1974,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
 
   const holidayRows = await queryRows<{ date: string }>(
     `
-      SELECT date::text as date FROM holidays
+      SELECT DATE_FORMAT(date, '%Y-%m-%d') as date FROM holidays
       WHERE date >= $1 AND date <= $2
         AND is_active = true
     `,
@@ -1878,14 +1990,13 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     endTime ?? null
   );
 
-  const result = await queryRow<{ id: number }>(
+  const result = await runExec(
     `
       INSERT INTO leave_requests (
         user_id, type, start_date, end_date, start_time, end_time,
         reason, computed_hours, status,
         created_at, updated_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT', NOW(), NOW())
-      RETURNING id
     `,
     [
       targetUserId,
@@ -1903,10 +2014,10 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -1919,7 +2030,7 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
       FROM leave_requests
       WHERE id = $1
     `,
-    [result?.id]
+    [result.insertId]
   );
 
   await createEntityAuditLog(
@@ -1965,10 +2076,10 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::date::text as "startDate",
-        lr.end_date::date::text as "endDate",
-        lr.start_time::text as "startTime",
-        lr.end_time::text as "endTime",
+        DATE_FORMAT(lr.start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(lr.end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(lr.start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(lr.end_time, '%H:%i:%s') as "endTime",
         
         
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -2040,7 +2151,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   ) {
     const holidayRows = await queryRows<{ date: string }>(
       `
-        SELECT date::text as date FROM holidays
+        SELECT DATE_FORMAT(date, '%Y-%m-%d') as date FROM holidays
         WHERE date >= $1 AND date <= $2
           AND is_active = true
       `,
@@ -2096,17 +2207,17 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
   if (updates.length > 0) {
     values.push(id);
     updates.push("updated_at = NOW()");
-    await pool.query(`UPDATE leave_requests SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
+    await runExec(`UPDATE leave_requests SET ${updates.join(", ")} WHERE id = $${values.length}`, values);
   }
 
   const after = await queryRow<LeaveRequest>(
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -2168,10 +2279,10 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::date::text as "startDate",
-        lr.end_date::date::text as "endDate",
-        lr.start_time::text as "startTime",
-        lr.end_time::text as "endTime",
+        DATE_FORMAT(lr.start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(lr.end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(lr.start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(lr.end_time, '%H:%i:%s') as "endTime",
         
         
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -2203,7 +2314,7 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
     }
   }
 
-  await pool.query("DELETE FROM leave_requests WHERE id = $1", [id]);
+  await runExec("DELETE FROM leave_requests WHERE id = $1", [id]);
 
   await createEntityAuditLog(
     auth.userID,
@@ -2226,10 +2337,10 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::date::text as "startDate",
-        lr.end_date::date::text as "endDate",
-        lr.start_time::text as "startTime",
-        lr.end_time::text as "endTime",
+        DATE_FORMAT(lr.start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(lr.end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(lr.start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(lr.end_time, '%H:%i:%s') as "endTime",
         
         
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -2291,16 +2402,16 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     }
   }
 
-  await pool.query("UPDATE leave_requests SET status = 'PENDING' WHERE id = $1", [id]);
+  await runExec("UPDATE leave_requests SET status = 'PENDING' WHERE id = $1", [id]);
 
   const updated = await queryRow<LeaveRequest>(
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -2370,10 +2481,10 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
     `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::date::text as "startDate",
-        lr.end_date::date::text as "endDate",
-        lr.start_time::text as "startTime",
-        lr.end_time::text as "endTime",
+        DATE_FORMAT(lr.start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(lr.end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(lr.start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(lr.end_time, '%H:%i:%s') as "endTime",
         
         
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -2439,7 +2550,7 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
     }
   }
 
-  await pool.query(
+  await runExec(
     `
       UPDATE leave_requests
       SET status = 'APPROVED',
@@ -2455,10 +2566,10 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -2515,10 +2626,10 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -2553,7 +2664,7 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
     throw new HttpError(409, "Can only reject requests in PENDING status");
   }
 
-  await pool.query(
+  await runExec(
     `
       UPDATE leave_requests
       SET status = 'REJECTED',
@@ -2569,10 +2680,10 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -2627,10 +2738,10 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -2673,16 +2784,16 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     }
   }
 
-  await pool.query("UPDATE leave_requests SET status = 'CANCELLED' WHERE id = $1", [id]);
+  await runExec("UPDATE leave_requests SET status = 'CANCELLED' WHERE id = $1", [id]);
 
   const updated = await queryRow<LeaveRequest>(
     `
       SELECT 
         id, user_id as "userId", type,
-        start_date::date::text as "startDate",
-        end_date::date::text as "endDate",
-        start_time::text as "startTime",
-        end_time::text as "endTime",
+        DATE_FORMAT(start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(end_time, '%H:%i:%s') as "endTime",
         
         
         status, reason, manager_comment as "managerComment",
@@ -2794,10 +2905,10 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const query = `
       SELECT 
         lr.id, lr.user_id as "userId", lr.type,
-        lr.start_date::date::text as "startDate",
-        lr.end_date::date::text as "endDate",
-        lr.start_time::text as "startTime",
-        lr.end_time::text as "endTime",
+        DATE_FORMAT(lr.start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(lr.end_date, '%Y-%m-%d') as "endDate",
+        TIME_FORMAT(lr.start_time, '%H:%i:%s') as "startTime",
+        TIME_FORMAT(lr.end_time, '%H:%i:%s') as "endTime",
         
         
         lr.status, lr.reason, lr.manager_comment as "managerComment",
@@ -2890,13 +3001,11 @@ app.get("/stats/dashboard", asyncHandler(async (req, res) => {
 
   if (scope.members.length > 0) {
     const scopedIds = scope.members.map((member) => member.id);
-    conditions.push(`lr.user_id = ANY($${values.length + 1}::text[])`);
-    values.push(scopedIds);
+    appendInClause("lr.user_id", scopedIds, values, conditions);
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
-    values.push(eventTypes);
+    appendInClause("lr.type", eventTypes, values, conditions);
   }
 
   const totalsRow = await queryRow<{
@@ -2958,7 +3067,7 @@ app.get("/stats/dashboard", asyncHandler(async (req, res) => {
   }>(
     `
       SELECT
-        EXTRACT(MONTH FROM lr.start_date)::int as month,
+        MONTH(lr.start_date) as month,
         COUNT(lr.id) as "totalEvents",
         COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
       FROM leave_requests lr
@@ -3107,12 +3216,11 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
 
     if (scope.members.length > 0) {
       const scopedIds = scope.members.map((member) => member.id);
-      conditions.push(`u.id = ANY($${startIndex + values.length}::text[])`);
-      values.push(scopedIds);
+      appendInClauseWithOffset("u.id", scopedIds, values, conditions, startIndex);
     }
 
     if (search) {
-      conditions.push(`u.name ILIKE $${startIndex + values.length}`);
+      conditions.push(`LOWER(u.name) LIKE LOWER($${startIndex + values.length})`);
       values.push(`%${search}%`);
     }
 
@@ -3127,8 +3235,7 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
   ];
 
   if (eventTypes.length > 0) {
-    leaveConditions.push(`lr.type = ANY($${leaveValues.length + 1}::leave_type[])`);
-    leaveValues.push(eventTypes);
+    appendInClause("lr.type", eventTypes, leaveValues, leaveConditions);
   }
 
   const { conditions: totalConditions, values: totalValues } = buildUserConditions(1);
@@ -3164,7 +3271,7 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
         u.name as "memberName",
         COUNT(lr.id) as "totalEvents",
         COALESCE(SUM(lr.computed_hours), 0) as "totalHours",
-        MAX(lr.end_date)::text as "lastEventDate"
+        DATE_FORMAT(MAX(lr.end_date), '%Y-%m-%d') as "lastEventDate"
       FROM users u
       LEFT JOIN leave_requests lr
         ON u.id = lr.user_id
@@ -3179,28 +3286,30 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
   );
 
   const memberIdsPage = dataRows.map((row) => row.memberId);
-  const typeRows =
-    memberIdsPage.length > 0
-      ? await queryRows<{
-          memberId: string;
-          type: LeaveType;
-          totalEvents: string;
-          totalHours: string;
-        }>(
-          `
-            SELECT
-              lr.user_id as "memberId",
-              lr.type,
-              COUNT(lr.id) as "totalEvents",
-              COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
-            FROM leave_requests lr
-            WHERE ${leaveConditions.join(" AND ")}
-              AND lr.user_id = ANY($${leaveValues.length + 1}::text[])
-            GROUP BY lr.user_id, lr.type
-          `,
-          [...leaveValues, memberIdsPage]
-        )
-      : [];
+  let typeRows: Array<{
+    memberId: string;
+    type: LeaveType;
+    totalEvents: string;
+    totalHours: string;
+  }> = [];
+  if (memberIdsPage.length > 0) {
+    const typeConditions = [...leaveConditions];
+    const typeValues = [...leaveValues];
+    appendInClause("lr.user_id", memberIdsPage, typeValues, typeConditions);
+    typeRows = await queryRows(
+      `
+        SELECT
+          lr.user_id as "memberId",
+          lr.type,
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+        FROM leave_requests lr
+        WHERE ${typeConditions.join(" AND ")}
+        GROUP BY lr.user_id, lr.type
+      `,
+      typeValues
+    );
+  }
 
   const typeByMember = new Map<string, typeof typeRows>();
   for (const row of typeRows) {
@@ -3276,13 +3385,11 @@ app.get("/stats/calendar", asyncHandler(async (req, res) => {
 
   if (scope.members.length > 0) {
     const scopedIds = scope.members.map((member) => member.id);
-    conditions.push(`lr.user_id = ANY($${values.length + 1}::text[])`);
-    values.push(scopedIds);
+    appendInClause("lr.user_id", scopedIds, values, conditions);
   }
 
   if (eventTypes.length > 0) {
-    conditions.push(`lr.type = ANY($${values.length + 1}::leave_type[])`);
-    values.push(eventTypes);
+    appendInClause("lr.type", eventTypes, values, conditions);
   }
 
   const eventRows = await queryRows<{
@@ -3297,8 +3404,8 @@ app.get("/stats/calendar", asyncHandler(async (req, res) => {
         lr.user_id as "memberId",
         u.name as "memberName",
         lr.type,
-        lr.start_date::date::text as "startDate",
-        lr.end_date::date::text as "endDate"
+        DATE_FORMAT(lr.start_date, '%Y-%m-%d') as "startDate",
+        DATE_FORMAT(lr.end_date, '%Y-%m-%d') as "endDate"
       FROM leave_requests lr
       JOIN users u ON lr.user_id = u.id
       WHERE ${conditions.join(" AND ")}
@@ -3575,9 +3682,9 @@ app.post("/notifications/:id/read", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const id = Number(req.params.id);
   if (isAdmin(auth.role)) {
-    await pool.query("UPDATE notifications SET read_at = NOW() WHERE id = $1", [id]);
+    await runExec("UPDATE notifications SET read_at = NOW() WHERE id = $1", [id]);
   } else {
-    await pool.query(
+    await runExec(
       "UPDATE notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2",
       [id, auth.userID]
     );
@@ -3588,9 +3695,9 @@ app.post("/notifications/:id/read", asyncHandler(async (req, res) => {
 app.post("/notifications/read-all", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   if (isAdmin(auth.role)) {
-    await pool.query("UPDATE notifications SET read_at = NOW() WHERE read_at IS NULL");
+    await runExec("UPDATE notifications SET read_at = NOW() WHERE read_at IS NULL");
   } else {
-    await pool.query(
+    await runExec(
       "UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL",
       [auth.userID]
     );
@@ -3631,7 +3738,7 @@ app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
     throw new HttpError(400, "Carry-over limit must be a non-negative number.");
   }
 
-  const updated = await queryRow<VacationPolicy>(
+  const updateResult = await runExec(
     `
       UPDATE settings
       SET annual_leave_accrual_policy = $1,
@@ -3639,13 +3746,21 @@ app.patch("/admin/vacation-policy", asyncHandler(async (req, res) => {
           carry_over_limit_hours = $3,
           updated_at = NOW()
       WHERE id = 1
-      RETURNING
-        annual_leave_accrual_policy as "accrualPolicy",
-        carry_over_enabled as "carryOverEnabled",
-        carry_over_limit_hours as "carryOverLimitHours"
     `,
     [accrualPolicy, carryOverEnabled, carryOverLimitHours]
   );
+  const updated = updateResult.affectedRows
+    ? await queryRow<VacationPolicy>(
+        `
+          SELECT
+            annual_leave_accrual_policy as "accrualPolicy",
+            carry_over_enabled as "carryOverEnabled",
+            carry_over_limit_hours as "carryOverLimitHours"
+          FROM settings
+          WHERE id = 1
+        `
+      )
+    : null;
 
   if (!updated) {
     throw new HttpError(500, "Failed to update vacation policy.");
@@ -3725,12 +3840,14 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
     throw new HttpError(400, `Backup is missing tables: ${missing.join(", ")}`);
   }
 
-  const client = await pool.connect();
+  const client = await pool.getConnection();
   try {
-    await client.query("BEGIN");
-    await client.query(
-      "TRUNCATE teams, users, leave_requests, holidays, leave_balances, settings, audit_logs, notifications RESTART IDENTITY CASCADE"
-    );
+    await client.beginTransaction();
+    await runExec("SET FOREIGN_KEY_CHECKS = 0", [], client);
+    for (const table of requiredTables) {
+      await runExec(`TRUNCATE TABLE ${table}`, [], client);
+    }
+    await runExec("SET FOREIGN_KEY_CHECKS = 1", [], client);
 
     await insertRows(client, "teams", backup.tables.teams);
     await insertRows(client, "users", backup.tables.users);
@@ -3748,7 +3865,7 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
     await resetSerialSequence(client, "audit_logs", "id");
     await resetSerialSequence(client, "notifications", "id");
 
-    await client.query(
+    await runExec(
       `
         INSERT INTO audit_logs (actor_user_id, entity_type, entity_id, action, after_json)
         VALUES ($1, 'database', 'full', 'database.import', $2)
@@ -3761,12 +3878,13 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
             requiredTables.map((table) => [table, backup.tables[table].length])
           ),
         }),
-      ]
+      ],
+      client
     );
 
-    await client.query("COMMIT");
+    await client.commit();
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.rollback();
     throw error;
   } finally {
     client.release();
@@ -3790,19 +3908,30 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 const port = Number(process.env.PORT ?? 4000);
 
 async function startServer() {
-  await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
-  await pool.query(`
-    ALTER TABLE leave_requests
-    ADD COLUMN IF NOT EXISTS start_time TIME,
-    ADD COLUMN IF NOT EXISTS end_time TIME
-  `);
-  await pool.query(`
-    ALTER TABLE holidays
-    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_holidays_active ON holidays(is_active)
-  `);
+  const hasStartTime = await columnExists("leave_requests", "start_time");
+  if (!hasStartTime) {
+    await runExec(`ALTER TABLE leave_requests ADD COLUMN start_time TIME`);
+  }
+  const hasEndTime = await columnExists("leave_requests", "end_time");
+  if (!hasEndTime) {
+    await runExec(`ALTER TABLE leave_requests ADD COLUMN end_time TIME`);
+  }
+  const hasHolidayActive = await columnExists("holidays", "is_active");
+  if (!hasHolidayActive) {
+    await runExec(`ALTER TABLE holidays ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+  }
+  const indexRows = await runQuery<{ exists: number }>(
+    `
+      SELECT COUNT(*) > 0 as "exists"
+      FROM information_schema.statistics
+      WHERE table_schema = DATABASE()
+        AND table_name = 'holidays'
+        AND index_name = 'idx_holidays_active'
+    `
+  );
+  if (!indexRows[0]?.exists) {
+    await runExec(`CREATE INDEX idx_holidays_active ON holidays(is_active)`);
+  }
   app.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(`API server listening on http://localhost:${port}`);

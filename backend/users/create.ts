@@ -5,6 +5,7 @@ import { validateEmail } from "../shared/validation";
 import { createAuditLog } from "../shared/audit";
 import { requireAdmin } from "../shared/rbac";
 import type { User, UserRole } from "../shared/types";
+import bcrypt from "bcryptjs";
 
 interface CreateUserRequest {
   id: string;
@@ -25,6 +26,7 @@ export const create = api(
     validateEmail(req.email);
     const resolvedTeamId = req.role === "ADMIN" ? null : req.teamId || null;
     const defaultPassword = "Password123!";
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
     
     await db.exec`
       INSERT INTO users (id, email, name, role, team_id, birth_date, has_child, password_hash, must_change_password)
@@ -36,7 +38,7 @@ export const create = api(
         ${resolvedTeamId},
         ${req.birthDate || null},
         ${req.hasChild ?? false},
-        crypt(${defaultPassword}, gen_salt('bf')),
+        ${passwordHash},
         true
       )
     `;
@@ -45,7 +47,7 @@ export const create = api(
       SELECT 
         id, email, name, role,
         team_id as "teamId",
-        birth_date::text as "birthDate",
+        DATE_FORMAT(birth_date, '%Y-%m-%d') as "birthDate",
         has_child as "hasChild",
         is_active as "isActive",
         created_at as "createdAt",

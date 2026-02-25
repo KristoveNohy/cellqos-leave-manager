@@ -1,13 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.$executeRaw`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`;
   const defaultPassword = "Password123!";
-  const [{ hash }] = await prisma.$queryRaw`
-    SELECT crypt(${defaultPassword}, gen_salt('bf')) AS hash
-  `;
+  const hash = await bcrypt.hash(defaultPassword, 10);
 
   const team = await prisma.team.upsert({
     where: { id: 1n },

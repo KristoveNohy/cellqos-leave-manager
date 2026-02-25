@@ -1,116 +1,110 @@
--- Enable UUID extension for potential future use
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
--- Enable pgcrypto for password hashing and token utilities
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
--- Enums
-CREATE TYPE user_role AS ENUM ('EMPLOYEE', 'MANAGER', 'ADMIN');
-CREATE TYPE leave_type AS ENUM ('ANNUAL_LEAVE', 'SICK_LEAVE', 'HOME_OFFICE', 'UNPAID_LEAVE', 'OTHER');
-CREATE TYPE leave_status AS ENUM ('DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED');
+-- Initial schema for MySQL
 
 -- Teams table
 CREATE TABLE teams (
-  id BIGSERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  max_concurrent_leaves INTEGER,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  max_concurrent_leaves INT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Users table (user_id is string for auth compatibility)
 CREATE TABLE users (
-  id TEXT PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  role user_role NOT NULL DEFAULT 'EMPLOYEE',
-  team_id BIGINT REFERENCES teams(id),
+  id VARCHAR(255) PRIMARY KEY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  role ENUM ('EMPLOYEE', 'MANAGER', 'ADMIN') NOT NULL DEFAULT 'EMPLOYEE',
+  team_id BIGINT,
   employment_start_date DATE,
   birth_date DATE,
   has_child BOOLEAN NOT NULL DEFAULT FALSE,
-  manual_leave_allowance_hours DOUBLE PRECISION,
+  manual_leave_allowance_hours DOUBLE,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_users_team FOREIGN KEY (team_id) REFERENCES teams(id)
 );
 
 -- Leave requests table
 CREATE TABLE leave_requests (
-  id BIGSERIAL PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id),
-  type leave_type NOT NULL,
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(255) NOT NULL,
+  type ENUM ('ANNUAL_LEAVE', 'SICK_LEAVE', 'HOME_OFFICE', 'UNPAID_LEAVE', 'OTHER') NOT NULL,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
   is_half_day_start BOOLEAN NOT NULL DEFAULT FALSE,
   is_half_day_end BOOLEAN NOT NULL DEFAULT FALSE,
-  status leave_status NOT NULL DEFAULT 'DRAFT',
+  status ENUM ('DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED') NOT NULL DEFAULT 'DRAFT',
   reason TEXT,
   manager_comment TEXT,
-  approved_by TEXT REFERENCES users(id),
-  approved_at TIMESTAMP,
-  computed_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
+  approved_by VARCHAR(255),
+  approved_at TIMESTAMP NULL,
+  computed_hours DOUBLE NOT NULL DEFAULT 0,
   attachment_url TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_leave_requests_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_leave_requests_approver FOREIGN KEY (approved_by) REFERENCES users(id),
   CONSTRAINT end_after_start CHECK (end_date >= start_date)
 );
 
 -- Holidays table
 CREATE TABLE holidays (
-  id BIGSERIAL PRIMARY KEY,
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
   date DATE NOT NULL UNIQUE,
-  name TEXT NOT NULL,
+  name VARCHAR(255) NOT NULL,
   is_company_holiday BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Leave balances table
 CREATE TABLE leave_balances (
-  id BIGSERIAL PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id),
-  year INTEGER NOT NULL,
-  allowance_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
-  used_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  
-  UNIQUE(user_id, year)
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(255) NOT NULL,
+  year INT NOT NULL,
+  allowance_hours DOUBLE NOT NULL DEFAULT 0,
+  used_hours DOUBLE NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE(user_id, year),
+  CONSTRAINT fk_leave_balances_user FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Audit logs table
 CREATE TABLE audit_logs (
-  id BIGSERIAL PRIMARY KEY,
-  actor_user_id TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  action TEXT NOT NULL,
-  before_json JSONB,
-  after_json JSONB,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  actor_user_id VARCHAR(255) NOT NULL,
+  entity_type VARCHAR(255) NOT NULL,
+  entity_id VARCHAR(255) NOT NULL,
+  action VARCHAR(255) NOT NULL,
+  before_json JSON,
+  after_json JSON,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Notifications table
 CREATE TABLE notifications (
-  id BIGSERIAL PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id),
-  type TEXT NOT NULL,
-  payload_json JSONB NOT NULL,
-  dedupe_key TEXT,
-  sent_at TIMESTAMP,
-  read_at TIMESTAMP,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id VARCHAR(255) NOT NULL,
+  type VARCHAR(255) NOT NULL,
+  payload_json JSON NOT NULL,
+  dedupe_key VARCHAR(255),
+  sent_at TIMESTAMP NULL,
+  read_at TIMESTAMP NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Settings table (single row)
 CREATE TABLE settings (
   id SMALLINT PRIMARY KEY DEFAULT 1,
   show_team_calendar_for_employees BOOLEAN NOT NULL DEFAULT FALSE,
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-INSERT INTO settings (id)
-VALUES (1)
-ON CONFLICT (id) DO NOTHING;
+INSERT IGNORE INTO settings (id)
+VALUES (1);
 
 -- Indexes for performance
 CREATE INDEX idx_users_email ON users(email);
@@ -125,25 +119,3 @@ CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_notifications_read ON notifications(read_at);
 CREATE UNIQUE INDEX idx_notifications_dedupe_key ON notifications(dedupe_key);
-
--- Update timestamp trigger function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Apply update triggers
-CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON teams
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_leave_requests_updated_at BEFORE UPDATE ON leave_requests
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_leave_balances_updated_at BEFORE UPDATE ON leave_balances
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

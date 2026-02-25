@@ -3,6 +3,7 @@ import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { createAuditLog, createNotification } from "../shared/audit";
 import { requireAdmin } from "../shared/rbac";
+import bcrypt from "bcryptjs";
 
 interface ResetPasswordRequest {
   id: string;
@@ -29,10 +30,11 @@ export const resetPassword = api(
     }
 
     const defaultPassword = "Password123!";
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
     await db.exec`
       UPDATE users
-      SET password_hash = crypt(${defaultPassword}, gen_salt('bf')),
+      SET password_hash = ${passwordHash},
           must_change_password = true
       WHERE id = ${req.id}
     `;

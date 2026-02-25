@@ -2,6 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import db from "../db";
 import { signAuthToken } from "./jwt";
 import type { UserRole } from "../shared/types";
+import bcrypt from "bcryptjs";
 
 interface LoginRequest {
   email: string;
@@ -28,16 +29,18 @@ export const login = api(
       name: string;
       role: UserRole;
       mustChangePassword: boolean;
+      passwordHash: string | null;
     }>`
-      SELECT id, email, name, role, must_change_password as "mustChangePassword"
+      SELECT id, email, name, role,
+        must_change_password as "mustChangePassword",
+        password_hash as "passwordHash"
       FROM users
       WHERE email = ${req.email}
         AND is_active = true
         AND password_hash IS NOT NULL
-        AND password_hash = crypt(${req.password}, password_hash)
     `;
 
-    if (!user) {
+    if (!user || !user.passwordHash || !(await bcrypt.compare(req.password, user.passwordHash))) {
       throw APIError.unauthenticated("Invalid email or password");
     }
 

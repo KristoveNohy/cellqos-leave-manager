@@ -1,6 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
+import bcrypt from "bcryptjs";
 
 interface ChangePasswordRequest {
   currentPassword: string;
@@ -20,19 +21,24 @@ export const changePassword = api(
 
     const auth = getAuthData()!;
 
-    const updated = await db.queryRow<{ id: string }>`
-      UPDATE users
-      SET password_hash = crypt(${req.newPassword}, gen_salt('bf')),
-          must_change_password = false
+    const existing = await db.queryRow<{ passwordHash: string | null }>`
+      SELECT password_hash as "passwordHash"
+      FROM users
       WHERE id = ${auth.userID}
         AND password_hash IS NOT NULL
-        AND password_hash = crypt(${req.currentPassword}, password_hash)
-      RETURNING id
     `;
 
-    if (!updated) {
+    if (!existing?.passwordHash || !(await bcrypt.compare(req.currentPassword, existing.passwordHash))) {
       throw APIError.invalidArgument("Current password is incorrect");
     }
+
+    const newHash = await bcrypt.hash(req.newPassword, 10);
+    await db.exec`
+      UPDATE users
+      SET password_hash = ${newHash},
+          must_change_password = false
+      WHERE id = ${auth.userID}
+    `;
 
     return { ok: true };
   }
