@@ -274,6 +274,24 @@ async function getAnnualLeaveAllowanceHoursForUser(userId, year) {
 function parseBooleanFlag(value) {
     return value === "true" || value === "1" || value === true;
 }
+function appendInClause(column, items, values, conditions) {
+    if (items.length === 0) {
+        return;
+    }
+    const placeholders = items.map((item) => {
+        values.push(item);
+        return `$${values.length}`;
+    });
+    conditions.push(`${column} IN (${placeholders.join(", ")})`);
+}
+function appendInClauseWithOffset(column, items, values, conditions, startIndex) {
+    if (items.length === 0) {
+        return;
+    }
+    const placeholders = items.map((_item, index) => `$${startIndex + values.length + index}`);
+    values.push(...items);
+    conditions.push(`${column} IN (${placeholders.join(", ")})`);
+}
 async function ensureSlovakHolidaysForYear(year, actorUserId) {
     const seeds = getSlovakHolidaySeeds(year);
     const existingRows = await queryRows(`
@@ -2158,11 +2176,10 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
         }
         if (scope.members.length > 0) {
             const scopedIds = scope.members.map((member) => member.id);
-            conditions.push(`u.id = ANY($${startIndex + values.length}::text[])`);
-            values.push(scopedIds);
+            appendInClauseWithOffset("u.id", scopedIds, values, conditions, startIndex);
         }
         if (search) {
-            conditions.push(`u.name ILIKE $${startIndex + values.length}`);
+            conditions.push(`LOWER(u.name) LIKE LOWER($${startIndex + values.length})`);
             values.push(`%${search}%`);
         }
         return { conditions, values };
@@ -2174,8 +2191,7 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
         "lr.status NOT IN ('DRAFT', 'REJECTED', 'CANCELLED')",
     ];
     if (eventTypes.length > 0) {
-        leaveConditions.push(`lr.type = ANY($${leaveValues.length + 1}::leave_type[])`);
-        leaveValues.push(eventTypes);
+        appendInClause("lr.type", eventTypes, leaveValues, leaveConditions);
     }
     const { conditions: totalConditions, values: totalValues } = buildUserConditions(1);
     const totalRow = await queryRow(`
@@ -2198,7 +2214,7 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
         u.name as "memberName",
         COUNT(lr.id) as "totalEvents",
         COALESCE(SUM(lr.computed_hours), 0) as "totalHours",
-        MAX(lr.end_date)::text as "lastEventDate"
+        DATE_FORMAT(MAX(lr.end_date), '%Y-%m-%d') as "lastEventDate"
       FROM users u
       LEFT JOIN leave_requests lr
         ON u.id = lr.user_id
@@ -2210,19 +2226,22 @@ app.get("/stats/table", asyncHandler(async (req, res) => {
       OFFSET $${dataValues.length + 2}
     `, [...dataValues, pageSize, (page - 1) * pageSize]);
     const memberIdsPage = dataRows.map((row) => row.memberId);
-    const typeRows = memberIdsPage.length > 0
-        ? await queryRows(`
-            SELECT
-              lr.user_id as "memberId",
-              lr.type,
-              COUNT(lr.id) as "totalEvents",
-              COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
-            FROM leave_requests lr
-            WHERE ${leaveConditions.join(" AND ")}
-              AND lr.user_id = ANY($${leaveValues.length + 1}::text[])
-            GROUP BY lr.user_id, lr.type
-          `, [...leaveValues, memberIdsPage])
-        : [];
+    let typeRows = [];
+    if (memberIdsPage.length > 0) {
+        const typeConditions = [...leaveConditions];
+        const typeValues = [...leaveValues];
+        appendInClause("lr.user_id", memberIdsPage, typeValues, typeConditions);
+        typeRows = await queryRows(`
+        SELECT
+          lr.user_id as "memberId",
+          lr.type,
+          COUNT(lr.id) as "totalEvents",
+          COALESCE(SUM(lr.computed_hours), 0) as "totalHours"
+        FROM leave_requests lr
+        WHERE ${typeConditions.join(" AND ")}
+        GROUP BY lr.user_id, lr.type
+      `, typeValues);
+    }
     const typeByMember = new Map();
     for (const row of typeRows) {
         const existing = typeByMember.get(row.memberId) ?? [];
