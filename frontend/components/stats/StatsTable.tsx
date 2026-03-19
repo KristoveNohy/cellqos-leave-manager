@@ -44,14 +44,14 @@ export default function StatsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Vyhľadať člena..."
-          className="max-w-xs"
+          className="w-full sm:max-w-xs"
         />
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">Triediť podľa:</span>
           <select
             value={sortBy}
@@ -81,7 +81,7 @@ export default function StatsTable({
 
       {rows.length > 0 && (
         <div className="rounded-md border bg-card">
-          <Table>
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Člen</TableHead>
@@ -114,7 +114,7 @@ export default function StatsTable({
         </div>
       )}
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <span className="text-muted-foreground">
           Strana {page} z {totalPages}
         </span>
@@ -150,7 +150,7 @@ export default function StatsTable({
                   <p className="text-muted-foreground">Bez udalostí v období.</p>
                 )}
                 {selectedRow.typeBreakdown.map((item) => (
-                  <div key={item.type} className="flex justify-between">
+                  <div key={item.type} className="flex justify-between gap-4">
                     <span>{leaveTypeLabel[item.type]}</span>
                     <span>{formatNumber(item.totalDays)} dní</span>
                   </div>

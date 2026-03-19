@@ -29,11 +29,9 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
     () => requests.length > 0 && selectedIds.size === requests.length,
     [requests.length, selectedIds]
   );
-  
+
   const approveMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return backend.leave_requests.approve({ id, comment });
-    },
+    mutationFn: async (id: number) => backend.leave_requests.approve({ id, comment }),
     onSuccess: () => {
       toast({ title: "Žiadosť bola schválená" });
       setComment("");
@@ -49,7 +47,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
       });
     },
   });
-  
+
   const rejectMutation = useMutation({
     mutationFn: async (id: number) => {
       if (!comment) {
@@ -119,7 +117,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
       });
     },
   });
-  
+
   const typeLabels = {
     ANNUAL_LEAVE: "Dovolenka",
     SICK_LEAVE: "PN",
@@ -127,11 +125,11 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
     UNPAID_LEAVE: "Neplatené voľno",
     OTHER: "Iné",
   };
-  
+
   if (isLoading) {
-    return <div className="text-center py-12">Načítava sa...</div>;
+    return <div className="py-12 text-center">Načítava sa...</div>;
   }
-  
+
   if (requests.length === 0) {
     return (
       <Card className="p-12 text-center">
@@ -151,29 +149,26 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
   const handleToggleOne = (id: number, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (checked) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
+      if (checked) next.add(id);
+      else next.delete(id);
       return next;
     });
   };
-  
+
   return (
     <div className="space-y-4">
-      <Card className="p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
+      <Card className="space-y-4 p-4 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
             <Checkbox checked={allSelected} onCheckedChange={handleToggleAll} />
             <span className="text-sm text-muted-foreground">
               Označené: {selectedCount} / {requests.length}
             </span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button
               size="sm"
-              className="bg-green-600 hover:bg-green-700"
+              className="w-full bg-green-600 hover:bg-green-700 sm:w-auto"
               onClick={() => bulkApproveMutation.mutate(Array.from(selectedIds))}
               disabled={selectedCount === 0 || bulkApproveMutation.isPending}
             >
@@ -182,6 +177,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
             <Button
               size="sm"
               variant="destructive"
+              className="w-full sm:w-auto"
               onClick={() => bulkRejectMutation.mutate(Array.from(selectedIds))}
               disabled={selectedCount === 0 || bulkRejectMutation.isPending || !bulkComment}
             >
@@ -196,12 +192,13 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
           rows={3}
         />
       </Card>
+
       {requests.map((request) => (
-        <Card key={request.id} className="p-6">
+        <Card key={request.id} className="p-4 sm:p-6">
           <div className="space-y-4">
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex-1 space-y-2">
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <Checkbox
                     checked={selectedIds.has(request.id)}
                     onCheckedChange={(checked) => handleToggleOne(request.id, Boolean(checked))}
@@ -212,59 +209,55 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                   <Badge className="bg-yellow-500">ČAKÁ</Badge>
                 </div>
 
-                <div className="text-sm text-muted-foreground space-y-1">
+                <div className="space-y-1 text-sm text-muted-foreground">
                   <div>
                     {formatRequestRange(request)} ({formatLeaveHours(request.computedHours)})
                   </div>
-                  {request.userName && (
-                    <div>Žiadateľ: {request.userName}</div>
-                  )}
+                  {request.userName && <div>Žiadateľ: {request.userName}</div>}
                   {request.currentBalanceHours !== null && request.currentBalanceHours !== undefined && (
                     <div>
-                      Zostatok: {formatLeaveHours(request.currentBalanceHours)} · Po schválení:{" "}
+                      Zostatok: {formatLeaveHours(request.currentBalanceHours)} • Po schválení:{" "}
                       {formatLeaveHours(request.balanceAfterApprovalHours)}
                     </div>
                   )}
                 </div>
-                
+
                 {request.reason && (
-                  <div className="text-sm text-muted-foreground italic">
-                    Dôvod: {request.reason}
-                  </div>
+                  <div className="text-sm italic text-muted-foreground">Dôvod: {request.reason}</div>
                 )}
               </div>
-              
-              <div className="flex space-x-2">
+
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="text-green-600 border-green-600 hover:bg-green-50"
+                  className="w-full border-green-600 text-green-600 hover:bg-green-50 sm:w-auto"
                   onClick={() => setExpandedId(expandedId === request.id ? null : request.id)}
                 >
-                  <Check className="h-4 w-4 mr-2" />
+                  <Check className="mr-2 h-4 w-4" />
                   Schváliť
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="text-red-600 border-red-600 hover:bg-red-50"
+                  className="w-full border-red-600 text-red-600 hover:bg-red-50 sm:w-auto"
                   onClick={() => setExpandedId(expandedId === request.id ? null : request.id)}
                 >
-                  <X className="h-4 w-4 mr-2" />
+                  <X className="mr-2 h-4 w-4" />
                   Zamietnuť
                 </Button>
               </div>
             </div>
-            
+
             {expandedId === request.id && (
-              <div className="space-y-3 pt-4 border-t">
+              <div className="space-y-3 border-t pt-4">
                 <Textarea
                   placeholder="Pridajte komentár (nepovinný pri schválení, povinný pri zamietnutí)"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   rows={3}
                 />
-                <div className="flex justify-end space-x-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <Button
                     variant="outline"
                     size="sm"

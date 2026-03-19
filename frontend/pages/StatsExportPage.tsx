@@ -10,8 +10,8 @@ import { buildStatsQuery } from "@/lib/stats";
 import type { StatsExportFormat, StatsReportType } from "~backend/shared/types";
 
 const reportOptions: Array<{ value: StatsReportType; label: string }> = [
-  { value: "DASHBOARD_SUMMARY", label: "Dashboard – súhrn" },
-  { value: "TABLE_DETAIL", label: "Tabuľka – detail" },
+  { value: "DASHBOARD_SUMMARY", label: "Dashboard - súhrn" },
+  { value: "TABLE_DETAIL", label: "Tabuľka - detail" },
   { value: "YEAR_CALENDAR", label: "Rokový kalendár" },
 ];
 
@@ -92,7 +92,7 @@ export default function StatsExportPage() {
     setStatusMessage(null);
   };
 
-  const handleDownload = async (job: { downloadUrl?: string; id: string; format: StatsExportFormat }) => {
+  const handleDownload = async (job: { downloadUrl?: string | null; id: string; format: StatsExportFormat }) => {
     if (!job.downloadUrl || !token) {
       setStatusMessage("Export nemá dostupný súbor alebo chýba prihlásenie.");
       return;
@@ -178,7 +178,9 @@ export default function StatsExportPage() {
             </select>
           </div>
           <div className="flex items-end">
-            <Button onClick={handleGenerate}>Vygenerovať export</Button>
+            <Button onClick={handleGenerate} className="w-full md:w-auto">
+              Vygenerovať export
+            </Button>
           </div>
           {statusMessage && (
             <p className="text-sm text-muted-foreground md:col-span-3">{statusMessage}</p>
@@ -201,13 +203,13 @@ export default function StatsExportPage() {
           <div className="grid gap-3">
             {exportsQuery.data?.exports.map((job) => (
               <div key={job.id} className="rounded-md border p-3 text-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-medium">
                       {reportOptions.find((option) => option.value === job.reportType)?.label}
                     </p>
                     <p className="text-muted-foreground">
-                      {job.format} · {new Date(job.createdAt).toLocaleString("sk-SK")}
+                      {job.format} • {new Date(job.createdAt).toLocaleString("sk-SK")}
                     </p>
                   </div>
                   <span className="rounded-full bg-muted px-2 py-1 text-xs">{job.status}</span>

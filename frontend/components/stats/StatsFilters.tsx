@@ -172,7 +172,7 @@ export default function StatsFilters({
             multiple
             value={filters.memberIds}
             onChange={handleMembersChange}
-            className="h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             {members.length === 0 && <option>Žiadni členovia</option>}
             {members.map((member) => (
@@ -185,15 +185,15 @@ export default function StatsFilters({
 
         <div className="space-y-2 lg:col-span-3">
           <Label>Typ udalosti</Label>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {statsEventTypes.map((type) => (
-              <label key={type.value} className="flex items-center gap-2 text-sm">
+              <label key={type.value} className="flex min-w-0 items-center gap-2 text-sm">
                 <Checkbox
                   checked={filters.eventTypes.includes(type.value)}
                   onCheckedChange={(checked) => toggleEventType(type.value, Boolean(checked))}
                 />
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: type.color }} />
-                {type.label}
+                <span className="min-w-0 break-words">{type.label}</span>
               </label>
             ))}
           </div>

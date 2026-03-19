@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar as BigCalendar, momentLocalizer, View } from "react-big-calendar";
+import { Calendar as BigCalendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
 import "moment/locale/sk";
 import { useBackend } from "@/lib/backend";
@@ -24,26 +24,28 @@ interface CalendarEvent {
   resource: any;
 }
 
+type CalendarView = "month" | "week" | "work_week" | "day" | "agenda";
+
 export default function CalendarPage() {
   const backend = useBackend();
   const [date, setDate] = useState(new Date());
-  const [view, setView] = useState<View>("month");
+  const [view, setView] = useState<CalendarView>("month");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedRange, setSelectedRange] = useState<{
     startDate: string;
     endDate: string;
   } | null>(null);
-  
-  const getViewUnit = (v: View) => {
+
+  const getViewUnit = (v: CalendarView) => {
     if (v === "agenda" || v === "work_week") return "month";
     return v as "day" | "week" | "month";
   };
-  
+
   const startDate = moment(date).startOf(getViewUnit(view)).format("YYYY-MM-DD");
   const endDate = moment(date).endOf(getViewUnit(view)).format("YYYY-MM-DD");
-  
-  const { data, isLoading } = useQuery({
+
+  const { data } = useQuery({
     queryKey: ["calendar", startDate, endDate],
     queryFn: async () => {
       return backend.calendar.get({ startDate, endDate });
@@ -64,9 +66,7 @@ export default function CalendarPage() {
         { length: end.year() - start.year() + 1 },
         (_, index) => start.year() + index
       );
-      const holidayResponses = await Promise.all(
-        years.map((year) => backend.holidays.list({ year }))
-      );
+      const holidayResponses = await Promise.all(years.map((year) => backend.holidays.list({ year })));
       const holidays = holidayResponses.flatMap((response) => response.holidays || []);
       const inRange = holidays.filter((holiday) => {
         const holidayMoment = moment(holiday.date, "YYYY-MM-DD", true);
@@ -75,7 +75,7 @@ export default function CalendarPage() {
       return { holidays: inRange };
     },
   });
-  
+
   const typeLabels = {
     ANNUAL_LEAVE: "Dovolenka",
     SICK_LEAVE: "PN",
@@ -85,16 +85,16 @@ export default function CalendarPage() {
   };
 
   const resolveTime = (timeValue?: string | null, fallbackTime = "00:00:00") => {
-    if (!timeValue) {
-      return fallbackTime;
-    }
-    if (timeValue.length === 5) {
-      return `${timeValue}:00`;
-    }
+    if (!timeValue) return fallbackTime;
+    if (timeValue.length === 5) return `${timeValue}:00`;
     return timeValue.slice(0, 8);
   };
 
-  const buildEventDateTime = (dateValue: string, timeValue?: string | null, fallbackTime = "00:00:00") => {
+  const buildEventDateTime = (
+    dateValue: string,
+    timeValue?: string | null,
+    fallbackTime = "00:00:00"
+  ) => {
     const datePart = dateValue.slice(0, 10);
     const timePart = resolveTime(timeValue, fallbackTime);
     return moment(`${datePart}T${timePart}`).toDate();
@@ -120,6 +120,7 @@ export default function CalendarPage() {
       resource: { ...event, kind: "LEAVE" },
     };
   });
+
   const holidayEvents: CalendarEvent[] = (holidayData?.holidays || []).map((holiday) => ({
     id: `holiday-${holiday.id}`,
     title: `Sviatok: ${holiday.name}`,
@@ -128,14 +129,14 @@ export default function CalendarPage() {
     allDay: true,
     resource: { ...holiday, kind: "HOLIDAY" },
   }));
+
   const calendarEvents = [...events, ...holidayEvents];
-  
+
   const eventStyleGetter = (event: CalendarEvent) => {
     if (event.resource?.kind === "HOLIDAY") {
-      return {
-        className: "holiday-event",
-      };
+      return { className: "holiday-event" };
     }
+
     const status = event.resource.status;
     const colors = {
       PENDING: "bg-yellow-500",
@@ -143,7 +144,7 @@ export default function CalendarPage() {
       REJECTED: "bg-red-500",
       CANCELLED: "bg-gray-500",
     };
-    
+
     return {
       className: colors[status as keyof typeof colors] || "bg-blue-500",
     };
@@ -159,46 +160,47 @@ export default function CalendarPage() {
       endMoment.minute() === 0 &&
       endMoment.diff(startMoment, "days") >= 1;
     const adjustedEnd = isAllDayRange ? endMoment.clone().subtract(1, "day") : endMoment;
-    const startDate = startMoment.format("YYYY-MM-DD");
-    const endDate = adjustedEnd.format("YYYY-MM-DD");
+    const nextStartDate = startMoment.format("YYYY-MM-DD");
+    const nextEndDate = adjustedEnd.format("YYYY-MM-DD");
 
     setSelectedEvent(null);
     setSelectedRange({
-      startDate,
-      endDate: endDate === startDate ? startDate : endDate,
+      startDate: nextStartDate,
+      endDate: nextEndDate === nextStartDate ? nextStartDate : nextEndDate,
     });
     setShowCreateDialog(true);
   };
-  
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Tímový kalendár</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Tímový kalendár</h1>
         <Button
+          className="w-full sm:w-auto"
           onClick={() => {
             setSelectedRange(null);
             setShowCreateDialog(true);
           }}
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           Nová žiadosť
         </Button>
       </div>
-      
-      <Card className="p-6">
-        <div className="calendar-container">
+
+      <Card className="p-3 sm:p-6">
+        <div className="calendar-container overflow-x-auto">
           <BigCalendar
             localizer={localizer}
             events={calendarEvents}
             startAccessor="start"
             endAccessor="end"
-            style={{ height: 600 }}
+            style={{ height: 600, minWidth: 720 }}
             view={view}
-            onView={setView}
+            onView={(nextView: string) => setView(nextView as CalendarView)}
             date={date}
             onNavigate={setDate}
             eventPropGetter={eventStyleGetter}
-            onSelectEvent={(event) => {
+            onSelectEvent={(event: CalendarEvent) => {
               if (event.resource?.kind === "HOLIDAY") {
                 return;
               }
@@ -219,13 +221,13 @@ export default function CalendarPage() {
               time: "Čas",
               event: "Udalosť",
               noEventsInRange: "Žiadne udalosti v tomto období",
-              showMore: (total) => `+${total} ďalšie`,
+              showMore: (total: number) => `+${total} ďalšie`,
               work_week: "Pracovný týždeň",
             }}
           />
         </div>
       </Card>
-      
+
       {showCreateDialog && (
         <RequestFormDialog
           open={showCreateDialog}
@@ -234,7 +236,7 @@ export default function CalendarPage() {
           initialEndDate={selectedRange?.endDate}
         />
       )}
-      
+
       {selectedEvent && (
         <RequestDetailDialog
           request={selectedEvent}

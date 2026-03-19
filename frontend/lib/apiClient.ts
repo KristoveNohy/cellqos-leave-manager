@@ -40,7 +40,7 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   return (await response.json()) as T;
 }
 
-function toQuery(params: Record<string, string | number | undefined>) {
+function toQuery(params: Record<string, string | number | boolean | undefined>) {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== "") {

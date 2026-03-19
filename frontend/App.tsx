@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -35,7 +36,7 @@ export default function App() {
           <div className="min-h-screen bg-background">
             <Navigation />
             <ForcePasswordChangeDialog />
-            <main className="container mx-auto py-6 px-4">
+            <main className="container mx-auto px-4 py-4 sm:py-6">
               <Routes>
                 <Route path="/" element={<Navigate to="/calendar" replace />} />
                 <Route path="/login" element={<LoginPage />} />
@@ -130,7 +131,7 @@ export default function App() {
   );
 }
 
-function RequireAuth({ children }: { children: JSX.Element }) {
+function RequireAuth({ children }: { children: ReactElement }) {
   const { user } = useAuth();
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -138,7 +139,7 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
-function RequireRole({ children, roles }: { children: JSX.Element; roles: UserRole[] }) {
+function RequireRole({ children, roles }: { children: ReactElement; roles: UserRole[] }) {
   const { user } = useAuth();
   if (!user) {
     return <Navigate to="/login" replace />;

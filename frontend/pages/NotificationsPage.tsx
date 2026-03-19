@@ -16,33 +16,26 @@ type NotificationWithDates = Notification & {
 function getNotificationContent(notification: NotificationWithDates) {
   const payload = notification.payloadJson ?? {};
   const range = formatRequestRange(payload) || "?";
-  const rangeWithTime = range;
 
   switch (notification.type) {
     case "NEW_PENDING_REQUEST":
       return {
         title: "Nová žiadosť na schválenie",
-        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${rangeWithTime}`,
+        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${range}`,
       };
     case "REQUEST_APPROVED":
-      return {
-        title: "Žiadosť schválená",
-        text: rangeWithTime,
-      };
+      return { title: "Žiadosť schválená", text: range };
     case "REQUEST_REJECTED":
-      return {
-        title: "Žiadosť zamietnutá",
-        text: rangeWithTime,
-      };
+      return { title: "Žiadosť zamietnutá", text: range };
     case "REQUEST_UPDATED_BY_MANAGER":
       return {
         title: "Žiadosť upravená manažérom",
-        text: `Stav: ${payload.status ?? "nezmenený"} • ${rangeWithTime}`,
+        text: `Stav: ${payload.status ?? "nezmenený"} • ${range}`,
       };
     case "REQUEST_CANCELLED":
       return {
         title: "Žiadosť zrušená",
-        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${rangeWithTime}`,
+        text: `${payload.userName ?? payload.userId ?? "Neznámy používateľ"} • ${range}`,
       };
     case "PASSWORD_RESET":
       return {
@@ -52,10 +45,7 @@ function getNotificationContent(notification: NotificationWithDates) {
         }`,
       };
     default:
-      return {
-        title: "Notifikácia",
-        text: JSON.stringify(payload),
-      };
+      return { title: "Notifikácia", text: JSON.stringify(payload) };
   }
 }
 
@@ -90,11 +80,11 @@ export default function NotificationsPage() {
   }, [notificationsQuery.data]);
 
   if (notificationsQuery.isLoading) {
-    return <div className="text-center py-12">Načítavam notifikácie...</div>;
+    return <div className="py-12 text-center">Načítavam notifikácie...</div>;
   }
 
   if (notificationsQuery.isError) {
-    return <div className="text-center py-12 text-destructive">Notifikácie sa nepodarilo načítať.</div>;
+    return <div className="py-12 text-center text-destructive">Notifikácie sa nepodarilo načítať.</div>;
   }
 
   const notifications = notificationsQuery.data ?? [];
@@ -109,26 +99,32 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold">Notifikácie</h2>
           {unreadCount > 0 && <Badge variant="secondary">{unreadCount} neprečítané</Badge>}
         </div>
         <Button
           variant="outline"
           size="sm"
+          className="w-full sm:w-auto"
           onClick={() => readAllMutation.mutate()}
           disabled={readAllMutation.isPending || unreadCount === 0}
         >
           Označiť všetko ako prečítané
         </Button>
       </div>
+
       {notifications.map((notification) => {
         const content = getNotificationContent(notification);
+
         return (
-          <Card key={notification.id} className="p-4 flex items-start justify-between gap-4">
+          <Card
+            key={notification.id}
+            className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between"
+          >
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{content.title}</span>
                 {!notification.readAt && <Badge variant="secondary">Nové</Badge>}
               </div>
@@ -137,10 +133,12 @@ export default function NotificationsPage() {
                 {new Date(notification.createdAt).toLocaleString("sk-SK")}
               </div>
             </div>
+
             {!notification.readAt && (
               <Button
                 size="sm"
                 variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => readMutation.mutate(notification.id)}
                 disabled={readMutation.isPending}
               >

@@ -13,13 +13,13 @@ export default function TeamPage() {
   const isManager = user?.role === "MANAGER" || user?.role === "ADMIN";
   const [activeTab, setActiveTab] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => backend.teams.list(),
   });
-  
-  const teamId =
-    activeTab === "all" ? undefined : Number.parseInt(activeTab, 10);
+
+  const teamId = activeTab === "all" ? undefined : Number.parseInt(activeTab, 10);
   const teamFilter = Number.isNaN(teamId) ? undefined : teamId;
 
   const { data: requestsData, isLoading, refetch } = useQuery({
@@ -28,21 +28,21 @@ export default function TeamPage() {
       return backend.leave_requests.list(teamFilter ? { teamId: teamFilter } : {});
     },
   });
-  
+
   const teams = teamsData?.teams || [];
   const allRequests = requestsData?.requests || [];
-  
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Prehľad tímov</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Prehľad tímov</h1>
         {isManager && (
-          <Button onClick={() => setShowCreateDialog(true)}>
+          <Button onClick={() => setShowCreateDialog(true)} className="w-full sm:w-auto">
             Nová žiadosť
           </Button>
         )}
       </div>
-      
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all">Všetky tímy</TabsTrigger>
@@ -52,24 +52,14 @@ export default function TeamPage() {
             </TabsTrigger>
           ))}
         </TabsList>
-        
+
         <TabsContent value="all" className="mt-6">
-          <RequestsList
-            requests={allRequests}
-            isLoading={isLoading}
-            onUpdate={refetch}
-            showUser
-          />
+          <RequestsList requests={allRequests} isLoading={isLoading} onUpdate={refetch} showUser />
         </TabsContent>
-        
+
         {teams.map((team) => (
           <TabsContent key={team.id} value={String(team.id)} className="mt-6">
-            <RequestsList
-              requests={allRequests}
-              isLoading={isLoading}
-              onUpdate={refetch}
-              showUser
-            />
+            <RequestsList requests={allRequests} isLoading={isLoading} onUpdate={refetch} showUser />
           </TabsContent>
         ))}
       </Tabs>

@@ -8,10 +8,10 @@ import VacationPolicyManagement from "@/components/admin/VacationPolicyManagemen
 export default function AdminPage() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Administrátorské nastavenia</h1>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Administrátorské nastavenia</h1>
       </div>
-      
+
       <Tabs defaultValue="users">
         <TabsList>
           <TabsTrigger value="users">Používatelia</TabsTrigger>
@@ -20,15 +20,15 @@ export default function AdminPage() {
           <TabsTrigger value="policies">Politiky</TabsTrigger>
           <TabsTrigger value="database">Databáza</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="users" className="mt-6">
           <UserManagement />
         </TabsContent>
-        
+
         <TabsContent value="teams" className="mt-6">
           <TeamManagement />
         </TabsContent>
-        
+
         <TabsContent value="holidays" className="mt-6">
           <HolidayManagement />
         </TabsContent>

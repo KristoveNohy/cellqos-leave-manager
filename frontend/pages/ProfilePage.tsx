@@ -1,9 +1,19 @@
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { useBackend } from "@/lib/backend";
 import { formatLeaveHours } from "@/lib/leaveFormat";
 import { Card } from "@/components/ui/card";
 import ChangePasswordForm from "@/components/auth/ChangePasswordForm";
+
+function ProfileRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium sm:text-right">{value}</span>
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -30,51 +40,40 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Profil</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Profil</h1>
         <p className="text-sm text-muted-foreground">
           Základné informácie o vašom účte a zostatku dovolenky.
         </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="p-6 space-y-4">
+        <Card className="space-y-4 p-6">
           <div>
             <h2 className="text-xl font-semibold">Osobné údaje</h2>
             <p className="text-sm text-muted-foreground">Údaje prihláseného používateľa.</p>
           </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Meno</span>
-              <span className="font-medium">{displayedUser?.name}</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Email</span>
-              <span className="font-medium">{displayedUser?.email}</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Rola</span>
-              <span className="font-medium">
-                {displayedUser?.role === "ADMIN"
+          <div className="space-y-3 text-sm">
+            <ProfileRow label="Meno" value={displayedUser?.name} />
+            <ProfileRow label="Email" value={displayedUser?.email} />
+            <ProfileRow
+              label="Rola"
+              value={
+                displayedUser?.role === "ADMIN"
                   ? "Admin"
                   : displayedUser?.role === "MANAGER"
                     ? "Manažér"
-                    : "Zamestnanec"}
-              </span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Dátum narodenia</span>
-              <span className="font-medium">
-                {displayedUser?.birthDate ? new Date(displayedUser.birthDate).toLocaleDateString() : "—"}
-              </span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Dieťa</span>
-              <span className="font-medium">{displayedUser?.hasChild ? "Áno" : "Nie"}</span>
-            </div>
+                    : "Zamestnanec"
+              }
+            />
+            <ProfileRow
+              label="Dátum narodenia"
+              value={displayedUser?.birthDate ? new Date(displayedUser.birthDate).toLocaleDateString() : "—"}
+            />
+            <ProfileRow label="Dieťa" value={displayedUser?.hasChild ? "Áno" : "Nie"} />
           </div>
         </Card>
 
-        <Card className="p-6 space-y-4">
+        <Card className="space-y-4 p-6">
           <div>
             <h2 className="text-xl font-semibold">Dovolenka</h2>
             <p className="text-sm text-muted-foreground">Prehľad dostupného času.</p>
@@ -84,33 +83,26 @@ export default function ProfilePage() {
           ) : balanceQuery.isError ? (
             <div className="text-sm text-destructive">Nepodarilo sa načítať zostatok.</div>
           ) : (
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Rok</span>
-                <span className="font-medium">{balanceQuery.data?.year}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Nárok</span>
-                <span className="font-medium">
-                  {formatLeaveHours(balanceQuery.data?.allowanceHours)}
-                </span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Použité / plánované</span>
-                <span className="font-medium">{formatLeaveHours(balanceQuery.data?.usedHours)}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Zostatok</span>
-                <span className="font-medium">
-                  {formatLeaveHours(balanceQuery.data?.remainingHours)}
-                </span>
-              </div>
+            <div className="space-y-3 text-sm">
+              <ProfileRow label="Rok" value={balanceQuery.data?.year} />
+              <ProfileRow
+                label="Nárok"
+                value={formatLeaveHours(balanceQuery.data?.allowanceHours)}
+              />
+              <ProfileRow
+                label="Použité / plánované"
+                value={formatLeaveHours(balanceQuery.data?.usedHours)}
+              />
+              <ProfileRow
+                label="Zostatok"
+                value={formatLeaveHours(balanceQuery.data?.remainingHours)}
+              />
             </div>
           )}
         </Card>
       </div>
 
-      <Card className="p-6 space-y-4 max-w-xl">
+      <Card className="max-w-xl space-y-4 p-6">
         <div>
           <h2 className="text-xl font-semibold">Zmena hesla</h2>
           <p className="text-sm text-muted-foreground">Aktualizujte svoje prihlasovacie heslo.</p>

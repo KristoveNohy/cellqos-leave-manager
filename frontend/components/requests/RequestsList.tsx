@@ -16,7 +16,7 @@ interface RequestsListProps {
 
 export default function RequestsList({ requests, isLoading, onUpdate, showUser }: RequestsListProps) {
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
-  
+
   const statusColors = {
     DRAFT: "bg-gray-500",
     PENDING: "bg-yellow-500",
@@ -24,7 +24,7 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
     REJECTED: "bg-red-500",
     CANCELLED: "bg-gray-400",
   };
-  
+
   const statusLabels = {
     DRAFT: "Návrh",
     PENDING: "Čaká",
@@ -40,11 +40,11 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
     UNPAID_LEAVE: "Neplatené voľno",
     OTHER: "Iné",
   };
-  
+
   if (isLoading) {
-    return <div className="text-center py-12">Načítava sa...</div>;
+    return <div className="py-12 text-center">Načítava sa...</div>;
   }
-  
+
   if (requests.length === 0) {
     return (
       <Card className="p-12 text-center">
@@ -52,47 +52,49 @@ export default function RequestsList({ requests, isLoading, onUpdate, showUser }
       </Card>
     );
   }
-  
+
   return (
     <>
       <div className="space-y-4">
         {requests.map((request) => (
-          <Card key={request.id} className="p-6">
-            <div className="flex items-center justify-between">
+          <Card key={request.id} className="p-4 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex-1 space-y-2">
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <h3 className="font-semibold">
                     {typeLabels[request.type as keyof typeof typeLabels]}
                   </h3>
                   <Badge className={statusColors[request.status as keyof typeof statusColors]}>
                     {statusLabels[request.status as keyof typeof statusLabels] ?? request.status}
                   </Badge>
+                  {showUser && request.userName && (
+                    <span className="text-sm text-muted-foreground">{request.userName}</span>
+                  )}
                 </div>
-                
+
                 <div className="text-sm text-muted-foreground">
                   {formatRequestRange(request)} ({formatLeaveHours(request.computedHours)})
                 </div>
-                
+
                 {request.reason && (
-                  <div className="text-sm text-muted-foreground italic">
-                    {request.reason}
-                  </div>
+                  <div className="text-sm italic text-muted-foreground">{request.reason}</div>
                 )}
               </div>
-              
+
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => setSelectedRequest(request)}
               >
-                <Eye className="h-4 w-4 mr-2" />
+                <Eye className="mr-2 h-4 w-4" />
                 Detail
               </Button>
             </div>
           </Card>
         ))}
       </div>
-      
+
       {selectedRequest && (
         <RequestDetailDialog
           request={selectedRequest}

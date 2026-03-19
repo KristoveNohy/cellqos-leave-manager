@@ -10,21 +10,17 @@ export default function ApprovalsPage() {
       return backend.leave_requests.list({ status: "PENDING" });
     },
   });
-  
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Schvaľovanie žiadostí</h1>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Schvaľovanie žiadostí</h1>
         <div className="text-sm text-muted-foreground">
           {data?.requests.length || 0} čakajúcich žiadostí
         </div>
       </div>
-      
-      <ApprovalInbox
-        requests={data?.requests || []}
-        isLoading={isLoading}
-        onUpdate={refetch}
-      />
+
+      <ApprovalInbox requests={data?.requests || []} isLoading={isLoading} onUpdate={refetch} />
     </div>
   );
 }

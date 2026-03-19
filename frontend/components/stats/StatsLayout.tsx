@@ -11,13 +11,15 @@ interface StatsLayoutProps {
 
 export default function StatsLayout({ title, breadcrumb, subtitle, children }: StatsLayoutProps) {
   const location = useLocation();
+
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
+      <header className="space-y-2">
         <p className="text-sm text-muted-foreground">Štatistiky / {breadcrumb}</p>
-        <h1 className="text-3xl font-bold">{title}</h1>
-        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
+        {subtitle && <p className="max-w-3xl text-sm text-muted-foreground">{subtitle}</p>}
       </header>
+
       <nav className="flex flex-wrap gap-2 text-sm stats-no-print">
         {[
           { path: "/stats", label: "Dashboard" },
@@ -26,6 +28,7 @@ export default function StatsLayout({ title, breadcrumb, subtitle, children }: S
         ].map((item) => {
           const active =
             location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+
           return (
             <Link
               key={item.path}
@@ -42,6 +45,7 @@ export default function StatsLayout({ title, breadcrumb, subtitle, children }: S
           );
         })}
       </nav>
+
       {children}
     </div>
   );

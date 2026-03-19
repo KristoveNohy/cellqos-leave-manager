@@ -12,7 +12,7 @@ export default function MyRequestsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { user } = useAuth();
   const userId = user?.id ?? "";
-  
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["my-requests"],
     queryFn: async () => {
@@ -20,23 +20,19 @@ export default function MyRequestsPage() {
     },
     enabled: Boolean(userId),
   });
-  
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Moje žiadosti o voľno</h1>
-        <Button onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Moje žiadosti o voľno</h1>
+        <Button onClick={() => setShowCreateDialog(true)} className="w-full sm:w-auto">
+          <Plus className="mr-2 h-4 w-4" />
           Nová žiadosť
         </Button>
       </div>
-      
-      <RequestsList
-        requests={data?.requests || []}
-        isLoading={isLoading}
-        onUpdate={refetch}
-      />
-      
+
+      <RequestsList requests={data?.requests || []} isLoading={isLoading} onUpdate={refetch} />
+
       {showCreateDialog && (
         <RequestFormDialog
           open={showCreateDialog}
