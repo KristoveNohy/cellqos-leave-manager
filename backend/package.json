@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "bun",
   "scripts": {
-    "build": "cd ../frontend && bun install && npx vite build --outDir=../backend/frontend/dist",
+    "build": "npm --workspace frontend run build -- --outDir=../backend/frontend/dist --emptyOutDir",
     "start": "tsx server.ts",
     "dev": "tsx server.ts",
     "prisma:generate": "prisma generate",
