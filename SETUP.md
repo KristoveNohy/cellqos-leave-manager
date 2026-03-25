@@ -90,3 +90,30 @@ Demo účty používajú heslo `Password123!`.
 ### Generovanie frontend klienta
 
 Frontend používa lokálny HTTP klient, takže nie je potrebné generovať špeciálne klienty.
+
+### Active Directory LDAP
+
+Ak chceš prihlasovanie cez Active Directory (`sAMAccountName`), nastav:
+
+```bash
+export LDAP_URL="ldaps://ad.example.local:636"
+export LDAP_BASE_DN="DC=example,DC=local"
+export LDAP_BIND_DN="CN=ldapuser,DC=example,DC=local"
+export LDAP_BIND_PASSWORD="secret"
+export LDAP_EMAIL_SUFFIX="example.local"
+export LDAP_TIMEOUT_MS="5000"
+```
+
+Pre internú alebo self-signed CA je správne riešenie:
+
+```bash
+export LDAP_TLS_CA_FILE="/etc/ssl/certs/internal-ad-ca.crt"
+```
+
+Dočasný debug fallback, ak chceš iba rýchlo overiť spojenie:
+
+```bash
+export LDAP_TLS_REJECT_UNAUTHORIZED="false"
+```
+
+`LDAP_TLS_REJECT_UNAUTHORIZED="false"` znižuje bezpečnosť a nemalo by ostať zapnuté v produkcii.

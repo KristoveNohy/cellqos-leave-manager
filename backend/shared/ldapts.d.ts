@@ -1,6 +1,16 @@
 declare module "ldapts" {
+  export type ClientTlsOptions = {
+    ca?: string | Buffer | Array<string | Buffer>;
+    rejectUnauthorized?: boolean;
+  };
+
   export class Client {
-    constructor(options: { url: string; timeout?: number; connectTimeout?: number });
+    constructor(options: {
+      url: string;
+      timeout?: number;
+      connectTimeout?: number;
+      tlsOptions?: ClientTlsOptions;
+    });
     bind(dn: string, password: string): Promise<void>;
     unbind(): Promise<void>;
     search(

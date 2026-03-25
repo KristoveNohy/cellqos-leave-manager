@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import fs from "fs";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Client as LdapClient } from "ldapts";
@@ -146,6 +147,36 @@ function getLdapConfig() {
   };
 }
 
+function parseBooleanEnv(value: string | undefined): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
+}
+
+function getLdapTlsOptions(url: string) {
+  if (!url.toLowerCase().startsWith("ldaps://")) {
+    return undefined;
+  }
+
+  const caFile = process.env.LDAP_TLS_CA_FILE?.trim();
+  const rejectUnauthorized = parseBooleanEnv(process.env.LDAP_TLS_REJECT_UNAUTHORIZED) ?? true;
+
+  return {
+    ca: caFile ? fs.readFileSync(caFile) : undefined,
+    rejectUnauthorized,
+  };
+}
+
 function escapeLdapFilterValue(value: string): string {
   return value
     .replace(/\\/g, "\\5c")
@@ -177,6 +208,7 @@ async function searchLdapUser(identifier: string): Promise<LdapDirectoryUser | n
     url: config.url,
     timeout: config.timeout,
     connectTimeout: config.timeout,
+    tlsOptions: getLdapTlsOptions(config.url),
   });
 
   try {
@@ -240,6 +272,7 @@ async function authenticateWithLdap(identifier: string, password: string): Promi
     url: config.url,
     timeout: config.timeout,
     connectTimeout: config.timeout,
+    tlsOptions: getLdapTlsOptions(config.url),
   });
 
   try {
