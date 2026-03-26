@@ -74,4 +74,23 @@ export function useAuth() {
   return context;
 }
 
-export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+function normalizeApiBaseUrl(value: string): string {
+  // Allow callers to pass "/" or "http(s)://host/" without creating "//path" URLs.
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") return "";
+  return trimmed.replace(/\/+$/, "");
+}
+
+/**
+ * API base URL strategy:
+ * - Dev default: talk directly to backend on localhost:4000
+ * - Prod default: same-origin (nginx proxies API routes to backend)
+ * - Override anytime with VITE_API_BASE_URL (e.g. staging / different host)
+ */
+export const apiBaseUrl = (() => {
+  const envValue = import.meta.env.VITE_API_BASE_URL;
+  if (typeof envValue === "string" && envValue.trim() !== "") {
+    return normalizeApiBaseUrl(envValue);
+  }
+  return import.meta.env.PROD ? "" : "http://localhost:4000";
+})();
