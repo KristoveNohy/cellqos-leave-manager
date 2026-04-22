@@ -19,7 +19,7 @@ var __privateWrapper = (obj, member, setter, getter) => ({
   }
 });
 var require_index_001 = __commonJS({
-  "assets/index-DIbd1MKV.js"(exports, module) {
+  "assets/index-BEfaCraf.js"(exports, module) {
     var _provider, _providerCalled, _a, _focused, _cleanup, _setup, _b, _online, _cleanup2, _setup2, _c, _gcTimeout, _d, _initialState, _revertState, _cache, _client, _retryer, _defaultOptions, _abortSignalConsumed, _Query_instances, dispatch_fn, _e, _client2, _currentQuery, _currentQueryInitialState, _currentResult, _currentResultState, _currentResultOptions, _currentThenable, _selectError, _selectFn, _selectResult, _lastQueryWithDefinedData, _staleTimeoutId, _refetchIntervalId, _currentRefetchInterval, _trackedProps, _QueryObserver_instances, executeFetch_fn, updateStaleTimeout_fn, computeRefetchInterval_fn, updateRefetchInterval_fn, updateTimers_fn, clearStaleTimeout_fn, clearRefetchInterval_fn, updateQuery_fn, notify_fn, _f, _client3, _observers, _mutationCache, _retryer2, _Mutation_instances, dispatch_fn2, _g, _mutations, _scopes, _mutationId, _h, _client4, _currentResult2, _currentMutation, _mutateOptions, _MutationObserver_instances, updateResult_fn, notify_fn2, _i, _queries, _j, _queryCache, _mutationCache2, _defaultOptions2, _queryDefaults, _mutationDefaults, _mountCount, _unsubscribeFocus, _unsubscribeOnline, _k;
     function _mergeNamespaces(n, m) {
       for (var i = 0; i < m.length; i++) {
@@ -23088,8 +23088,8 @@ Please change the parent <Route path="${parentPath}"> to <Route path="${parentPa
         setMobileMenuOpen(false);
       }, [location.pathname]);
       return /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { className: "sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "container mx-auto px-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-16 items-center justify-between gap-3 py-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "container mx-auto px-3 sm:px-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-14 items-center justify-between gap-2 py-2 sm:min-h-16 sm:gap-3 sm:py-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-3 lg:gap-8", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs(Link, { to: "/", className: "flex min-w-0 items-center gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar$2, { className: "h-6 w-6 shrink-0 text-primary" }),
@@ -23141,7 +23141,7 @@ Please change the parent <Route path="${parentPath}"> to <Route path="${parentPa
               }
             )
           ] }),
-          mobileMenuOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t py-4 lg:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2", children: [
+          mobileMenuOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-[calc(100dvh-3.5rem)] overflow-y-auto border-t py-3 lg:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2", children: [
             visibleItems.map((item) => {
               const Icon2 = item.icon;
               const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
@@ -45409,7 +45409,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           {
             "data-slot": "dialog-content",
             className: cn(
-              "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+              "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-1rem)] w-full max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border p-4 shadow-lg duration-200 outline-none sm:max-w-lg sm:p-6",
               className
             ),
             ...props,
@@ -49657,13 +49657,26 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         )
       ] });
     }
-    const localizer = moment$2(hooks);
     hooks.locale("sk");
+    hooks.updateLocale("sk", {
+      week: {
+        dow: 1,
+        doy: 4
+      }
+    });
+    const localizer = moment$2(hooks);
+    const slovakWeekdayShortNames = ["Ne", "Po", "Ut", "St", "Št", "Pi", "So"];
+    const calendarFormats = {
+      weekdayFormat: (date2) => slovakWeekdayShortNames[date2.getDay()],
+      dayFormat: (date2) => `${slovakWeekdayShortNames[date2.getDay()]} ${hooks(date2).format("D.")}`,
+      dayHeaderFormat: (date2) => `${slovakWeekdayShortNames[date2.getDay()]} ${hooks(date2).format("D. M. YYYY")}`
+    };
     function CalendarPage() {
       var _a2;
       const backend = useBackend();
       const [date2, setDate] = reactExports.useState(/* @__PURE__ */ new Date());
       const [view, setView] = reactExports.useState("month");
+      const [isMobile, setIsMobile] = reactExports.useState(false);
       const [showCreateDialog, setShowCreateDialog] = reactExports.useState(false);
       const [selectedEvent, setSelectedEvent] = reactExports.useState(null);
       const [selectedRange, setSelectedRange] = reactExports.useState(null);
@@ -49671,6 +49684,18 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         if (v === "agenda" || v === "work_week") return "month";
         return v;
       };
+      reactExports.useEffect(() => {
+        const mediaQuery = window.matchMedia("(max-width: 640px)");
+        const updateLayout = () => {
+          setIsMobile(mediaQuery.matches);
+          if (mediaQuery.matches && (view === "week" || view === "work_week")) {
+            setView("month");
+          }
+        };
+        updateLayout();
+        mediaQuery.addEventListener("change", updateLayout);
+        return () => mediaQuery.removeEventListener("change", updateLayout);
+      }, [view]);
       const startDate = hooks(date2).startOf(getViewUnit(view)).format("YYYY-MM-DD");
       const endDate = hooks(date2).endOf(getViewUnit(view)).format("YYYY-MM-DD");
       const { data } = useQuery({
@@ -49816,14 +49841,17 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: (namedayData.users || []).length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { variant: "secondary", children: "Nikto z používateľov" }) : namedayData.users.map((user) => /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { variant: "secondary", children: user.name }, user.id)) })
         ] }) }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { className: "p-3 sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "calendar-container overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { className: "p-2 sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "calendar-container", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           Calendar$1,
           {
             localizer,
+            culture: "sk",
+            formats: calendarFormats,
+            views: isMobile ? ["month", "day", "agenda"] : ["month", "week", "work_week", "day", "agenda"],
             events: calendarEvents,
             startAccessor: "start",
             endAccessor: "end",
-            style: { height: 600, minWidth: 720 },
+            style: { height: isMobile ? 540 : 600, minWidth: 0 },
             view,
             onView: (nextView) => setView(nextView),
             date: date2,
@@ -51279,8 +51307,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           createMutation.mutate(payload);
         }
       };
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "p-6 space-y-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "space-y-4 p-4 sm:p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold", children: "Používatelia" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Spravujte používateľov, priraďte im roly a tímy." })
@@ -52307,87 +52335,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         })
       ] });
     }
-    function ChangePasswordForm({ onSuccess, submitLabel }) {
-      const backend = useBackend();
-      const { toast: toast2 } = useToast();
-      const [currentPassword, setCurrentPassword] = reactExports.useState("");
-      const [newPassword, setNewPassword] = reactExports.useState("");
-      const [confirmPassword, setConfirmPassword] = reactExports.useState("");
-      const [isSubmitting, setIsSubmitting] = reactExports.useState(false);
-      const handleSubmit = async (event) => {
-        event.preventDefault();
-        if (newPassword !== confirmPassword) {
-          toast2({
-            title: "Heslá sa nezhodujú",
-            description: "Skontrolujte, či sú nové heslá rovnaké.",
-            variant: "destructive"
-          });
-          return;
-        }
-        setIsSubmitting(true);
-        try {
-          await backend.auth.changePassword({
-            currentPassword,
-            newPassword
-          });
-          toast2({ title: "Heslo bolo zmenené." });
-          setCurrentPassword("");
-          setNewPassword("");
-          setConfirmPassword("");
-          onSuccess == null ? void 0 : onSuccess();
-        } catch (error) {
-          toast2({
-            title: "Zmena hesla zlyhala",
-            description: error.message,
-            variant: "destructive"
-          });
-        } finally {
-          setIsSubmitting(false);
-        }
-      };
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "space-y-4", onSubmit: handleSubmit, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "current-password", children: "Aktuálne heslo" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            Input,
-            {
-              id: "current-password",
-              type: "password",
-              value: currentPassword,
-              onChange: (event) => setCurrentPassword(event.target.value),
-              required: true
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "new-password", children: "Nové heslo" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            Input,
-            {
-              id: "new-password",
-              type: "password",
-              value: newPassword,
-              onChange: (event) => setNewPassword(event.target.value),
-              required: true
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "confirm-password", children: "Potvrďte nové heslo" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            Input,
-            {
-              id: "confirm-password",
-              type: "password",
-              value: confirmPassword,
-              onChange: (event) => setConfirmPassword(event.target.value),
-              required: true
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { type: "submit", disabled: isSubmitting, className: "w-full", children: isSubmitting ? "Ukladá sa..." : submitLabel ?? "Zmeniť heslo" })
-      ] });
-    }
     function ProfileRow({ label, value }) {
       return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-muted-foreground", children: label }),
@@ -52473,13 +52420,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
               )
             ] })
           ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "max-w-xl space-y-4 p-6", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold", children: "Zmena hesla" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Aktualizujte svoje prihlasovacie heslo." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ChangePasswordForm, {})
         ] })
       ] });
     }
@@ -53696,9 +53636,9 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       }
     });
     function App() {
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(AuthProvider, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(QueryClientProvider, { client: queryClient, children: /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRouter, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-background", children: [
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(AuthProvider, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(QueryClientProvider, { client: queryClient, children: /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRouter, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen overflow-x-hidden bg-background", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(Navigation, {}),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "container mx-auto px-4 py-4 sm:py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Routes, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "container mx-auto px-3 py-3 sm:px-4 sm:py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Routes, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/", element: /* @__PURE__ */ jsxRuntimeExports.jsx(Navigate, { to: "/calendar", replace: true }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/login", element: /* @__PURE__ */ jsxRuntimeExports.jsx(LoginPage, {}) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/magic-link", element: /* @__PURE__ */ jsxRuntimeExports.jsx(MagicLinkPage, {}) }),

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar as BigCalendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
@@ -13,8 +13,23 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 import "./calendar.css";
 import { Badge } from "@/components/ui/badge";
 
-const localizer = momentLocalizer(moment);
 moment.locale("sk");
+moment.updateLocale("sk", {
+  week: {
+    dow: 1,
+    doy: 4,
+  },
+});
+
+const localizer = momentLocalizer(moment);
+
+const slovakWeekdayShortNames = ["Ne", "Po", "Ut", "St", "Št", "Pi", "So"];
+
+const calendarFormats = {
+  weekdayFormat: (date: Date) => slovakWeekdayShortNames[date.getDay()],
+  dayFormat: (date: Date) => `${slovakWeekdayShortNames[date.getDay()]} ${moment(date).format("D.")}`,
+  dayHeaderFormat: (date: Date) => `${slovakWeekdayShortNames[date.getDay()]} ${moment(date).format("D. M. YYYY")}`,
+};
 
 interface CalendarEvent {
   id: number | string;
@@ -31,6 +46,7 @@ export default function CalendarPage() {
   const backend = useBackend();
   const [date, setDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>("month");
+  const [isMobile, setIsMobile] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedRange, setSelectedRange] = useState<{
@@ -42,6 +58,20 @@ export default function CalendarPage() {
     if (v === "agenda" || v === "work_week") return "month";
     return v as "day" | "week" | "month";
   };
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const updateLayout = () => {
+      setIsMobile(mediaQuery.matches);
+      if (mediaQuery.matches && (view === "week" || view === "work_week")) {
+        setView("month");
+      }
+    };
+
+    updateLayout();
+    mediaQuery.addEventListener("change", updateLayout);
+    return () => mediaQuery.removeEventListener("change", updateLayout);
+  }, [view]);
 
   const startDate = moment(date).startOf(getViewUnit(view)).format("YYYY-MM-DD");
   const endDate = moment(date).endOf(getViewUnit(view)).format("YYYY-MM-DD");
@@ -233,14 +263,17 @@ export default function CalendarPage() {
         </Card>
       ) : null}
 
-      <Card className="p-3 sm:p-6">
-        <div className="calendar-container overflow-x-auto">
+      <Card className="p-2 sm:p-6">
+        <div className="calendar-container">
           <BigCalendar
             localizer={localizer}
+            culture="sk"
+            formats={calendarFormats}
+            views={isMobile ? ["month", "day", "agenda"] : ["month", "week", "work_week", "day", "agenda"]}
             events={calendarEvents}
             startAccessor="start"
             endAccessor="end"
-            style={{ height: 600, minWidth: 720 }}
+            style={{ height: isMobile ? 540 : 600, minWidth: 0 }}
             view={view}
             onView={(nextView: string) => setView(nextView as CalendarView)}
             date={date}

@@ -4,7 +4,6 @@ import { useAuth } from "@/lib/auth";
 import { useBackend } from "@/lib/backend";
 import { formatLeaveHours } from "@/lib/leaveFormat";
 import { Card } from "@/components/ui/card";
-import ChangePasswordForm from "@/components/auth/ChangePasswordForm";
 
 function ProfileRow({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -101,14 +100,6 @@ export default function ProfilePage() {
           )}
         </Card>
       </div>
-
-      <Card className="max-w-xl space-y-4 p-6">
-        <div>
-          <h2 className="text-xl font-semibold">Zmena hesla</h2>
-          <p className="text-sm text-muted-foreground">Aktualizujte svoje prihlasovacie heslo.</p>
-        </div>
-        <ChangePasswordForm />
-      </Card>
     </div>
   );
 }

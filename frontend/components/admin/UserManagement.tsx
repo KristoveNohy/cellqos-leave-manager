@@ -225,8 +225,8 @@ export default function UserManagement() {
   };
   
   return (
-    <Card className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <Card className="space-y-4 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold">Používatelia</h2>
           <p className="text-sm text-muted-foreground">

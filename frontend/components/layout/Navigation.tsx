@@ -56,8 +56,8 @@ export default function Navigation() {
 
   return (
     <nav className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-      <div className="container mx-auto px-4">
-        <div className="flex min-h-16 items-center justify-between gap-3 py-3">
+      <div className="container mx-auto px-3 sm:px-4">
+        <div className="flex min-h-14 items-center justify-between gap-2 py-2 sm:min-h-16 sm:gap-3 sm:py-3">
           <div className="flex min-w-0 items-center gap-3 lg:gap-8">
             <Link to="/" className="flex min-w-0 items-center gap-2">
               <Calendar className="h-6 w-6 shrink-0 text-primary" />
@@ -128,7 +128,7 @@ export default function Navigation() {
         </div>
 
         {mobileMenuOpen && (
-          <div className="border-t py-4 lg:hidden">
+          <div className="max-h-[calc(100dvh-3.5rem)] overflow-y-auto border-t py-3 lg:hidden">
             <div className="flex flex-col gap-2">
               {visibleItems.map((item) => {
                 const Icon = item.icon;

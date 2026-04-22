@@ -68,6 +68,10 @@
 }
 
 @media (max-width: 768px) {
+  .calendar-container {
+    width: 100%;
+  }
+
   .calendar-container .rbc-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -86,11 +90,34 @@
   }
 
   .calendar-container .rbc-toolbar button {
-    padding: 0.5rem 0.75rem;
+    flex: 1 1 auto;
+    min-width: 4.5rem;
+    padding: 0.5rem 0.6rem;
   }
 
   .calendar-container .rbc-header {
     padding: 0.5rem 0.25rem;
     font-size: 0.75rem;
+  }
+
+  .calendar-container .rbc-month-view,
+  .calendar-container .rbc-time-view,
+  .calendar-container .rbc-agenda-view {
+    min-width: 0;
+  }
+
+  .calendar-container .rbc-date-cell {
+    padding-right: 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .calendar-container .rbc-event {
+    padding: 1px 3px;
+    font-size: 0.7rem;
+    line-height: 1.15;
+  }
+
+  .calendar-container .rbc-show-more {
+    font-size: 0.7rem;
   }
 }

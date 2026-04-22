@@ -34,9 +34,9 @@ export default function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <div className="min-h-screen bg-background">
+          <div className="min-h-screen overflow-x-hidden bg-background">
             <Navigation />
-            <main className="container mx-auto px-4 py-4 sm:py-6">
+            <main className="container mx-auto px-3 py-3 sm:px-4 sm:py-6">
               <Routes>
                 <Route path="/" element={<Navigate to="/calendar" replace />} />
                 <Route path="/login" element={<LoginPage />} />
