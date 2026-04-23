@@ -1269,6 +1269,17 @@ app.post("/auth/change-password", asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+app.get("/users/me", asyncHandler(async (req, res) => {
+  const auth = requireAuth(req.auth ?? null);
+  const columnSupport = await getUserColumnSupport();
+
+  const user = await queryRow<User>(
+    `
+      SELECT id, email, name, role,
+        team_id as "teamId",
+        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
+        birth_date::text as "birthDate",
+        has_child as "hasChild",
         ${columnSupport.profileCompleted ? `profile_completed` : "TRUE"} as "profileCompleted",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours",
