@@ -3710,6 +3710,10 @@ button.rbc-input::-moz-focus-inner {
       grid-column: span 3 / span 3;
     }
 
+    .md\:col-start-2 {
+      grid-column-start: 2;
+    }
+
     .md\:w-auto {
       width: auto;
     }

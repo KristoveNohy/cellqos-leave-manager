@@ -29,6 +29,10 @@ export interface User {
   hasChild: boolean;
   profileCompleted: boolean;
   manualLeaveAllowanceHours: number | null;
+  manualCarryOverHours: number | null;
+  annualLeaveAllowanceHours?: number | null;
+  carryOverHours?: number | null;
+  usedLeaveHours?: number | null;
   remainingLeaveHours?: number | null;
   isActive: boolean;
   createdAt: Date;

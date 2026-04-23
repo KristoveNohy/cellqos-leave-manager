@@ -78,12 +78,10 @@ export VITE_API_BASE_URL="http://localhost:4000"
 
 ### Autentifikácia
 
-Aplikácia používa email + heslo, voliteľne magic link. API endpointy:
+Aplikácia používa email + heslo. API endpointy:
 
 - `POST /auth/register`
 - `POST /auth/login`
-- `POST /auth/magic-link`
-- `POST /auth/magic-link/verify`
 
 Demo účty používajú heslo `Password123!`.
 

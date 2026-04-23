@@ -25,9 +25,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
-  const [magicEmail, setMagicEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMagicSubmitting, setIsMagicSubmitting] = useState(false);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -56,57 +54,6 @@ export default function LoginPage() {
       });
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleMagicLink = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsMagicSubmitting(true);
-    try {
-      const response = await fetch(`${apiBaseUrl}/auth/magic-link`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: magicEmail,
-          redirectUrl: `${window.location.origin}/magic-link`,
-        }),
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.message || "Žiadosť o magic link zlyhala");
-      }
-
-      const payload = (await response.json()) as {
-        magicLinkUrl?: string;
-      };
-
-      if (payload.magicLinkUrl) {
-        toast({
-          title: "Magic link bol vytvorený",
-          description: (
-            <span>
-              Odkaz pre prihlásenie nájdete tu:{" "}
-              <a className="underline" href={payload.magicLinkUrl}>
-                Magic link
-              </a>
-            </span>
-          ),
-        });
-      } else {
-        toast({
-          title: "Magic link bol odoslaný",
-          description: "Skontrolujte svoj email pre pokračovanie.",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Magic link zlyhal",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsMagicSubmitting(false);
     }
   };
 
@@ -144,27 +91,6 @@ export default function LoginPage() {
         </form>
       </Card>
 
-      <Card className="p-6 space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold">Magic link (voliteľné)</h2>
-          <p className="text-sm text-muted-foreground">Pošlite si jednorazový odkaz na prihlásenie.</p>
-        </div>
-        <form className="space-y-4" onSubmit={handleMagicLink}>
-          <div className="space-y-2">
-            <Label htmlFor="magic-email">Email</Label>
-            <Input
-              id="magic-email"
-              type="email"
-              value={magicEmail}
-              onChange={(event) => setMagicEmail(event.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" variant="outline" disabled={isMagicSubmitting} className="w-full">
-            {isMagicSubmitting ? "Odosiela sa..." : "Poslať magic link"}
-          </Button>
-        </form>
-      </Card>
     </div>
   );
 }

@@ -42,6 +42,7 @@ model Team {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
   users               User[]
+  managerAssignments  ManagerTeam[]
 
   @@map("teams")
 }
@@ -58,19 +59,30 @@ model User {
   hasChild           Boolean  @default(false) @map("has_child")
   profileCompleted   Boolean  @default(false) @map("profile_completed")
   manualLeaveAllowanceHours Float? @map("manual_leave_allowance_hours")
+  manualCarryOverHours Float? @map("manual_carry_over_hours")
   isActive           Boolean  @default(true) @map("is_active")
   passwordHash       String?  @map("password_hash")
   mustChangePassword Boolean  @default(false) @map("must_change_password")
-  magicLinkTokenHash String?  @map("magic_link_token_hash")
-  magicLinkExpiresAt DateTime? @map("magic_link_expires_at")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
   leaveRequests      LeaveRequest[] @relation("UserLeaveRequests")
   approvals          LeaveRequest[] @relation("UserApprovals")
   leaveBalances      LeaveBalance[]
   notifications      Notification[]
+  managedTeams       ManagerTeam[] @relation("ManagerAssignments")
 
   @@map("users")
+}
+
+model ManagerTeam {
+  managerUserId String   @map("manager_user_id")
+  teamId        BigInt   @map("team_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  manager       User     @relation("ManagerAssignments", fields: [managerUserId], references: [id], onDelete: Cascade)
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([managerUserId, teamId])
+  @@map("manager_teams")
 }
 
 model LeaveRequest {

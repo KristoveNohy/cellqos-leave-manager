@@ -34,7 +34,7 @@ test("applies pro-rata allowance for employees starting mid-year", () => {
   assert.equal(allowance, 133.33);
 });
 
-test("uses manual allowance for the start year when provided", () => {
+test("uses manual allowance when provided", () => {
   const allowance = computeAnnualLeaveAllowanceHours({
     birthDate: "1995-01-01",
     hasChild: false,

@@ -105,10 +105,12 @@ export function createApiClient(token: string | null) {
         name: string;
         role?: string;
         teamId?: number | null;
+        managedTeamIds?: number[];
         birthDate?: string | null;
         hasChild?: boolean;
         employmentStartDate?: string | null;
         manualLeaveAllowanceHours?: number | null;
+        manualCarryOverHours?: number | null;
       }) =>
         apiRequest<any>("/users", { method: "POST", body: data, token }),
       update: (data: { id: string } & Record<string, unknown>) =>

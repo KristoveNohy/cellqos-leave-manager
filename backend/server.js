@@ -516,50 +516,6 @@ app.post("/auth/change-password", asyncHandler(async (req, res) => {
     }
     res.json({ ok: true });
 }));
-app.post("/auth/magic-link", asyncHandler(async (req, res) => {
-    const { email, redirectUrl } = req.body;
-    const user = await queryRow("SELECT id FROM users WHERE email = $1 AND is_active = true", [email]);
-    if (!user) {
-        return res.json({ ok: true });
-    }
-    const token = randomBytes(32).toString("hex");
-    const tokenHash = createHash("sha256").update(token).digest("hex");
-    await pool.query(`
-      UPDATE users
-      SET magic_link_token_hash = $1,
-          magic_link_expires_at = NOW() + INTERVAL '15 minutes'
-      WHERE id = $2
-    `, [tokenHash, user.id]);
-    const magicLinkUrl = redirectUrl ? `${redirectUrl}?token=${token}` : undefined;
-    res.json({ ok: true, magicLinkToken: token, magicLinkUrl });
-}));
-app.post("/auth/magic-link/verify", asyncHandler(async (req, res) => {
-    const { token } = req.body;
-    const tokenHash = createHash("sha256").update(token).digest("hex");
-    const user = await queryRow(`
-      SELECT id, email, name, role, must_change_password as "mustChangePassword"
-      FROM users
-      WHERE magic_link_token_hash = $1
-        AND magic_link_expires_at IS NOT NULL
-        AND magic_link_expires_at > NOW()
-    `, [tokenHash]);
-    if (!user) {
-        throw new HttpError(401, "Invalid or expired magic link");
-    }
-    await pool.query(`
-      UPDATE users
-      SET magic_link_token_hash = NULL,
-          magic_link_expires_at = NULL
-      WHERE id = $1
-    `, [user.id]);
-    const authToken = signAuthToken({
-        sub: user.id,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-    });
-    res.json({ token: authToken, user });
-}));
 app.get("/users/me", asyncHandler(async (req, res) => {
     const auth = requireAuth(req.auth ?? null);
     const columnSupport = await getUserColumnSupport();

@@ -27,7 +27,7 @@ Komplexný systém správy dovoleniek a absencií s riadením prístupu podľa r
 - **Frontend**: React, TypeScript, shadcn/ui, React Big Calendar, React Hook Form, Zod
 - **Backend**: Node.js (Express), PostgreSQL
 - **ORM**: Prisma (migrácie + seed)
-- **Autentifikácia**: Email + heslo, voliteľne magic link, JWT session
+- **Autentifikácia**: Email + heslo, JWT session
 
 ## Schéma databázy
 

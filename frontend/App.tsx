@@ -9,7 +9,6 @@ import TeamPage from "./pages/TeamPage";
 import ApprovalsPage from "./pages/ApprovalsPage";
 import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
-import MagicLinkPage from "./pages/MagicLinkPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
 import OnboardingPage from "./pages/OnboardingPage";
@@ -40,7 +39,6 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Navigate to="/calendar" replace />} />
                 <Route path="/login" element={<LoginPage />} />
-                <Route path="/magic-link" element={<MagicLinkPage />} />
                 <Route
                   path="/onboarding"
                   element={

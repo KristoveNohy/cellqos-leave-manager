@@ -19,7 +19,7 @@ var __privateWrapper = (obj, member, setter, getter) => ({
   }
 });
 var require_index_001 = __commonJS({
-  "assets/index-BEfaCraf.js"(exports, module) {
+  "assets/index-DKuVyc9v.js"(exports, module) {
     var _provider, _providerCalled, _a, _focused, _cleanup, _setup, _b, _online, _cleanup2, _setup2, _c, _gcTimeout, _d, _initialState, _revertState, _cache, _client, _retryer, _defaultOptions, _abortSignalConsumed, _Query_instances, dispatch_fn, _e, _client2, _currentQuery, _currentQueryInitialState, _currentResult, _currentResultState, _currentResultOptions, _currentThenable, _selectError, _selectFn, _selectResult, _lastQueryWithDefinedData, _staleTimeoutId, _refetchIntervalId, _currentRefetchInterval, _trackedProps, _QueryObserver_instances, executeFetch_fn, updateStaleTimeout_fn, computeRefetchInterval_fn, updateRefetchInterval_fn, updateTimers_fn, clearStaleTimeout_fn, clearRefetchInterval_fn, updateQuery_fn, notify_fn, _f, _client3, _observers, _mutationCache, _retryer2, _Mutation_instances, dispatch_fn2, _g, _mutations, _scopes, _mutationId, _h, _client4, _currentResult2, _currentMutation, _mutateOptions, _MutationObserver_instances, updateResult_fn, notify_fn2, _i, _queries, _j, _queryCache, _mutationCache2, _defaultOptions2, _queryDefaults, _mutationDefaults, _mountCount, _unsubscribeFocus, _unsubscribeOnline, _k;
     function _mergeNamespaces(n, m) {
       for (var i = 0; i < m.length; i++) {
@@ -14019,29 +14019,6 @@ Please change the parent <Route path="${parentPath}"> to <Route path="${parentPa
       (!target || target === "_self") && // Let browser handle "target=_blank" etc.
       !isModifiedEvent$1(event);
     }
-    function createSearchParams(init = "") {
-      return new URLSearchParams(
-        typeof init === "string" || Array.isArray(init) || init instanceof URLSearchParams ? init : Object.keys(init).reduce((memo2, key) => {
-          let value = init[key];
-          return memo2.concat(
-            Array.isArray(value) ? value.map((v) => [key, v]) : [[key, value]]
-          );
-        }, [])
-      );
-    }
-    function getSearchParamsForLocation(locationSearch, defaultSearchParams) {
-      let searchParams = createSearchParams(locationSearch);
-      if (defaultSearchParams) {
-        defaultSearchParams.forEach((_, key) => {
-          if (!searchParams.has(key)) {
-            defaultSearchParams.getAll(key).forEach((value) => {
-              searchParams.append(key, value);
-            });
-          }
-        });
-      }
-      return searchParams;
-    }
     var _formDataSupportsSubmitter = null;
     function isFormDataSubmitterSupported() {
       if (_formDataSupportsSubmitter === null) {
@@ -14815,39 +14792,6 @@ Please change the parent <Route path="${parentPath}"> to <Route path="${parentPa
           unstable_useTransitions
         ]
       );
-    }
-    function useSearchParams(defaultInit) {
-      warning$1(
-        typeof URLSearchParams !== "undefined",
-        `You cannot use the \`useSearchParams\` hook in a browser that does not support the URLSearchParams API. If you need to support Internet Explorer 11, we recommend you load a polyfill such as https://github.com/ungap/url-search-params.`
-      );
-      let defaultSearchParamsRef = reactExports.useRef(createSearchParams(defaultInit));
-      let hasSetSearchParamsRef = reactExports.useRef(false);
-      let location = useLocation();
-      let searchParams = reactExports.useMemo(
-        () => (
-          // Only merge in the defaults if we haven't yet called setSearchParams.
-          // Once we call that we want those to take precedence, otherwise you can't
-          // remove a param with setSearchParams({}) if it has an initial value
-          getSearchParamsForLocation(
-            location.search,
-            hasSetSearchParamsRef.current ? null : defaultSearchParamsRef.current
-          )
-        ),
-        [location.search]
-      );
-      let navigate2 = useNavigate();
-      let setSearchParams = reactExports.useCallback(
-        (nextInit, navigateOptions) => {
-          const newSearchParams = createSearchParams(
-            typeof nextInit === "function" ? nextInit(new URLSearchParams(searchParams)) : nextInit
-          );
-          hasSetSearchParamsRef.current = true;
-          navigate2("?" + newSearchParams, navigateOptions);
-        },
-        [navigate2, searchParams]
-      );
-      return [searchParams, setSearchParams];
     }
     var fetcherId = 0;
     var getUniqueFetcherId = () => `__${String(++fetcherId)}__`;
@@ -51175,10 +51119,12 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           email: "",
           role: "EMPLOYEE",
           teamId: "none",
+          managedTeamIds: [],
           employmentStartDate: "",
           birthDate: "",
           hasChild: false,
-          manualLeaveAllowanceHours: ""
+          manualLeaveAllowanceHours: "",
+          manualCarryOverHours: ""
         }
       });
       const createMutation = useMutation({
@@ -51255,24 +51201,29 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           email: "",
           role: "EMPLOYEE",
           teamId: "none",
+          managedTeamIds: [],
           employmentStartDate: "",
           birthDate: "",
           hasChild: false,
-          manualLeaveAllowanceHours: ""
+          manualLeaveAllowanceHours: "",
+          manualCarryOverHours: ""
         });
         setDialogOpen(true);
       };
       const openEdit = (user) => {
         setEditingUser(user);
+        const initialManagedTeamIds = Array.isArray(user.managedTeamIds) ? user.managedTeamIds.map((id) => String(id)) : [];
         reset({
           name: user.name ?? "",
           email: user.email ?? "",
           role: user.role ?? "EMPLOYEE",
           teamId: user.teamId ? String(user.teamId) : "none",
+          managedTeamIds: initialManagedTeamIds,
           employmentStartDate: user.employmentStartDate ? String(user.employmentStartDate).slice(0, 10) : "",
           birthDate: user.birthDate ? String(user.birthDate).slice(0, 10) : "",
           hasChild: Boolean(user.hasChild),
-          manualLeaveAllowanceHours: user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== void 0 ? String(user.manualLeaveAllowanceHours) : ""
+          manualLeaveAllowanceHours: user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== void 0 ? String(user.manualLeaveAllowanceHours) : "",
+          manualCarryOverHours: user.manualCarryOverHours !== null && user.manualCarryOverHours !== void 0 ? String(user.manualCarryOverHours) : ""
         });
         setDialogOpen(true);
       };
@@ -51290,16 +51241,33 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           resetPasswordMutation.mutate({ id: user.id });
         }
       };
+      const toggleManagedTeam = (teamId, checked) => {
+        const current = watch("managedTeamIds") || [];
+        if (checked) {
+          if (!current.includes(teamId)) {
+            setValue("managedTeamIds", [...current, teamId]);
+          }
+          return;
+        }
+        setValue(
+          "managedTeamIds",
+          current.filter((id) => id !== teamId)
+        );
+      };
       const onSubmit = (values) => {
+        const parsedManagedTeamIds = (values.managedTeamIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id));
+        const resolvedTeamId = values.role === "ADMIN" ? null : values.teamId !== "none" ? Number(values.teamId) : null;
         const payload = {
           email: values.email.trim(),
           name: values.name.trim(),
           role: values.role,
-          teamId: values.teamId !== "none" ? Number(values.teamId) : null,
+          teamId: resolvedTeamId,
+          managedTeamIds: values.role === "MANAGER" ? parsedManagedTeamIds : [],
           employmentStartDate: values.employmentStartDate ? values.employmentStartDate : null,
           birthDate: values.birthDate ? values.birthDate : null,
           hasChild: values.hasChild,
-          manualLeaveAllowanceHours: values.manualLeaveAllowanceHours ? Number(values.manualLeaveAllowanceHours) : null
+          manualLeaveAllowanceHours: values.manualLeaveAllowanceHours !== "" ? Number(values.manualLeaveAllowanceHours) : null,
+          manualCarryOverHours: values.manualCarryOverHours !== "" ? Number(values.manualCarryOverHours) : null
         };
         if (editingUser) {
           updateMutation.mutate({ id: editingUser.id, ...payload });
@@ -51324,21 +51292,30 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Nástup" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Narodenie" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Dieťa" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Nárok dovolenky (hodiny)" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Prenesené z minulého roka (hodiny)" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Zostatok dovolenky (hodiny)" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Stav" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "text-right", children: "Akcie" })
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TableBody, { children: users.map((user) => {
             var _a2;
+            const managedTeamNames = Array.isArray(user.managedTeamIds) ? teams.filter((team) => user.managedTeamIds.includes(team.id)).map((team) => team.name) : [];
             const teamName = (_a2 = teams.find((team) => team.id === user.teamId)) == null ? void 0 : _a2.name;
+            const teamLabel = user.role === "MANAGER" ? [
+              `Člen: ${teamName || "Bez tímu"}`,
+              `Riadi: ${managedTeamNames.length > 0 ? managedTeamNames.join(", ") : "Žiadny tím"}`
+            ].join(" | ") : teamName || "Bez tímu";
             return /* @__PURE__ */ jsxRuntimeExports.jsxs(TableRow, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { className: "font-medium", children: user.name }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.email }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { variant: user.role === "ADMIN" ? "default" : user.role === "MANAGER" ? "secondary" : "outline", children: roleLabels[user.role] ?? user.role }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: teamName || "Bez tímu" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: teamLabel }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.employmentStartDate ? new Date(user.employmentStartDate).toLocaleDateString() : "—" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.hasChild ? "Áno" : "Nie" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatLeaveHours(user.annualLeaveAllowanceHours) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatLeaveHours(user.carryOverHours) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatLeaveHours(user.remainingLeaveHours) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { variant: user.isActive ? "default" : "destructive", children: user.isActive ? "Aktívny" : "Neaktívny" }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { className: "text-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-end gap-2", children: [
@@ -51394,6 +51371,10 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                       setValue("role", value);
                       if (value === "ADMIN") {
                         setValue("teamId", "none");
+                        setValue("managedTeamIds", []);
+                      }
+                      if (value === "EMPLOYEE") {
+                        setValue("managedTeamIds", []);
                       }
                     },
                     children: [
@@ -51408,7 +51389,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                 )
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { children: "Tím" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { children: watch("role") === "MANAGER" ? "Tím (ako zamestnanec)" : "Tím" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs(
                   Select,
                   {
@@ -51425,6 +51406,24 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                   }
                 )
               ] })
+            ] }),
+            watch("role") === "MANAGER" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { children: "Tímy manažéra" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 md:grid-cols-2", children: teams.map((team) => {
+                const teamId = String(team.id);
+                const isChecked = (watch("managedTeamIds") || []).includes(teamId);
+                return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 rounded-md border p-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    Checkbox,
+                    {
+                      checked: isChecked,
+                      onCheckedChange: (checked) => toggleManagedTeam(teamId, Boolean(checked))
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm", children: team.name })
+                ] }, team.id);
+              }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Manažér bude mať prístup k žiadostiam a kalendáru vo vybraných tímoch." })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
@@ -51449,7 +51448,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Input, { id: "user-start-date", type: "date", ...register("employmentStartDate") })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-manual-allowance", children: "Zostatok dovolenky (hodiny)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-manual-allowance", children: "Nárok dovolenky na začiatku roka (hodiny)" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   Input,
                   {
@@ -51461,7 +51460,22 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                     ...register("manualLeaveAllowanceHours")
                   }
                 ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Prepíše aktuálny zostatok dovolenky pre tento rok na zadanú hodnotu." })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Ak pole necháte prázdne, systém vypočíta nárok automaticky." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 md:col-start-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-manual-carry-over", children: "Prenesená dovolenka z minulého roka (hodiny)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Input,
+                  {
+                    id: "user-manual-carry-over",
+                    type: "number",
+                    min: 0,
+                    step: "0.5",
+                    placeholder: "Napr. 24",
+                    ...register("manualCarryOverHours")
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Ručne nastaví počet hodín prenesených do aktuálneho roka." })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-end gap-2", children: [
@@ -52039,9 +52053,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       const { toast: toast2 } = useToast();
       const [login, setLogin] = reactExports.useState("");
       const [password, setPassword] = reactExports.useState("");
-      const [magicEmail, setMagicEmail] = reactExports.useState("");
       const [isSubmitting, setIsSubmitting] = reactExports.useState(false);
-      const [isMagicSubmitting, setIsMagicSubmitting] = reactExports.useState(false);
       const handleLogin = async (event) => {
         event.preventDefault();
         setIsSubmitting(true);
@@ -52069,149 +52081,40 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           setIsSubmitting(false);
         }
       };
-      const handleMagicLink = async (event) => {
-        event.preventDefault();
-        setIsMagicSubmitting(true);
-        try {
-          const response = await fetch(`${apiBaseUrl}/auth/magic-link`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: magicEmail,
-              redirectUrl: `${window.location.origin}/magic-link`
-            })
-          });
-          if (!response.ok) {
-            const payload2 = await response.json().catch(() => ({}));
-            throw new Error(payload2.message || "Žiadosť o magic link zlyhala");
-          }
-          const payload = await response.json();
-          if (payload.magicLinkUrl) {
-            toast2({
-              title: "Magic link bol vytvorený",
-              description: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-                "Odkaz pre prihlásenie nájdete tu:",
-                " ",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "underline", href: payload.magicLinkUrl, children: "Magic link" })
-              ] })
-            });
-          } else {
-            toast2({
-              title: "Magic link bol odoslaný",
-              description: "Skontrolujte svoj email pre pokračovanie."
-            });
-          }
-        } catch (error) {
-          toast2({
-            title: "Magic link zlyhal",
-            description: error.message,
-            variant: "destructive"
-          });
-        } finally {
-          setIsMagicSubmitting(false);
-        }
-      };
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-xl mx-auto space-y-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "p-6 space-y-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold", children: "Prihlásenie" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Prihláste sa pomocou emailu a hesla." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "space-y-4", onSubmit: handleLogin, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "email", children: "Email alebo AD konto" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Input,
-                {
-                  id: "email",
-                  type: "text",
-                  value: login,
-                  onChange: (event) => setLogin(event.target.value),
-                  required: true
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "password", children: "Heslo" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Input,
-                {
-                  id: "password",
-                  type: "password",
-                  value: password,
-                  onChange: (event) => setPassword(event.target.value),
-                  required: true
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { type: "submit", disabled: isSubmitting, className: "w-full", children: isSubmitting ? "Prihlasuje sa..." : "Prihlásiť" })
-          ] })
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-xl mx-auto space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "p-6 space-y-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold", children: "Prihlásenie" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Prihláste sa pomocou emailu a hesla." })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "p-6 space-y-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold", children: "Magic link (voliteľné)" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Pošlite si jednorazový odkaz na prihlásenie." })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "space-y-4", onSubmit: handleLogin, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "email", children: "Email alebo AD konto" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Input,
+              {
+                id: "email",
+                type: "text",
+                value: login,
+                onChange: (event) => setLogin(event.target.value),
+                required: true
+              }
+            )
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "space-y-4", onSubmit: handleMagicLink, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "magic-email", children: "Email" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Input,
-                {
-                  id: "magic-email",
-                  type: "email",
-                  value: magicEmail,
-                  onChange: (event) => setMagicEmail(event.target.value),
-                  required: true
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { type: "submit", variant: "outline", disabled: isMagicSubmitting, className: "w-full", children: isMagicSubmitting ? "Odosiela sa..." : "Poslať magic link" })
-          ] })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "password", children: "Heslo" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Input,
+              {
+                id: "password",
+                type: "password",
+                value: password,
+                onChange: (event) => setPassword(event.target.value),
+                required: true
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { type: "submit", disabled: isSubmitting, className: "w-full", children: isSubmitting ? "Prihlasuje sa..." : "Prihlásiť" })
         ] })
-      ] });
-    }
-    function MagicLinkPage() {
-      const [searchParams] = useSearchParams();
-      const navigate2 = useNavigate();
-      const { setSession } = useAuth();
-      const { toast: toast2 } = useToast();
-      const [status, setStatus] = reactExports.useState("Overovanie magic linku...");
-      reactExports.useEffect(() => {
-        const token2 = searchParams.get("token");
-        if (!token2) {
-          setStatus("Chýba token v odkaze.");
-          return;
-        }
-        const verify = async () => {
-          try {
-            const response = await fetch(`${apiBaseUrl}/auth/magic-link/verify`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token: token2 })
-            });
-            if (!response.ok) {
-              const payload2 = await response.json().catch(() => ({}));
-              throw new Error(payload2.message || "Magic link je neplatný");
-            }
-            const payload = await response.json();
-            setSession(payload);
-            toast2({ title: "Prihlásenie cez magic link bolo úspešné" });
-            navigate2(requiresOnboarding(payload.user) ? "/onboarding" : "/calendar", { replace: true });
-          } catch (error) {
-            setStatus("Overenie zlyhalo.");
-            toast2({
-              title: "Magic link zlyhal",
-              description: error.message,
-              variant: "destructive"
-            });
-          }
-        };
-        void verify();
-      }, [navigate2, searchParams, setSession, toast2]);
-      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-xl mx-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "p-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold", children: "Magic link" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground mt-2", children: status })
       ] }) });
     }
     function getNotificationContent(notification) {
@@ -53641,7 +53544,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "container mx-auto px-3 py-3 sm:px-4 sm:py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Routes, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/", element: /* @__PURE__ */ jsxRuntimeExports.jsx(Navigate, { to: "/calendar", replace: true }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/login", element: /* @__PURE__ */ jsxRuntimeExports.jsx(LoginPage, {}) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/magic-link", element: /* @__PURE__ */ jsxRuntimeExports.jsx(MagicLinkPage, {}) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Route,
             {

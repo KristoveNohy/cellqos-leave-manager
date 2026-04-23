@@ -55,16 +55,22 @@ export function computeAnnualLeaveAllowanceHours({
         return 0;
       }
 
+      if (manualAllowanceHours !== null && manualAllowanceHours !== undefined) {
+        return roundLeaveHours(manualAllowanceHours);
+      }
+
       if (startYear === year) {
-        if (manualAllowanceHours !== null && manualAllowanceHours !== undefined) {
-          allowanceHours = manualAllowanceHours;
-        } else if (accrualPolicy === "PRO_RATA") {
+        if (accrualPolicy === "PRO_RATA") {
           const startMonth = startDate.getMonth() + 1;
           const monthsWorked = Math.max(0, 12 - startMonth + 1);
           allowanceHours = (baseAllowanceHours * monthsWorked) / 12;
         }
       }
     }
+  }
+
+  if (manualAllowanceHours !== null && manualAllowanceHours !== undefined) {
+    return roundLeaveHours(manualAllowanceHours);
   }
 
   return roundLeaveHours(allowanceHours);

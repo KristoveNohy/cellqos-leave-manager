@@ -38,10 +38,12 @@ type UserFormValues = {
   email: string;
   role: "EMPLOYEE" | "MANAGER" | "ADMIN";
   teamId: string;
+  managedTeamIds: string[];
   employmentStartDate: string;
   birthDate: string;
   hasChild: boolean;
   manualLeaveAllowanceHours: string;
+  manualCarryOverHours: string;
 };
 
 export default function UserManagement() {
@@ -64,10 +66,12 @@ export default function UserManagement() {
       email: "",
       role: "EMPLOYEE",
       teamId: "none",
+      managedTeamIds: [],
       employmentStartDate: "",
       birthDate: "",
       hasChild: false,
       manualLeaveAllowanceHours: "",
+      manualCarryOverHours: "",
     },
   });
 
@@ -77,10 +81,12 @@ export default function UserManagement() {
       name: string;
       role: string;
       teamId?: number | null;
+      managedTeamIds?: number[];
       birthDate?: string | null;
       hasChild?: boolean;
       employmentStartDate?: string | null;
       manualLeaveAllowanceHours?: number | null;
+      manualCarryOverHours?: number | null;
     }) =>
       backend.users.create(payload),
     onSuccess: () => {
@@ -162,26 +168,35 @@ export default function UserManagement() {
       email: "",
       role: "EMPLOYEE",
       teamId: "none",
+      managedTeamIds: [],
       employmentStartDate: "",
       birthDate: "",
       hasChild: false,
       manualLeaveAllowanceHours: "",
+      manualCarryOverHours: "",
     });
     setDialogOpen(true);
   };
 
   const openEdit = (user: any) => {
     setEditingUser(user);
+    const initialManagedTeamIds = Array.isArray(user.managedTeamIds)
+      ? user.managedTeamIds.map((id: number) => String(id))
+      : [];
     reset({
       name: user.name ?? "",
       email: user.email ?? "",
       role: user.role ?? "EMPLOYEE",
       teamId: user.teamId ? String(user.teamId) : "none",
+      managedTeamIds: initialManagedTeamIds,
       employmentStartDate: user.employmentStartDate ? String(user.employmentStartDate).slice(0, 10) : "",
       birthDate: user.birthDate ? String(user.birthDate).slice(0, 10) : "",
       hasChild: Boolean(user.hasChild),
       manualLeaveAllowanceHours: user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined
         ? String(user.manualLeaveAllowanceHours)
+        : "",
+      manualCarryOverHours: user.manualCarryOverHours !== null && user.manualCarryOverHours !== undefined
+        ? String(user.manualCarryOverHours)
         : "",
     });
     setDialogOpen(true);
@@ -203,17 +218,46 @@ export default function UserManagement() {
     }
   };
 
+  const toggleManagedTeam = (teamId: string, checked: boolean) => {
+    const current = watch("managedTeamIds") || [];
+    if (checked) {
+      if (!current.includes(teamId)) {
+        setValue("managedTeamIds", [...current, teamId]);
+      }
+      return;
+    }
+    setValue(
+      "managedTeamIds",
+      current.filter((id) => id !== teamId)
+    );
+  };
+
   const onSubmit = (values: UserFormValues) => {
+    const parsedManagedTeamIds = (values.managedTeamIds || [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id));
+
+    const resolvedTeamId =
+      values.role === "ADMIN"
+        ? null
+        : values.teamId !== "none"
+          ? Number(values.teamId)
+          : null;
+
     const payload = {
       email: values.email.trim(),
       name: values.name.trim(),
       role: values.role,
-      teamId: values.teamId !== "none" ? Number(values.teamId) : null,
+      teamId: resolvedTeamId,
+      managedTeamIds: values.role === "MANAGER" ? parsedManagedTeamIds : [],
       employmentStartDate: values.employmentStartDate ? values.employmentStartDate : null,
       birthDate: values.birthDate ? values.birthDate : null,
       hasChild: values.hasChild,
-      manualLeaveAllowanceHours: values.manualLeaveAllowanceHours
+      manualLeaveAllowanceHours: values.manualLeaveAllowanceHours !== ""
         ? Number(values.manualLeaveAllowanceHours)
+        : null,
+      manualCarryOverHours: values.manualCarryOverHours !== ""
+        ? Number(values.manualCarryOverHours)
         : null,
     };
 
@@ -245,6 +289,8 @@ export default function UserManagement() {
             <TableHead>Nástup</TableHead>
             <TableHead>Narodenie</TableHead>
             <TableHead>Dieťa</TableHead>
+            <TableHead>Nárok dovolenky (hodiny)</TableHead>
+            <TableHead>Prenesené z minulého roka (hodiny)</TableHead>
             <TableHead>Zostatok dovolenky (hodiny)</TableHead>
             <TableHead>Stav</TableHead>
             <TableHead className="text-right">Akcie</TableHead>
@@ -252,7 +298,18 @@ export default function UserManagement() {
         </TableHeader>
         <TableBody>
           {users.map((user) => {
+            const managedTeamNames = Array.isArray(user.managedTeamIds)
+              ? teams
+                  .filter((team: any) => user.managedTeamIds.includes(team.id))
+                  .map((team: any) => team.name)
+              : [];
             const teamName = teams.find((team: any) => team.id === user.teamId)?.name;
+            const teamLabel = user.role === "MANAGER"
+              ? [
+                  `Člen: ${teamName || "Bez tímu"}`,
+                  `Riadi: ${managedTeamNames.length > 0 ? managedTeamNames.join(", ") : "Žiadny tím"}`,
+                ].join(" | ")
+              : (teamName || "Bez tímu");
             return (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.name}</TableCell>
@@ -262,7 +319,7 @@ export default function UserManagement() {
                     {roleLabels[user.role as keyof typeof roleLabels] ?? user.role}
                   </Badge>
                 </TableCell>
-                <TableCell>{teamName || "Bez tímu"}</TableCell>
+                <TableCell>{teamLabel}</TableCell>
                 <TableCell>
                   {user.employmentStartDate ? new Date(user.employmentStartDate).toLocaleDateString() : "—"}
                 </TableCell>
@@ -270,6 +327,8 @@ export default function UserManagement() {
                   {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—"}
                 </TableCell>
                 <TableCell>{user.hasChild ? "Áno" : "Nie"}</TableCell>
+                <TableCell>{formatLeaveHours(user.annualLeaveAllowanceHours)}</TableCell>
+                <TableCell>{formatLeaveHours(user.carryOverHours)}</TableCell>
                 <TableCell>{formatLeaveHours(user.remainingLeaveHours)}</TableCell>
                 <TableCell>
                   <Badge variant={user.isActive ? "default" : "destructive"}>
@@ -336,6 +395,10 @@ export default function UserManagement() {
                     setValue("role", value as UserFormValues["role"]);
                     if (value === "ADMIN") {
                       setValue("teamId", "none");
+                      setValue("managedTeamIds", []);
+                    }
+                    if (value === "EMPLOYEE") {
+                      setValue("managedTeamIds", []);
                     }
                   }}
                 >
@@ -350,7 +413,7 @@ export default function UserManagement() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Tím</Label>
+                <Label>{watch("role") === "MANAGER" ? "Tím (ako zamestnanec)" : "Tím"}</Label>
                 <Select
                   value={watch("teamId")}
                   onValueChange={(value) => setValue("teamId", value)}
@@ -370,6 +433,29 @@ export default function UserManagement() {
                 </Select>
               </div>
             </div>
+            {watch("role") === "MANAGER" && (
+              <div className="space-y-2">
+                <Label>Tímy manažéra</Label>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {teams.map((team: any) => {
+                    const teamId = String(team.id);
+                    const isChecked = (watch("managedTeamIds") || []).includes(teamId);
+                    return (
+                      <label key={team.id} className="flex items-center gap-2 rounded-md border p-2">
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={(checked) => toggleManagedTeam(teamId, Boolean(checked))}
+                        />
+                        <span className="text-sm">{team.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Manažér bude mať prístup k žiadostiam a kalendáru vo vybraných tímoch.
+                </p>
+              </div>
+            )}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="user-birth-date">Dátum narodenia</Label>
@@ -390,7 +476,7 @@ export default function UserManagement() {
                 <Input id="user-start-date" type="date" {...register("employmentStartDate")} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="user-manual-allowance">Zostatok dovolenky (hodiny)</Label>
+                <Label htmlFor="user-manual-allowance">Nárok dovolenky na začiatku roka (hodiny)</Label>
                 <Input
                   id="user-manual-allowance"
                   type="number"
@@ -400,7 +486,21 @@ export default function UserManagement() {
                   {...register("manualLeaveAllowanceHours")}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Prepíše aktuálny zostatok dovolenky pre tento rok na zadanú hodnotu.
+                  Ak pole necháte prázdne, systém vypočíta nárok automaticky.
+                </p>
+              </div>
+              <div className="space-y-1 md:col-start-2">
+                <Label htmlFor="user-manual-carry-over">Prenesená dovolenka z minulého roka (hodiny)</Label>
+                <Input
+                  id="user-manual-carry-over"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  placeholder="Napr. 24"
+                  {...register("manualCarryOverHours")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ručne nastaví počet hodín prenesených do aktuálneho roka.
                 </p>
               </div>
             </div>

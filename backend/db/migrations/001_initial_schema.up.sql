@@ -28,6 +28,7 @@ CREATE TABLE users (
   birth_date DATE,
   has_child BOOLEAN NOT NULL DEFAULT FALSE,
   manual_leave_allowance_hours DOUBLE PRECISION,
+  manual_carry_over_hours DOUBLE PRECISION,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()

@@ -13,11 +13,13 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     hasChild: boolean;
     employmentStartDate: string | null;
     manualLeaveAllowanceHours: number | null;
+    manualCarryOverHours: number | null;
   }>`
     SELECT birth_date::text as "birthDate",
       has_child as "hasChild",
       employment_start_date::text as "employmentStartDate",
-      manual_leave_allowance_hours as "manualLeaveAllowanceHours"
+      manual_leave_allowance_hours as "manualLeaveAllowanceHours",
+      manual_carry_over_hours as "manualCarryOverHours"
     FROM users
     WHERE id = ${userId}
   `;
@@ -32,7 +34,11 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     WHERE user_id = ${userId}
       AND year = ${year}
   `;
-  if (overrideBalance) {
+  if (
+    overrideBalance
+    && user.manualLeaveAllowanceHours === null
+    && user.manualCarryOverHours === null
+  ) {
     return Number(overrideBalance.allowanceHours ?? 0);
   }
 
@@ -54,9 +60,13 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     hasChild: user.hasChild,
     year,
     employmentStartDate: user.employmentStartDate,
-    manualAllowanceHours: null,
+    manualAllowanceHours: user.manualLeaveAllowanceHours,
     accrualPolicy,
   });
+
+  if (user.manualCarryOverHours !== null && user.manualCarryOverHours !== undefined) {
+    return baseAllowanceHours + Number(user.manualCarryOverHours);
+  }
 
   if (!user.employmentStartDate) {
     return baseAllowanceHours;

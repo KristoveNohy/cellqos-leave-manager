@@ -5,7 +5,7 @@ import fs from "fs";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { Client as LdapClient } from "ldapts";
-import { randomBytes, createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { computeWorkingHours, parseDate, formatDate, addDays, HOURS_PER_WORKDAY } from "./shared/date-utils";
 import { getSlovakHolidaySeeds } from "./shared/holiday-seeds";
 import { validateDateRange, validateNotInPast, validateEmail } from "./shared/validation";
@@ -155,6 +155,95 @@ async function queryRow<T extends QueryResultRow>(text: string, values: any[] = 
 async function queryRows<T extends QueryResultRow>(text: string, values: any[] = []): Promise<T[]> {
   const result = await pool.query<T>(text, values);
   return result.rows;
+}
+
+let managerTeamsTableSupported: boolean | null = null;
+
+async function hasManagerTeamsTable(): Promise<boolean> {
+  if (managerTeamsTableSupported !== null) {
+    return managerTeamsTableSupported;
+  }
+
+  const result = await queryRow<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'manager_teams'
+      ) as "exists"
+    `
+  );
+
+  managerTeamsTableSupported = Boolean(result?.exists);
+  return managerTeamsTableSupported;
+}
+
+async function getManagedTeamIds(userId: string): Promise<number[]> {
+  if (await hasManagerTeamsTable()) {
+    const rows = await queryRows<{ teamId: number }>(
+      "SELECT team_id as \"teamId\" FROM manager_teams WHERE manager_user_id = $1",
+      [userId]
+    );
+    return Array.from(new Set(rows.map((row) => Number(row.teamId))));
+  }
+
+  // Backward compatibility for environments that don't have manager_teams yet.
+  const fallbackTeam = await queryRow<{ teamId: number | null }>(
+    "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
+    [userId]
+  );
+  return fallbackTeam?.teamId !== null && fallbackTeam?.teamId !== undefined
+    ? [Number(fallbackTeam.teamId)]
+    : [];
+}
+
+async function canManagerAccessTeam(userId: string, teamId: number | null): Promise<boolean> {
+  if (teamId === null || teamId === undefined) {
+    return false;
+  }
+  const managedTeamIds = await getManagedTeamIds(userId);
+  return managedTeamIds.includes(teamId);
+}
+
+async function replaceManagerTeamAssignments(userId: string, teamIds: number[]): Promise<void> {
+  if (!(await hasManagerTeamsTable())) {
+    return;
+  }
+
+  const uniqueTeamIds = Array.from(new Set(teamIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)));
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM manager_teams WHERE manager_user_id = $1", [userId]);
+
+    for (const teamId of uniqueTeamIds) {
+      await client.query(
+        `
+          INSERT INTO manager_teams (manager_user_id, team_id)
+          VALUES ($1, $2)
+          ON CONFLICT (manager_user_id, team_id) DO NOTHING
+        `,
+        [userId, teamId]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function addTeamScopeFilter(conditions: string[], values: any[], column: string, teamIds: number[]): void {
+  if (teamIds.length === 0) {
+    conditions.push("1=0");
+    return;
+  }
+  conditions.push(`${column} = ANY($${values.length + 1}::bigint[])`);
+  values.push(teamIds);
 }
 
 function getLdapConfig() {
@@ -471,6 +560,7 @@ async function getVacationPolicy(): Promise<VacationPolicy> {
 type UserColumnSupport = {
   employmentStartDate: boolean;
   manualLeaveAllowanceHours: boolean;
+  manualCarryOverHours: boolean;
   profileCompleted: boolean;
 };
 
@@ -500,7 +590,9 @@ async function columnExists(table: string, column: string): Promise<boolean> {
     [table, column]
   );
   const exists = Boolean(result?.exists);
-  columnSupportCache.set(cacheKey, exists);
+  if (exists) {
+    columnSupportCache.set(cacheKey, true);
+  }
   return exists;
 }
 
@@ -521,22 +613,20 @@ async function resolveStatsScope(
 
   let teamId: number | null = requestedTeamId;
   let teamName: string | null = null;
+  let managerTeamIds: number[] = [];
 
-  if (!isAdminUser) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (!viewer) {
-      throw new HttpError(404, "User not found");
-    }
-    if (!viewer.teamId) {
+  if (isManagerUser && !isAdminUser) {
+    managerTeamIds = await getManagedTeamIds(auth.userID);
+    if (managerTeamIds.length === 0) {
       return { teamId: null, teamName: null, members: [], allMembers: [] };
     }
-    if (requestedTeamId && requestedTeamId !== viewer.teamId) {
+    if (requestedTeamId && !managerTeamIds.includes(requestedTeamId)) {
       throw new HttpError(403, "Cannot access another team's statistics");
     }
-    teamId = viewer.teamId;
+  }
+
+  if (!isAdminUser && !isManagerUser) {
+    throw new HttpError(403, "Only managers can access statistics");
   }
 
   if (teamId) {
@@ -549,6 +639,8 @@ async function resolveStatsScope(
   if (teamId) {
     teamConditions.push(`team_id = $${teamParams.length + 1}`);
     teamParams.push(teamId);
+  } else if (isManagerUser && !isAdminUser) {
+    addTeamScopeFilter(teamConditions, teamParams, "team_id", managerTeamIds);
   }
 
   const allMembers = await queryRows<{ id: string; name: string }>(
@@ -592,15 +684,17 @@ function parseOptionalNumber(value?: string): number | undefined {
 }
 
 async function getUserColumnSupport(): Promise<UserColumnSupport> {
-  const [employmentStartDate, manualLeaveAllowanceHours, profileCompleted] = await Promise.all([
+  const [employmentStartDate, manualLeaveAllowanceHours, manualCarryOverHours, profileCompleted] = await Promise.all([
     columnExists("users", "employment_start_date"),
     columnExists("users", "manual_leave_allowance_hours"),
+    columnExists("users", "manual_carry_over_hours"),
     columnExists("users", "profile_completed"),
   ]);
 
   return {
     employmentStartDate,
     manualLeaveAllowanceHours,
+    manualCarryOverHours,
     profileCompleted,
   };
 }
@@ -617,19 +711,31 @@ async function getVacationPolicySupport(): Promise<VacationPolicyColumnSupport> 
   };
 }
 
-async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number, skipCarryOver?: boolean): Promise<number> {
+type AnnualLeaveBreakdown = {
+  annualLeaveAllowanceHours: number;
+  carryOverHours: number;
+  totalAllowanceHours: number;
+};
+
+async function getAnnualLeaveBreakdownForUser(
+  userId: string,
+  year: number,
+  skipCarryOver?: boolean
+): Promise<AnnualLeaveBreakdown> {
   const columnSupport = await getUserColumnSupport();
   const user = await queryRow<{
     birthDate: string | null;
     hasChild: boolean;
     employmentStartDate: string | null;
     manualLeaveAllowanceHours: number | null;
+    manualCarryOverHours: number | null;
   }>(
     `
       SELECT birth_date::text as "birthDate",
         has_child as "hasChild",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
-        ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours"
+        ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
+        ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours"
       FROM users
       WHERE id = $1
     `,
@@ -637,8 +743,23 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number,
   );
 
   if (!user) {
-    return 0;
+    return {
+      annualLeaveAllowanceHours: 0,
+      carryOverHours: 0,
+      totalAllowanceHours: 0,
+    };
   }
+
+  const policy = await getVacationPolicy();
+
+  const annualLeaveAllowanceHours = computeAnnualLeaveAllowanceHours({
+    birthDate: user.birthDate,
+    hasChild: user.hasChild,
+    year,
+    employmentStartDate: user.employmentStartDate,
+    manualAllowanceHours: user.manualLeaveAllowanceHours,
+    accrualPolicy: policy.accrualPolicy,
+  });
 
   const overrideBalance = await queryRow<{ allowanceHours: number }>(
     `
@@ -649,27 +770,42 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number,
     `,
     [userId, year]
   );
-  if (overrideBalance) {
-    return Number(overrideBalance.allowanceHours ?? 0);
+  if (
+    overrideBalance
+    && user.manualLeaveAllowanceHours === null
+    && user.manualCarryOverHours === null
+  ) {
+    const totalAllowanceHours = Number(overrideBalance.allowanceHours ?? 0);
+    return {
+      annualLeaveAllowanceHours,
+      carryOverHours: Math.max(0, totalAllowanceHours - annualLeaveAllowanceHours),
+      totalAllowanceHours,
+    };
   }
 
-  const policy = await getVacationPolicy();
-
-  const baseAllowanceHours = computeAnnualLeaveAllowanceHours({
-    birthDate: user.birthDate,
-    hasChild: user.hasChild,
-    year,
-    employmentStartDate: user.employmentStartDate,
-    manualAllowanceHours: null,
-    accrualPolicy: policy.accrualPolicy,
-  });
+  if (user.manualCarryOverHours !== null && user.manualCarryOverHours !== undefined) {
+    const carryOverHours = Number(user.manualCarryOverHours);
+    return {
+      annualLeaveAllowanceHours,
+      carryOverHours,
+      totalAllowanceHours: annualLeaveAllowanceHours + carryOverHours,
+    };
+  }
 
   if (!user.employmentStartDate) {
-    return baseAllowanceHours;
+    return {
+      annualLeaveAllowanceHours,
+      carryOverHours: 0,
+      totalAllowanceHours: annualLeaveAllowanceHours,
+    };
   }
 
   if (!policy.carryOverEnabled || skipCarryOver) {
-    return baseAllowanceHours;
+    return {
+      annualLeaveAllowanceHours,
+      carryOverHours: 0,
+      totalAllowanceHours: annualLeaveAllowanceHours,
+    };
   }
 
   const previousYear = year - 1;
@@ -697,7 +833,11 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number,
   );
 
   if (!previousBalance && Number(previousUsed?.count ?? 0) === 0) {
-    return baseAllowanceHours;
+    return {
+      annualLeaveAllowanceHours,
+      carryOverHours: 0,
+      totalAllowanceHours: annualLeaveAllowanceHours,
+    };
   }
 
   const previousAllowanceHours = previousBalance
@@ -723,7 +863,16 @@ async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number,
     carryOverLimit: carryOverLimitHours,
   });
 
-  return baseAllowanceHours + carryOverHours;
+  return {
+    annualLeaveAllowanceHours,
+    carryOverHours,
+    totalAllowanceHours: annualLeaveAllowanceHours + carryOverHours,
+  };
+}
+
+async function getAnnualLeaveAllowanceHoursForUser(userId: string, year: number, skipCarryOver?: boolean): Promise<number> {
+  const breakdown = await getAnnualLeaveBreakdownForUser(userId, year, skipCarryOver);
+  return breakdown.totalAllowanceHours;
 }
 
 function parseBooleanFlag(value: unknown): boolean {
@@ -1120,89 +1269,9 @@ app.post("/auth/change-password", asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-app.post("/auth/magic-link", asyncHandler(async (req, res) => {
-  const { email, redirectUrl } = req.body as { email: string; redirectUrl?: string };
-  const user = await queryRow<{ id: string }>(
-    "SELECT id FROM users WHERE email = $1 AND is_active = true",
-    [email]
-  );
-
-  if (!user) {
-    return res.json({ ok: true });
-  }
-
-  const token = randomBytes(32).toString("hex");
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-
-  await pool.query(
-    `
-      UPDATE users
-      SET magic_link_token_hash = $1,
-          magic_link_expires_at = NOW() + INTERVAL '15 minutes'
-      WHERE id = $2
-    `,
-    [tokenHash, user.id]
-  );
-
-  const magicLinkUrl = redirectUrl ? `${redirectUrl}?token=${token}` : undefined;
-
-  res.json({ ok: true, magicLinkToken: token, magicLinkUrl });
-}));
-
-app.post("/auth/magic-link/verify", asyncHandler(async (req, res) => {
-  const { token } = req.body as { token: string };
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  const columnSupport = await getUserColumnSupport();
-
-  const user = await queryRow<{ id: string; email: string; name: string; role: UserRole; mustChangePassword: boolean; profileCompleted: boolean }>(
-    `
-      SELECT id, email, name, role,
-        must_change_password as "mustChangePassword",
-        ${columnSupport.profileCompleted ? `profile_completed` : "TRUE"} as "profileCompleted"
-      FROM users
-      WHERE magic_link_token_hash = $1
-        AND magic_link_expires_at IS NOT NULL
-        AND magic_link_expires_at > NOW()
-    `,
-    [tokenHash]
-  );
-
-  if (!user) {
-    throw new HttpError(401, "Invalid or expired magic link");
-  }
-
-  await pool.query(
-    `
-      UPDATE users
-      SET magic_link_token_hash = NULL,
-          magic_link_expires_at = NULL
-      WHERE id = $1
-    `,
-    [user.id]
-  );
-
-  const authToken = signAuthToken({
-    sub: user.id,
-    email: user.email,
-    role: user.role,
-    name: user.name,
-  });
-
-  res.json({ token: authToken, user });
-}));
-
-app.get("/users/me", asyncHandler(async (req, res) => {
-  const auth = requireAuth(req.auth ?? null);
-  const columnSupport = await getUserColumnSupport();
-  const user = await queryRow<User & { profileCompleted: boolean }>(
-    `
-      SELECT id, email, name, role,
-        team_id as "teamId",
-        ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
-        birth_date::text as "birthDate",
-        has_child as "hasChild",
         ${columnSupport.profileCompleted ? `profile_completed` : "TRUE"} as "profileCompleted",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
+        ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1288,6 +1357,7 @@ app.patch("/users/me/onboarding", asyncHandler(async (req, res) => {
         has_child as "hasChild",
         ${columnSupport.profileCompleted ? `profile_completed` : "TRUE"} as "profileCompleted",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
+        ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1351,15 +1421,12 @@ app.get("/users", asyncHandler(async (req, res) => {
   requireManager(auth.role);
   const columnSupport = await getUserColumnSupport();
   let teamFilter = "";
-  let params: Array<number> = [];
+  let params: any[] = [];
   if (isManagerUser && !isAdminUser) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (viewer?.teamId) {
-      teamFilter = "WHERE team_id = $1";
-      params = [viewer.teamId];
+    const managerTeamIds = await getManagedTeamIds(auth.userID);
+    if (managerTeamIds.length > 0) {
+      teamFilter = "WHERE team_id = ANY($1::bigint[])";
+      params = [managerTeamIds];
     } else {
       teamFilter = "WHERE 1=0";
     }
@@ -1374,6 +1441,10 @@ app.get("/users", asyncHandler(async (req, res) => {
         has_child as "hasChild",
         ${columnSupport.profileCompleted ? `profile_completed` : "TRUE"} as "profileCompleted",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
+        ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours",
+        NULL::double precision as "annualLeaveAllowanceHours",
+        NULL::double precision as "carryOverHours",
+        NULL::double precision as "usedLeaveHours",
         NULL::double precision as "remainingLeaveHours",
         is_active as "isActive",
         created_at as "createdAt",
@@ -1404,31 +1475,57 @@ app.get("/users", asyncHandler(async (req, res) => {
 
   const usersWithBalances = await Promise.all(
     users.map(async (user) => {
-      const allowanceHours = await getAnnualLeaveAllowanceHoursForUser(user.id, year);
+      const breakdown = await getAnnualLeaveBreakdownForUser(user.id, year);
       const usedHours = bookedByUserId.get(user.id) ?? 0;
       return {
         ...user,
-        remainingLeaveHours: allowanceHours - usedHours,
+        annualLeaveAllowanceHours: breakdown.annualLeaveAllowanceHours,
+        carryOverHours: breakdown.carryOverHours,
+        usedLeaveHours: usedHours,
+        remainingLeaveHours: breakdown.totalAllowanceHours - usedHours,
       };
     })
   );
 
-  res.json({ users: usersWithBalances });
+  const usersWithManagedTeams = await Promise.all(
+    usersWithBalances.map(async (user) => {
+      if (user.role !== "MANAGER") {
+        return { ...user, managedTeamIds: [] as number[] };
+      }
+      const managedTeamIds = await getManagedTeamIds(user.id);
+      return { ...user, managedTeamIds };
+    })
+  );
+
+  res.json({ users: usersWithManagedTeams });
 }));
 
 app.post("/users", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   requireAdmin(auth.role);
   const columnSupport = await getUserColumnSupport();
-  const { email, name, role, teamId, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceHours } = req.body as {
+  const {
+    email,
+    name,
+    role,
+    teamId,
+    managedTeamIds,
+    birthDate,
+    hasChild,
+    employmentStartDate,
+    manualLeaveAllowanceHours,
+    manualCarryOverHours,
+  } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
     teamId?: number | null;
+    managedTeamIds?: number[];
     birthDate?: string | null;
     hasChild?: boolean;
     employmentStartDate?: string | null;
     manualLeaveAllowanceHours?: number | null;
+    manualCarryOverHours?: number | null;
   };
 
   if (!email || !name) {
@@ -1447,9 +1544,20 @@ app.post("/users", asyncHandler(async (req, res) => {
   );
 
   if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
-    if (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0) {
+    if (typeof manualLeaveAllowanceHours !== "number" || Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0) {
       throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
     }
+  }
+  if (manualLeaveAllowanceHours !== undefined && !columnSupport.manualLeaveAllowanceHours) {
+    throw new HttpError(500, "Missing database column users.manual_leave_allowance_hours. Run migrations before saving leave allowance overrides.");
+  }
+  if (manualCarryOverHours !== undefined && manualCarryOverHours !== null) {
+    if (typeof manualCarryOverHours !== "number" || Number.isNaN(manualCarryOverHours) || manualCarryOverHours < 0) {
+      throw new HttpError(400, "Manual carry-over must be a non-negative number.");
+    }
+  }
+  if (manualCarryOverHours !== undefined && !columnSupport.manualCarryOverHours) {
+    throw new HttpError(500, "Missing database column users.manual_carry_over_hours. Run migrations before saving carry-over overrides.");
   }
 
   try {
@@ -1484,6 +1592,14 @@ app.post("/users", asyncHandler(async (req, res) => {
       columns.splice(5, 0, "employment_start_date");
       values.splice(5, 0, employmentStartDate ?? null);
     }
+    if (columnSupport.manualLeaveAllowanceHours) {
+      columns.splice(columns.length - 2, 0, "manual_leave_allowance_hours");
+      values.push(manualLeaveAllowanceHours ?? null);
+    }
+    if (columnSupport.manualCarryOverHours) {
+      columns.splice(columns.length - 2, 0, "manual_carry_over_hours");
+      values.push(manualCarryOverHours ?? null);
+    }
 
     const placeholders: string[] = values.map((_value, index) => `$${index + 1}`);
     placeholders.push("NOW()", "NOW()");
@@ -1511,6 +1627,7 @@ app.post("/users", asyncHandler(async (req, res) => {
         has_child as "hasChild",
         ${columnSupport.profileCompleted ? `profile_completed` : "TRUE"} as "profileCompleted",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
+        ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1524,11 +1641,12 @@ app.post("/users", asyncHandler(async (req, res) => {
     throw new HttpError(500, "User creation failed");
   }
 
-  await createEntityAuditLog(auth.userID, "users", userId, "CREATE", null, user as unknown as Record<string, unknown>);
-
-  if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
-    await applyLeaveBalanceOverride(userId, manualLeaveAllowanceHours, auth.userID);
+  if (userRole === "MANAGER") {
+    const initialManagerTeams = managedTeamIds ?? [];
+    await replaceManagerTeamAssignments(userId, initialManagerTeams);
   }
+
+  await createEntityAuditLog(auth.userID, "users", userId, "CREATE", null, user as unknown as Record<string, unknown>);
 
   res.json(user);
 }));
@@ -1538,16 +1656,30 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   requireAdmin(auth.role);
   const { id } = req.params;
   const columnSupport = await getUserColumnSupport();
-  const { email, name, role, teamId, isActive, birthDate, hasChild, employmentStartDate, manualLeaveAllowanceHours } = req.body as {
+  const {
+    email,
+    name,
+    role,
+    teamId,
+    managedTeamIds,
+    isActive,
+    birthDate,
+    hasChild,
+    employmentStartDate,
+    manualLeaveAllowanceHours,
+    manualCarryOverHours,
+  } = req.body as {
     email?: string;
     name?: string;
     role?: UserRole;
     teamId?: number | null;
+    managedTeamIds?: number[];
     isActive?: boolean;
     birthDate?: string | null;
     hasChild?: boolean;
     employmentStartDate?: string | null;
     manualLeaveAllowanceHours?: number | null;
+    manualCarryOverHours?: number | null;
   };
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [id]);
@@ -1592,8 +1724,33 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     values.push(hasChild);
   }
   if (manualLeaveAllowanceHours !== undefined) {
-    if (manualLeaveAllowanceHours !== null && (Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0)) {
+    if (
+      manualLeaveAllowanceHours !== null
+      && (typeof manualLeaveAllowanceHours !== "number" || Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0)
+    ) {
       throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
+    }
+    if (!columnSupport.manualLeaveAllowanceHours) {
+      throw new HttpError(500, "Missing database column users.manual_leave_allowance_hours. Run migrations before saving leave allowance overrides.");
+    }
+    if (columnSupport.manualLeaveAllowanceHours) {
+      updates.push(`manual_leave_allowance_hours = $${values.length + 1}`);
+      values.push(manualLeaveAllowanceHours);
+    }
+  }
+  if (manualCarryOverHours !== undefined) {
+    if (
+      manualCarryOverHours !== null
+      && (typeof manualCarryOverHours !== "number" || Number.isNaN(manualCarryOverHours) || manualCarryOverHours < 0)
+    ) {
+      throw new HttpError(400, "Manual carry-over must be a non-negative number.");
+    }
+    if (!columnSupport.manualCarryOverHours) {
+      throw new HttpError(500, "Missing database column users.manual_carry_over_hours. Run migrations before saving carry-over overrides.");
+    }
+    if (columnSupport.manualCarryOverHours) {
+      updates.push(`manual_carry_over_hours = $${values.length + 1}`);
+      values.push(manualCarryOverHours);
     }
   }
   if (isActive !== undefined) {
@@ -1618,6 +1775,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
         birth_date::text as "birthDate",
         has_child as "hasChild",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
+        ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"
@@ -1631,11 +1789,15 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     throw new HttpError(404, "User not found");
   }
 
-  await createEntityAuditLog(auth.userID, "users", id, "UPDATE", before, user as unknown as Record<string, unknown>);
-
-  if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
-    await applyLeaveBalanceOverride(id, manualLeaveAllowanceHours, auth.userID);
+  if (user.role === "MANAGER") {
+    if (managedTeamIds !== undefined) {
+      await replaceManagerTeamAssignments(id, managedTeamIds);
+    }
+  } else {
+    await replaceManagerTeamAssignments(id, []);
   }
+
+  await createEntityAuditLog(auth.userID, "users", id, "UPDATE", before, user as unknown as Record<string, unknown>);
 
   res.json(user);
 }));
@@ -2097,13 +2259,9 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const isAdminUser = isAdmin(auth.role);
   const isManagerUser = isManager(auth.role);
-  let viewerTeamId: number | null = null;
+  let managerTeamIds: number[] = [];
   if (isManagerUser && !isAdminUser) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    viewerTeamId = viewer?.teamId ?? null;
+    managerTeamIds = await getManagedTeamIds(auth.userID);
   }
   const conditions: string[] = ["1=1"];
   const values: any[] = [];
@@ -2124,7 +2282,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
         "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
         [userId]
       );
-      if (!target || viewerTeamId === null || target.teamId !== viewerTeamId) {
+      if (!target || target.teamId === null || !managerTeamIds.includes(target.teamId)) {
         throw new HttpError(403, "Not allowed to view other teams' requests");
       }
     }
@@ -2138,12 +2296,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   if (isManagerUser && !isAdminUser && !userId) {
-    if (viewerTeamId === null) {
-      conditions.push("1=0");
-    } else {
-      conditions.push(`u.team_id = $${values.length + 1}`);
-      values.push(viewerTeamId);
-    }
+    addTeamScopeFilter(conditions, values, "u.team_id", managerTeamIds);
   }
 
   if (status) {
@@ -2167,7 +2320,7 @@ app.get("/leave-requests", asyncHandler(async (req, res) => {
   }
 
   if (teamId) {
-    if (isManagerUser && !isAdminUser && teamId !== viewerTeamId) {
+    if (isManagerUser && !isAdminUser && !managerTeamIds.includes(teamId)) {
       throw new HttpError(403, "Not allowed to view other teams' requests");
     }
     conditions.push(`u.team_id = $${values.length + 1}`);
@@ -2280,15 +2433,11 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   if (targetUserId !== auth.userID) {
     requireManager(auth.role);
     if (isManagerUser && !isAdminUser) {
-      const viewer = await queryRow<{ teamId: number | null }>(
-        "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-        [auth.userID]
-      );
       const target = await queryRow<{ teamId: number | null }>(
         "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
         [targetUserId]
       );
-      if (!viewer || !target || viewer.teamId === null || viewer.teamId !== target.teamId) {
+      if (!target || !(await canManagerAccessTeam(auth.userID, target.teamId))) {
         throw new HttpError(403, "Cannot create requests for another team");
       }
     }
@@ -2437,11 +2586,7 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
 
   let isSameTeam = before.userId === auth.userID;
   if (isManagerUser && !isAdminUser && before.userId !== auth.userID) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    isSameTeam = Boolean(viewer?.teamId && viewer.teamId === before.teamId);
+    isSameTeam = await canManagerAccessTeam(auth.userID, before.teamId);
     if (!isSameTeam) {
       throw new HttpError(403, "You are not allowed to edit this request");
     }
@@ -2639,11 +2784,7 @@ app.delete("/leave-requests/:id", asyncHandler(async (req, res) => {
   }
 
   if (isManagerUser && !isAdminUser && request.userId !== auth.userID) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (!viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+    if (!(await canManagerAccessTeam(auth.userID, request.teamId))) {
       throw new HttpError(403, "Cannot delete another team's request");
     }
   }
@@ -2727,11 +2868,7 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
   );
 
   if (isManagerUser && !isAdminUser && request.userId !== auth.userID) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (!viewer || viewer.teamId === null || viewer.teamId !== requester?.teamId) {
+    if (!(await canManagerAccessTeam(auth.userID, requester?.teamId ?? null))) {
       throw new HttpError(403, "Cannot submit another team's request");
     }
   }
@@ -2772,7 +2909,14 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
 
   const managers = requester?.teamId
     ? await queryRows<{ id: string }>(
-        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true AND team_id = $1",
+        `
+          SELECT DISTINCT u.id
+          FROM users u
+          LEFT JOIN manager_teams mt ON mt.manager_user_id = u.id
+          WHERE u.role = 'MANAGER'
+            AND u.is_active = true
+            AND (u.team_id = $1 OR mt.team_id = $1)
+        `,
         [requester.teamId]
       )
     : await queryRows<{ id: string }>(
@@ -2841,11 +2985,7 @@ app.post("/leave-requests/:id/approve", asyncHandler(async (req, res) => {
   }
 
   if (isManagerUser && !isAdminUser) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (!viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+    if (!(await canManagerAccessTeam(auth.userID, request.teamId))) {
       throw new HttpError(403, "Cannot approve another team's request");
     }
   }
@@ -2985,11 +3125,7 @@ app.post("/leave-requests/:id/reject", asyncHandler(async (req, res) => {
   }
 
   if (isManagerUser && !isAdminUser) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (!viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+    if (!(await canManagerAccessTeam(auth.userID, request.teamId))) {
       throw new HttpError(403, "Cannot reject another team's request");
     }
   }
@@ -3109,11 +3245,7 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
   );
 
   if (isManagerUser && !isAdminUser && request.userId !== auth.userID) {
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (!viewer || viewer.teamId === null || viewer.teamId !== requester?.teamId) {
+    if (!(await canManagerAccessTeam(auth.userID, requester?.teamId ?? null))) {
       throw new HttpError(403, "Cannot cancel another team's request");
     }
   }
@@ -3154,7 +3286,14 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
 
   const managers = requester?.teamId
     ? await queryRows<{ id: string }>(
-        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true AND team_id = $1",
+        `
+          SELECT DISTINCT u.id
+          FROM users u
+          LEFT JOIN manager_teams mt ON mt.manager_user_id = u.id
+          WHERE u.role = 'MANAGER'
+            AND u.is_active = true
+            AND (u.team_id = $1 OR mt.team_id = $1)
+        `,
         [requester.teamId]
       )
     : await queryRows<{ id: string }>(
@@ -3194,9 +3333,10 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const isManagerUser = isManager(auth.role);
   const viewerId = auth.userID;
   let viewerTeamId: number | null = null;
+  let managerTeamIds: number[] = [];
   const showTeamCalendarForEmployees = await getShowTeamCalendarForEmployees();
 
-  if (!isAdminUser) {
+  if (!isAdminUser && !isManagerUser) {
     const viewer = await queryRow<{ teamId: number | null }>(
       "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
       [viewerId]
@@ -3207,6 +3347,10 @@ app.get("/calendar", asyncHandler(async (req, res) => {
     }
 
     viewerTeamId = viewer.teamId;
+  }
+
+  if (isManagerUser && !isAdminUser) {
+    managerTeamIds = await getManagedTeamIds(viewerId);
   }
 
   if (!startDate || !endDate) {
@@ -3222,8 +3366,15 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const values: any[] = [startDate, endDate];
 
   if ((isManagerUser || isAdminUser) && teamId) {
+    if (isManagerUser && !isAdminUser && !managerTeamIds.includes(teamId)) {
+      throw new HttpError(403, "Cannot access another team's calendar");
+    }
     conditions.push(`u.team_id = $${values.length + 1}`);
     values.push(teamId);
+  }
+
+  if (isManagerUser && !isAdminUser && !teamId) {
+    addTeamScopeFilter(conditions, values, "u.team_id", managerTeamIds);
   }
 
   if (!isManagerUser && !isAdminUser) {
@@ -3264,7 +3415,9 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const events = await queryRows<any>(query, values);
   const safeEvents = events.map((event) => {
     if (!isAdminUser && event.userId !== viewerId) {
-      const isSameTeam = viewerTeamId !== null && viewerTeamId === event.teamId;
+      const isSameTeam = isManagerUser
+        ? managerTeamIds.includes(event.teamId)
+        : viewerTeamId !== null && viewerTeamId === event.teamId;
       if (!isManagerUser || !isSameTeam) {
         return {
           ...event,
@@ -3282,8 +3435,15 @@ app.get("/calendar", asyncHandler(async (req, res) => {
   const userValues: any[] = [];
 
   if ((isManagerUser || isAdminUser) && teamId) {
+    if (isManagerUser && !isAdminUser && !managerTeamIds.includes(teamId)) {
+      throw new HttpError(403, "Cannot access another team's calendar");
+    }
     userConditions.push(`team_id = $${userValues.length + 1}`);
     userValues.push(teamId);
+  }
+
+  if (isManagerUser && !isAdminUser && !teamId) {
+    addTeamScopeFilter(userConditions, userValues, "team_id", managerTeamIds);
   }
 
   if (!isManagerUser && !isAdminUser) {
@@ -3403,12 +3563,17 @@ app.get("/namedays/today", asyncHandler(async (req, res) => {
   const showTeamCalendarForEmployees = await getShowTeamCalendarForEmployees();
 
   let viewerTeamId: number | null = null;
+  let managerTeamIds: number[] = [];
   if (!isAdminUser) {
     const viewer = await queryRow<{ teamId: number | null }>(
       "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
       [viewerId]
     );
     viewerTeamId = viewer?.teamId ?? null;
+  }
+
+  if (isManagerUser && !isAdminUser) {
+    managerTeamIds = await getManagedTeamIds(viewerId);
   }
 
   const { date, names, source, providerStatus } = await fetchSlovakNamedayToday();
@@ -3419,8 +3584,15 @@ app.get("/namedays/today", asyncHandler(async (req, res) => {
 
   const teamId = req.query.teamId ? Number(req.query.teamId) : undefined;
   if ((isManagerUser || isAdminUser) && teamId) {
+    if (isManagerUser && !isAdminUser && !managerTeamIds.includes(teamId)) {
+      throw new HttpError(403, "Cannot access another team's namedays");
+    }
     conditions.push(`team_id = $${values.length + 1}`);
     values.push(teamId);
+  }
+
+  if (isManagerUser && !isAdminUser && !teamId) {
+    addTeamScopeFilter(conditions, values, "team_id", managerTeamIds);
   }
 
   if (!isManagerUser && !isAdminUser) {
@@ -4117,11 +4289,7 @@ app.get("/audit", asyncHandler(async (req, res) => {
       `,
       [Number(entityId)]
     );
-    const viewer = await queryRow<{ teamId: number | null }>(
-      "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-      [auth.userID]
-    );
-    if (!request || !viewer || viewer.teamId === null || viewer.teamId !== request.teamId) {
+    if (!request || !(await canManagerAccessTeam(auth.userID, request.teamId))) {
       throw new HttpError(403, "Not allowed to view audit logs");
     }
   }
