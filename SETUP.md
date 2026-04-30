@@ -91,7 +91,7 @@ Frontend používa lokálny HTTP klient, takže nie je potrebné generovať špe
 
 ### Active Directory LDAP
 
-Ak chceš prihlasovanie cez Active Directory (`sAMAccountName`), nastav:
+Ak chceš prihlasovanie cez Active Directory (`sAMAccountName` aj e-mailovú adresu), nastav:
 
 ```bash
 export LDAP_URL="ldaps://ad.example.local:636"

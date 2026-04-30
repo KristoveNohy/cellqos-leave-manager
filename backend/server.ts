@@ -323,6 +323,11 @@ async function searchLdapUser(identifier: string): Promise<LdapDirectoryUser | n
     return null;
   }
 
+  const normalizedIdentifier = identifier.trim().toLowerCase();
+  if (!normalizedIdentifier) {
+    return null;
+  }
+
   const client = new LdapClient({
     url: config.url,
     timeout: config.timeout,
@@ -332,11 +337,12 @@ async function searchLdapUser(identifier: string): Promise<LdapDirectoryUser | n
 
   try {
     await client.bind(config.bindDN, config.bindPassword);
-    const filter = `(&(objectClass=user)(sAMAccountName=${escapeLdapFilterValue(identifier)}))`;
+    const escapedIdentifier = escapeLdapFilterValue(normalizedIdentifier);
+    const filter = `(&(objectClass=user)(|(sAMAccountName=${escapedIdentifier})(mail=${escapedIdentifier})(userPrincipalName=${escapedIdentifier})))`;
     const { searchEntries } = await client.search(config.baseDN, {
       scope: "sub",
       filter,
-      attributes: ["distinguishedName", "sAMAccountName", "mail", "displayName", "cn"],
+      attributes: ["distinguishedName", "sAMAccountName", "mail", "userPrincipalName", "displayName", "cn"],
       sizeLimit: 1,
     });
 
@@ -355,6 +361,7 @@ async function searchLdapUser(identifier: string): Promise<LdapDirectoryUser | n
 
     const email =
       takeDirectoryString(entry, "mail")
+      ?? takeDirectoryString(entry, "userPrincipalName")
       ?? `${samAccountName}@${config.emailSuffix}`;
     const displayName =
       takeDirectoryString(entry, "displayName")
@@ -476,7 +483,7 @@ async function authenticateWithLocalPassword(identifier: string, password: strin
         must_change_password as "mustChangePassword",
         ${columnSupport.profileCompleted ? `profile_completed` : "TRUE"} as "profileCompleted"
       FROM users
-      WHERE email = $1
+      WHERE lower(email) = lower($1)
         AND is_active = true
         AND password_hash IS NOT NULL
         AND password_hash = crypt($2, password_hash)
@@ -1185,10 +1192,21 @@ app.post("/auth/login", asyncHandler(async (req, res) => {
   }
 
   const identifier = email.trim();
+  const localUser = await authenticateWithLocalPassword(identifier, password);
+  if (localUser) {
+    const token = signAuthToken({
+      sub: localUser.id,
+      email: localUser.email,
+      role: localUser.role,
+      name: localUser.name,
+    });
+
+    res.json({ token, user: localUser });
+    return;
+  }
+
   const ldapDirectoryUser = await authenticateWithLdap(identifier, password);
-  const user =
-    (ldapDirectoryUser ? await findOrProvisionLdapAppUser(ldapDirectoryUser) : null)
-    ?? await authenticateWithLocalPassword(identifier, password);
+  const user = ldapDirectoryUser ? await findOrProvisionLdapAppUser(ldapDirectoryUser) : null;
 
   if (!user) {
     throw new HttpError(401, "Invalid login or password");
