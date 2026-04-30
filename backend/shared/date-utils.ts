@@ -48,6 +48,7 @@ export function computeWorkingHours(
   startDate: string,
   endDate: string,
   holidays: Set<string>,
+  workingHoursPerDay = HOURS_PER_WORKDAY,
   startTime?: string | null,
   endTime?: string | null
 ): number {
@@ -78,7 +79,7 @@ export function computeWorkingHours(
     currentDate = addDays(currentDate, 1);
   }
   
-  const workingHours = workingDays * HOURS_PER_WORKDAY;
+  const workingHours = workingDays * workingHoursPerDay;
 
   return Math.max(0, workingHours);
 }

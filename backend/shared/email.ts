@@ -20,6 +20,7 @@ interface EmailPayload {
 
 let cachedTransporter: nodemailer.Transporter | null = null;
 let cachedConfigKey: string | null = null;
+let missingEmailConfigWarned = false;
 
 function parseBooleanEnv(value: string | undefined): boolean | undefined {
   if (value === undefined) {
@@ -43,13 +44,23 @@ function getEmailConfig(): EmailConfig | null {
   const from = process.env.SMTP_FROM?.trim();
 
   if (!host || !portRaw || !from) {
+    if (!missingEmailConfigWarned) {
+      console.warn("SMTP email disabled: missing SMTP_HOST, SMTP_PORT, or SMTP_FROM");
+      missingEmailConfigWarned = true;
+    }
     return null;
   }
 
   const port = Number(portRaw);
   if (!Number.isFinite(port)) {
+    if (!missingEmailConfigWarned) {
+      console.warn("SMTP email disabled: SMTP_PORT is not a valid number");
+      missingEmailConfigWarned = true;
+    }
     return null;
   }
+
+  missingEmailConfigWarned = false;
 
   const secure = process.env.SMTP_SECURE === "true" || port === 465;
   const ignoreTLS = parseBooleanEnv(process.env.SMTP_IGNORE_TLS) ?? false;
@@ -115,7 +126,16 @@ export async function sendNotificationEmail(payload: EmailPayload): Promise<bool
     });
     return true;
   } catch (error) {
-    console.warn("SMTP email send failed", error);
+    console.warn("SMTP email send failed", {
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      ignoreTLS: config.ignoreTLS,
+      requireTLS: config.requireTLS,
+      rejectUnauthorized: config.rejectUnauthorized,
+      hasAuth: Boolean(config.user && config.pass),
+      error,
+    });
     return false;
   }
 }

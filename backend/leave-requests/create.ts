@@ -35,11 +35,17 @@ export const create = api(
     `) {
       holidayDates.add(holiday.date);
     }
+    const user = await db.queryRow<{ workingHoursPerDay: number }>`
+      SELECT working_hours_per_day as "workingHoursPerDay"
+      FROM users
+      WHERE id = ${userId}
+    `;
     
     const computedHours = computeWorkingHours(
       req.startDate,
       req.endDate,
       holidayDates,
+      Number(user?.workingHoursPerDay ?? 8),
       req.startTime || null,
       req.endTime || null
     );

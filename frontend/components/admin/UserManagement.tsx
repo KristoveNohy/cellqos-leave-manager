@@ -39,6 +39,7 @@ type UserFormValues = {
   role: "EMPLOYEE" | "MANAGER" | "ADMIN";
   teamId: string;
   managedTeamIds: string[];
+  workingHoursPerDay: string;
   employmentStartDate: string;
   birthDate: string;
   hasChild: boolean;
@@ -46,33 +47,41 @@ type UserFormValues = {
   manualCarryOverHours: string;
 };
 
+function getDefaultValues(): UserFormValues {
+  return {
+    name: "",
+    email: "",
+    role: "EMPLOYEE",
+    teamId: "none",
+    managedTeamIds: [],
+    workingHoursPerDay: "8",
+    employmentStartDate: "",
+    birthDate: "",
+    hasChild: false,
+    manualLeaveAllowanceHours: "",
+    manualCarryOverHours: "",
+  };
+}
+
 export default function UserManagement() {
   const backend = useBackend();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
+
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: async () => backend.users.list(),
   });
+
   const { data: teamsData } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => backend.teams.list(),
   });
+
   const { register, handleSubmit, setValue, watch, reset } = useForm<UserFormValues>({
-    defaultValues: {
-      name: "",
-      email: "",
-      role: "EMPLOYEE",
-      teamId: "none",
-      managedTeamIds: [],
-      employmentStartDate: "",
-      birthDate: "",
-      hasChild: false,
-      manualLeaveAllowanceHours: "",
-      manualCarryOverHours: "",
-    },
+    defaultValues: getDefaultValues(),
   });
 
   const createMutation = useMutation({
@@ -82,13 +91,13 @@ export default function UserManagement() {
       role: string;
       teamId?: number | null;
       managedTeamIds?: number[];
+      workingHoursPerDay?: number;
       birthDate?: string | null;
       hasChild?: boolean;
       employmentStartDate?: string | null;
       manualLeaveAllowanceHours?: number | null;
       manualCarryOverHours?: number | null;
-    }) =>
-      backend.users.create(payload),
+    }) => backend.users.create(payload),
     onSuccess: () => {
       toast({ title: "Používateľ bol vytvorený." });
       queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -148,11 +157,11 @@ export default function UserManagement() {
       });
     },
   });
-  
+
   if (isLoading) {
-    return <div className="text-center py-12">Načítava sa...</div>;
+    return <div className="py-12 text-center">Načítava sa...</div>;
   }
-  
+
   const users = data?.users || [];
   const teams = teamsData?.teams || [];
   const roleLabels = {
@@ -163,18 +172,7 @@ export default function UserManagement() {
 
   const openCreate = () => {
     setEditingUser(null);
-    reset({
-      name: "",
-      email: "",
-      role: "EMPLOYEE",
-      teamId: "none",
-      managedTeamIds: [],
-      employmentStartDate: "",
-      birthDate: "",
-      hasChild: false,
-      manualLeaveAllowanceHours: "",
-      manualCarryOverHours: "",
-    });
+    reset(getDefaultValues());
     setDialogOpen(true);
   };
 
@@ -183,21 +181,28 @@ export default function UserManagement() {
     const initialManagedTeamIds = Array.isArray(user.managedTeamIds)
       ? user.managedTeamIds.map((id: number) => String(id))
       : [];
+
     reset({
       name: user.name ?? "",
       email: user.email ?? "",
       role: user.role ?? "EMPLOYEE",
       teamId: user.teamId ? String(user.teamId) : "none",
       managedTeamIds: initialManagedTeamIds,
+      workingHoursPerDay:
+        user.workingHoursPerDay !== null && user.workingHoursPerDay !== undefined
+          ? String(user.workingHoursPerDay)
+          : "8",
       employmentStartDate: user.employmentStartDate ? String(user.employmentStartDate).slice(0, 10) : "",
       birthDate: user.birthDate ? String(user.birthDate).slice(0, 10) : "",
       hasChild: Boolean(user.hasChild),
-      manualLeaveAllowanceHours: user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined
-        ? String(user.manualLeaveAllowanceHours)
-        : "",
-      manualCarryOverHours: user.manualCarryOverHours !== null && user.manualCarryOverHours !== undefined
-        ? String(user.manualCarryOverHours)
-        : "",
+      manualLeaveAllowanceHours:
+        user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined
+          ? String(user.manualLeaveAllowanceHours)
+          : "",
+      manualCarryOverHours:
+        user.manualCarryOverHours !== null && user.manualCarryOverHours !== undefined
+          ? String(user.manualCarryOverHours)
+          : "",
     });
     setDialogOpen(true);
   };
@@ -210,9 +215,7 @@ export default function UserManagement() {
   };
 
   const handleResetPassword = (user: any) => {
-    const confirmed = window.confirm(
-      `Naozaj chcete resetovať heslo používateľa ${user.name}?`
-    );
+    const confirmed = window.confirm(`Naozaj chcete resetovať heslo používateľa ${user.name}?`);
     if (confirmed) {
       resetPasswordMutation.mutate({ id: user.id });
     }
@@ -226,6 +229,7 @@ export default function UserManagement() {
       }
       return;
     }
+
     setValue(
       "managedTeamIds",
       current.filter((id) => id !== teamId)
@@ -244,21 +248,34 @@ export default function UserManagement() {
           ? Number(values.teamId)
           : null;
 
+    const parsedWorkingHoursPerDay = Number(values.workingHoursPerDay);
+    if (!Number.isFinite(parsedWorkingHoursPerDay) || parsedWorkingHoursPerDay <= 0) {
+      toast({
+        title: "Neplatná pracovná doba",
+        description: "Zadajte počet hodín za deň väčší ako 0.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const payload = {
       email: values.email.trim(),
       name: values.name.trim(),
       role: values.role,
       teamId: resolvedTeamId,
       managedTeamIds: values.role === "MANAGER" ? parsedManagedTeamIds : [],
+      workingHoursPerDay: parsedWorkingHoursPerDay,
       employmentStartDate: values.employmentStartDate ? values.employmentStartDate : null,
       birthDate: values.birthDate ? values.birthDate : null,
       hasChild: values.hasChild,
-      manualLeaveAllowanceHours: values.manualLeaveAllowanceHours !== ""
-        ? Number(values.manualLeaveAllowanceHours)
-        : null,
-      manualCarryOverHours: values.manualCarryOverHours !== ""
-        ? Number(values.manualCarryOverHours)
-        : null,
+      manualLeaveAllowanceHours:
+        values.manualLeaveAllowanceHours !== ""
+          ? Number(values.manualLeaveAllowanceHours)
+          : null,
+      manualCarryOverHours:
+        values.manualCarryOverHours !== ""
+          ? Number(values.manualCarryOverHours)
+          : null,
     };
 
     if (editingUser) {
@@ -267,7 +284,7 @@ export default function UserManagement() {
       createMutation.mutate(payload);
     }
   };
-  
+
   return (
     <Card className="space-y-4 p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -279,6 +296,7 @@ export default function UserManagement() {
         </div>
         <Button onClick={openCreate}>Pridať používateľa</Button>
       </div>
+
       <Table>
         <TableHeader>
           <TableRow>
@@ -287,6 +305,7 @@ export default function UserManagement() {
             <TableHead>Rola</TableHead>
             <TableHead>Tím</TableHead>
             <TableHead>Nástup</TableHead>
+            <TableHead>Pracovná doba</TableHead>
             <TableHead>Narodenie</TableHead>
             <TableHead>Dieťa</TableHead>
             <TableHead>Nárok dovolenky (hodiny)</TableHead>
@@ -304,12 +323,14 @@ export default function UserManagement() {
                   .map((team: any) => team.name)
               : [];
             const teamName = teams.find((team: any) => team.id === user.teamId)?.name;
-            const teamLabel = user.role === "MANAGER"
-              ? [
-                  `Člen: ${teamName || "Bez tímu"}`,
-                  `Riadi: ${managedTeamNames.length > 0 ? managedTeamNames.join(", ") : "Žiadny tím"}`,
-                ].join(" | ")
-              : (teamName || "Bez tímu");
+            const teamLabel =
+              user.role === "MANAGER"
+                ? [
+                    `Člen: ${teamName || "Bez tímu"}`,
+                    `Riadi: ${managedTeamNames.length > 0 ? managedTeamNames.join(", ") : "Žiadny tím"}`,
+                  ].join(" | ")
+                : (teamName || "Bez tímu");
+
             return (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.name}</TableCell>
@@ -323,6 +344,7 @@ export default function UserManagement() {
                 <TableCell>
                   {user.employmentStartDate ? new Date(user.employmentStartDate).toLocaleDateString() : "—"}
                 </TableCell>
+                <TableCell>{user.workingHoursPerDay ?? 8} h</TableCell>
                 <TableCell>
                   {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—"}
                 </TableCell>
@@ -367,9 +389,7 @@ export default function UserManagement() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>
-              {editingUser ? "Upraviť používateľa" : "Pridať používateľa"}
-            </DialogTitle>
+            <DialogTitle>{editingUser ? "Upraviť používateľa" : "Pridať používateľa"}</DialogTitle>
             <DialogDescription>
               Vyplňte základné informácie o používateľovi a priraďte mu rolu alebo tím.
             </DialogDescription>
@@ -386,6 +406,7 @@ export default function UserManagement() {
                 <Input id="user-email" type="email" {...register("email", { required: true })} />
               </div>
             </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
                 <Label>Rola</Label>
@@ -412,6 +433,7 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-1">
                 <Label>{watch("role") === "MANAGER" ? "Tím (ako zamestnanec)" : "Tím"}</Label>
                 <Select
@@ -433,6 +455,7 @@ export default function UserManagement() {
                 </Select>
               </div>
             </div>
+
             {watch("role") === "MANAGER" && (
               <div className="space-y-2">
                 <Label>Tímy manažéra</Label>
@@ -456,6 +479,7 @@ export default function UserManagement() {
                 </p>
               </div>
             )}
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="user-birth-date">Dátum narodenia</Label>
@@ -470,11 +494,26 @@ export default function UserManagement() {
                 <Label htmlFor="user-has-child">Má dieťa</Label>
               </div>
             </div>
+
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label htmlFor="user-working-hours">Pracovná doba za deň (hodiny)</Label>
+                <Input
+                  id="user-working-hours"
+                  type="number"
+                  min={0.5}
+                  step="0.5"
+                  placeholder="Napr. 7.5"
+                  {...register("workingHoursPerDay", { required: true })}
+                />
+              </div>
               <div className="space-y-1">
                 <Label htmlFor="user-start-date">Dátum nástupu</Label>
                 <Input id="user-start-date" type="date" {...register("employmentStartDate")} />
               </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="user-manual-allowance">Nárok dovolenky na začiatku roka (hodiny)</Label>
                 <Input
@@ -489,7 +528,7 @@ export default function UserManagement() {
                   Ak pole necháte prázdne, systém vypočíta nárok automaticky.
                 </p>
               </div>
-              <div className="space-y-1 md:col-start-2">
+              <div className="space-y-1">
                 <Label htmlFor="user-manual-carry-over">Prenesená dovolenka z minulého roka (hodiny)</Label>
                 <Input
                   id="user-manual-carry-over"
@@ -504,6 +543,7 @@ export default function UserManagement() {
                 </p>
               </div>
             </div>
+
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Zrušiť

@@ -5,18 +5,21 @@ import {
   computeCarryOverHours,
   getAnnualLeaveGroupAllowanceHours,
 } from "./leave-entitlement";
+import { HOURS_PER_WORKDAY } from "./date-utils";
 import { formatLeaveHours } from "./leave-format";
 
 export async function getAnnualLeaveAllowanceHours(userId: string, year: number): Promise<number> {
   const user = await db.queryRow<{
     birthDate: string | null;
     hasChild: boolean;
+    workingHoursPerDay: number;
     employmentStartDate: string | null;
     manualLeaveAllowanceHours: number | null;
     manualCarryOverHours: number | null;
   }>`
     SELECT birth_date::text as "birthDate",
       has_child as "hasChild",
+      COALESCE(working_hours_per_day, ${HOURS_PER_WORKDAY}) as "workingHoursPerDay",
       employment_start_date::text as "employmentStartDate",
       manual_leave_allowance_hours as "manualLeaveAllowanceHours",
       manual_carry_over_hours as "manualCarryOverHours"
@@ -59,6 +62,7 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
+    workingHoursPerDay: user.workingHoursPerDay,
     employmentStartDate: user.employmentStartDate,
     manualAllowanceHours: user.manualLeaveAllowanceHours,
     accrualPolicy,
@@ -104,6 +108,7 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
         birthDate: user.birthDate,
         hasChild: user.hasChild,
         year: previousYear,
+        workingHoursPerDay: user.workingHoursPerDay,
         employmentStartDate: user.employmentStartDate,
         manualAllowanceHours: null,
         accrualPolicy,
@@ -113,6 +118,7 @@ export async function getAnnualLeaveAllowanceHours(userId: string, year: number)
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
+    workingHoursPerDay: user.workingHoursPerDay,
   });
 
   const carryOverHours = computeCarryOverHours({

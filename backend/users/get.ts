@@ -38,6 +38,7 @@ export const get = api(
       SELECT 
         id, email, name, role,
         team_id as "teamId",
+        working_hours_per_day as "workingHoursPerDay",
         is_active as "isActive",
         created_at as "createdAt",
         updated_at as "updatedAt"

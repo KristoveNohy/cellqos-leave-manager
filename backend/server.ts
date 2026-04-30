@@ -565,6 +565,7 @@ async function getVacationPolicy(): Promise<VacationPolicy> {
 }
 
 type UserColumnSupport = {
+  workingHoursPerDay: boolean;
   employmentStartDate: boolean;
   manualLeaveAllowanceHours: boolean;
   manualCarryOverHours: boolean;
@@ -690,8 +691,30 @@ function parseOptionalNumber(value?: string): number | undefined {
   return parsed;
 }
 
+function validateWorkingHoursPerDay(value: unknown): number {
+  if (typeof value !== "number" || Number.isNaN(value) || value <= 0) {
+    throw new HttpError(400, "Working hours per day must be a positive number.");
+  }
+  return value;
+}
+
+async function getWorkingHoursPerDayForUser(userId: string): Promise<number> {
+  const columnSupport = await getUserColumnSupport();
+  const user = await queryRow<{ workingHoursPerDay: number }>(
+    `
+      SELECT ${columnSupport.workingHoursPerDay ? "working_hours_per_day" : `${HOURS_PER_WORKDAY}`} as "workingHoursPerDay"
+      FROM users
+      WHERE id = $1
+    `,
+    [userId]
+  );
+
+  return Number(user?.workingHoursPerDay ?? HOURS_PER_WORKDAY);
+}
+
 async function getUserColumnSupport(): Promise<UserColumnSupport> {
-  const [employmentStartDate, manualLeaveAllowanceHours, manualCarryOverHours, profileCompleted] = await Promise.all([
+  const [workingHoursPerDay, employmentStartDate, manualLeaveAllowanceHours, manualCarryOverHours, profileCompleted] = await Promise.all([
+    columnExists("users", "working_hours_per_day"),
     columnExists("users", "employment_start_date"),
     columnExists("users", "manual_leave_allowance_hours"),
     columnExists("users", "manual_carry_over_hours"),
@@ -699,6 +722,7 @@ async function getUserColumnSupport(): Promise<UserColumnSupport> {
   ]);
 
   return {
+    workingHoursPerDay,
     employmentStartDate,
     manualLeaveAllowanceHours,
     manualCarryOverHours,
@@ -733,6 +757,7 @@ async function getAnnualLeaveBreakdownForUser(
   const user = await queryRow<{
     birthDate: string | null;
     hasChild: boolean;
+    workingHoursPerDay: number;
     employmentStartDate: string | null;
     manualLeaveAllowanceHours: number | null;
     manualCarryOverHours: number | null;
@@ -740,6 +765,7 @@ async function getAnnualLeaveBreakdownForUser(
     `
       SELECT birth_date::text as "birthDate",
         has_child as "hasChild",
+        ${columnSupport.workingHoursPerDay ? "working_hours_per_day" : `${HOURS_PER_WORKDAY}`} as "workingHoursPerDay",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         ${columnSupport.manualLeaveAllowanceHours ? `manual_leave_allowance_hours` : "NULL"} as "manualLeaveAllowanceHours",
         ${columnSupport.manualCarryOverHours ? `manual_carry_over_hours` : "NULL"} as "manualCarryOverHours"
@@ -763,6 +789,7 @@ async function getAnnualLeaveBreakdownForUser(
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
+    workingHoursPerDay: user.workingHoursPerDay,
     employmentStartDate: user.employmentStartDate,
     manualAllowanceHours: user.manualLeaveAllowanceHours,
     accrualPolicy: policy.accrualPolicy,
@@ -853,6 +880,7 @@ async function getAnnualLeaveBreakdownForUser(
         birthDate: user.birthDate,
         hasChild: user.hasChild,
         year: previousYear,
+        workingHoursPerDay: user.workingHoursPerDay,
         employmentStartDate: user.employmentStartDate,
         manualAllowanceHours: null,
         accrualPolicy: policy.accrualPolicy,
@@ -862,6 +890,7 @@ async function getAnnualLeaveBreakdownForUser(
     birthDate: user.birthDate,
     hasChild: user.hasChild,
     year,
+    workingHoursPerDay: user.workingHoursPerDay,
   });
 
   const carryOverHours = computeCarryOverHours({
@@ -1295,6 +1324,7 @@ app.get("/users/me", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.workingHoursPerDay ? "working_hours_per_day" : `${HOURS_PER_WORKDAY}`} as "workingHoursPerDay",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
@@ -1325,9 +1355,10 @@ app.get("/users/me", asyncHandler(async (req, res) => {
 app.patch("/users/me/onboarding", asyncHandler(async (req, res) => {
   const auth = requireAuth(req.auth ?? null);
   const columnSupport = await getUserColumnSupport();
-  const { birthDate, hasChild, employmentStartDate, teamId } = req.body as {
+  const { birthDate, hasChild, workingHoursPerDay, employmentStartDate, teamId } = req.body as {
     birthDate?: string;
     hasChild?: boolean;
+    workingHoursPerDay?: number;
     employmentStartDate?: string | null;
     teamId?: number | null;
   };
@@ -1338,6 +1369,11 @@ app.patch("/users/me/onboarding", asyncHandler(async (req, res) => {
 
   if (typeof hasChild !== "boolean") {
     throw new HttpError(400, "Child information is required");
+  }
+
+  const resolvedWorkingHoursPerDay = validateWorkingHoursPerDay(workingHoursPerDay);
+  if (!columnSupport.workingHoursPerDay) {
+    throw new HttpError(500, "Missing database column users.working_hours_per_day. Run migrations before saving working hours.");
   }
 
   const before = await queryRow<Record<string, unknown>>("SELECT * FROM users WHERE id = $1", [auth.userID]);
@@ -1353,6 +1389,9 @@ app.patch("/users/me/onboarding", asyncHandler(async (req, res) => {
 
   updates.push(`has_child = $${values.length + 1}`);
   values.push(hasChild);
+
+  updates.push(`working_hours_per_day = $${values.length + 1}`);
+  values.push(resolvedWorkingHoursPerDay);
 
   // Only update employment_start_date if it was explicitly provided in the request
   if (columnSupport.employmentStartDate && "employmentStartDate" in req.body) {
@@ -1381,6 +1420,7 @@ app.patch("/users/me/onboarding", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.workingHoursPerDay ? "working_hours_per_day" : `${HOURS_PER_WORKDAY}`} as "workingHoursPerDay",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
@@ -1465,6 +1505,7 @@ app.get("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.workingHoursPerDay ? "working_hours_per_day" : `${HOURS_PER_WORKDAY}`} as "workingHoursPerDay",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
@@ -1541,6 +1582,7 @@ app.post("/users", asyncHandler(async (req, res) => {
     managedTeamIds,
     birthDate,
     hasChild,
+    workingHoursPerDay,
     employmentStartDate,
     manualLeaveAllowanceHours,
     manualCarryOverHours,
@@ -1552,6 +1594,7 @@ app.post("/users", asyncHandler(async (req, res) => {
     managedTeamIds?: number[];
     birthDate?: string | null;
     hasChild?: boolean;
+    workingHoursPerDay?: number;
     employmentStartDate?: string | null;
     manualLeaveAllowanceHours?: number | null;
     manualCarryOverHours?: number | null;
@@ -1566,12 +1609,17 @@ app.post("/users", asyncHandler(async (req, res) => {
   const userId = randomUUID();
   const userRole: UserRole = role ?? "EMPLOYEE";
   const resolvedTeamId = userRole === "ADMIN" ? null : teamId ?? null;
+  const resolvedWorkingHoursPerDay = workingHoursPerDay ?? HOURS_PER_WORKDAY;
   const defaultPassword = "Password123!";
   const passwordRow = await queryRow<{ hash: string }>(
     "SELECT crypt($1, gen_salt('bf')) as hash",
     [defaultPassword]
   );
 
+  validateWorkingHoursPerDay(resolvedWorkingHoursPerDay);
+  if (!columnSupport.workingHoursPerDay) {
+    throw new HttpError(500, "Missing database column users.working_hours_per_day. Run migrations before saving working hours.");
+  }
   if (manualLeaveAllowanceHours !== undefined && manualLeaveAllowanceHours !== null) {
     if (typeof manualLeaveAllowanceHours !== "number" || Number.isNaN(manualLeaveAllowanceHours) || manualLeaveAllowanceHours < 0) {
       throw new HttpError(400, "Manual leave allowance must be a non-negative number.");
@@ -1596,6 +1644,7 @@ app.post("/users", asyncHandler(async (req, res) => {
       "name",
       "role",
       "team_id",
+      "working_hours_per_day",
       "birth_date",
       "has_child",
       "password_hash",
@@ -1610,6 +1659,7 @@ app.post("/users", asyncHandler(async (req, res) => {
       name,
       userRole,
       resolvedTeamId,
+      resolvedWorkingHoursPerDay,
       birthDate ?? null,
       hasChild ?? false,
       passwordRow?.hash ?? null,
@@ -1618,8 +1668,8 @@ app.post("/users", asyncHandler(async (req, res) => {
     ];
 
     if (columnSupport.employmentStartDate) {
-      columns.splice(5, 0, "employment_start_date");
-      values.splice(5, 0, employmentStartDate ?? null);
+      columns.splice(6, 0, "employment_start_date");
+      values.splice(6, 0, employmentStartDate ?? null);
     }
     if (columnSupport.manualLeaveAllowanceHours) {
       columns.splice(columns.length - 2, 0, "manual_leave_allowance_hours");
@@ -1651,6 +1701,7 @@ app.post("/users", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.workingHoursPerDay ? "working_hours_per_day" : `${HOURS_PER_WORKDAY}`} as "workingHoursPerDay",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
@@ -1694,6 +1745,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     isActive,
     birthDate,
     hasChild,
+    workingHoursPerDay,
     employmentStartDate,
     manualLeaveAllowanceHours,
     manualCarryOverHours,
@@ -1706,6 +1758,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     isActive?: boolean;
     birthDate?: string | null;
     hasChild?: boolean;
+    workingHoursPerDay?: number;
     employmentStartDate?: string | null;
     manualLeaveAllowanceHours?: number | null;
     manualCarryOverHours?: number | null;
@@ -1739,6 +1792,14 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
   } else if (teamId !== undefined) {
     updates.push(`team_id = $${values.length + 1}`);
     values.push(teamId ?? null);
+  }
+  if (workingHoursPerDay !== undefined) {
+    validateWorkingHoursPerDay(workingHoursPerDay);
+    if (!columnSupport.workingHoursPerDay) {
+      throw new HttpError(500, "Missing database column users.working_hours_per_day. Run migrations before saving working hours.");
+    }
+    updates.push(`working_hours_per_day = $${values.length + 1}`);
+    values.push(workingHoursPerDay);
   }
   if (columnSupport.employmentStartDate && employmentStartDate !== undefined) {
     updates.push(`employment_start_date = $${values.length + 1}`);
@@ -1800,6 +1861,7 @@ app.patch("/users/:id", asyncHandler(async (req, res) => {
     `
       SELECT id, email, name, role,
         team_id as "teamId",
+        ${columnSupport.workingHoursPerDay ? "working_hours_per_day" : `${HOURS_PER_WORKDAY}`} as "workingHoursPerDay",
         ${columnSupport.employmentStartDate ? `employment_start_date::text` : "NULL"} as "employmentStartDate",
         birth_date::text as "birthDate",
         has_child as "hasChild",
@@ -2493,10 +2555,12 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
   );
 
   const holidayDates = new Set(holidayRows.map((h) => h.date));
+  const workingHoursPerDayForUser = await getWorkingHoursPerDayForUser(targetUserId);
   const computedHours = computeWorkingHours(
     startDate,
     endDate,
     holidayDates,
+    workingHoursPerDayForUser,
     startTime ?? null,
     endTime ?? null
   );
@@ -2667,10 +2731,12 @@ app.patch("/leave-requests/:id", asyncHandler(async (req, res) => {
     );
 
     const holidayDates = new Set(holidayRows.map((h) => h.date));
+    const workingHoursPerDayForUser = await getWorkingHoursPerDayForUser(before.userId);
     computedHours = computeWorkingHours(
       newStartDate,
       newEndDate,
       holidayDates,
+      workingHoursPerDayForUser,
       startTime ?? before.startTime,
       endTime ?? before.endTime
     );
@@ -4591,15 +4657,32 @@ app.post("/admin/database/import", asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof HttpError) {
+    console.error("API request failed", {
+      method: req.method,
+      path: req.originalUrl,
+      status: err.status,
+      message: err.message,
+    });
     return res.status(err.status).json({ message: err.message });
   }
 
   if (err instanceof Error) {
+    console.error("Unhandled API error", {
+      method: req.method,
+      path: req.originalUrl,
+      message: err.message,
+      stack: err.stack,
+    });
     return res.status(500).json({ message: err.message });
   }
 
+  console.error("Unknown API error", {
+    method: req.method,
+    path: req.originalUrl,
+    error: err,
+  });
   return res.status(500).json({ message: "Unknown error" });
 });
 

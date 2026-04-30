@@ -97,6 +97,7 @@ export function createApiClient(token: string | null) {
       completeOnboarding: (data: {
         birthDate: string;
         hasChild: boolean;
+        workingHoursPerDay: number;
         employmentStartDate?: string | null;
         teamId?: number | null;
       }) => apiRequest<{ user: any; allowanceHours: number }>("/users/me/onboarding", { method: "PATCH", body: data, token }),
@@ -108,6 +109,7 @@ export function createApiClient(token: string | null) {
         managedTeamIds?: number[];
         birthDate?: string | null;
         hasChild?: boolean;
+        workingHoursPerDay?: number;
         employmentStartDate?: string | null;
         manualLeaveAllowanceHours?: number | null;
         manualCarryOverHours?: number | null;

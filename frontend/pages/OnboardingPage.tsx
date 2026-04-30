@@ -17,6 +17,7 @@ interface OnboardingFormValues {
   birthDate: string;
   hasChild: boolean;
   teamId: string;
+  workingHoursPerDay: string;
   employmentStartDate: string;
   unknownStartDate: boolean;
 }
@@ -45,6 +46,7 @@ export default function OnboardingPage() {
       birthDate: "",
       hasChild: false,
       teamId: "none",
+      workingHoursPerDay: "8",
       employmentStartDate: "",
       unknownStartDate: false,
     },
@@ -59,6 +61,7 @@ export default function OnboardingPage() {
       birthDate: userQuery.data.birthDate ? String(userQuery.data.birthDate).slice(0, 10) : "",
       hasChild: Boolean(userQuery.data.hasChild),
       teamId: userQuery.data.teamId ? String(userQuery.data.teamId) : "none",
+      workingHoursPerDay: userQuery.data.workingHoursPerDay ? String(userQuery.data.workingHoursPerDay) : "8",
       employmentStartDate: userQuery.data.employmentStartDate ? String(userQuery.data.employmentStartDate).slice(0, 10) : "",
       unknownStartDate: !userQuery.data.employmentStartDate,
     });
@@ -68,6 +71,7 @@ export default function OnboardingPage() {
     mutationFn: (payload: {
       birthDate: string;
       hasChild: boolean;
+      workingHoursPerDay: number;
       employmentStartDate?: string | null;
       teamId?: number | null;
     }) => backend.users.completeOnboarding(payload),
@@ -84,7 +88,6 @@ export default function OnboardingPage() {
         });
       }
 
-      // Invalidate the /users/me cache so the guard fetches fresh data
       queryClient.invalidateQueries({ queryKey: ["me"] });
 
       toast({
@@ -119,9 +122,20 @@ export default function OnboardingPage() {
       return;
     }
 
+    const parsedWorkingHoursPerDay = Number(values.workingHoursPerDay);
+    if (!Number.isFinite(parsedWorkingHoursPerDay) || parsedWorkingHoursPerDay <= 0) {
+      toast({
+        title: "Neplatná pracovná doba",
+        description: "Zadajte počet hodín za deň väčší ako 0.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     onboardingMutation.mutate({
       birthDate: values.birthDate,
       hasChild: values.hasChild,
+      workingHoursPerDay: parsedWorkingHoursPerDay,
       employmentStartDate: values.unknownStartDate ? null : values.employmentStartDate || null,
       teamId: values.teamId !== "none" ? Number(values.teamId) : null,
     });
@@ -172,6 +186,19 @@ export default function OnboardingPage() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="workingHoursPerDay">Pracovná doba za deň (hodiny)</Label>
+                <Input
+                  id="workingHoursPerDay"
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  {...register("workingHoursPerDay", { required: true })}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="employmentStartDate">Dátum nástupu</Label>
                 <Input
                   id="employmentStartDate"
@@ -218,12 +245,12 @@ export default function OnboardingPage() {
           <div>
             <h2 className="text-xl font-semibold">Prečo to potrebujeme</h2>
             <p className="text-sm text-muted-foreground">
-              Tieto údaje používame na výpočet 160 alebo 200 hodinového nároku a na správne priradenie do tímu.
+              Tieto údaje používame na výpočet nároku v hodinách a na správne priradenie do tímu.
             </p>
           </div>
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>Zostatok z minulého roka sa pri prvom dokončení profilu neprenáša.</p>
-            <p>Váš nárok na dovolenku sa vypočítá na základe osobných údajov a dátumu narodenia.</p>
+            <p>Váš nárok na dovolenku sa vypočíta z pracovných hodín za deň a z pravidla 20 alebo 25 dní.</p>
             <p>Údaje môžete po uložení skontrolovať v profile.</p>
           </div>
           {userQuery.data?.profileCompleted === false ? (

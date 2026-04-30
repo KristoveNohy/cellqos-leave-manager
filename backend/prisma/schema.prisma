@@ -54,6 +54,7 @@ model User {
   role               UserRole @default(EMPLOYEE)
   teamId             BigInt?  @map("team_id")
   team               Team?    @relation(fields: [teamId], references: [id])
+  workingHoursPerDay Float    @default(8) @map("working_hours_per_day")
   employmentStartDate DateTime? @map("employment_start_date") @db.Date
   birthDate          DateTime? @map("birth_date") @db.Date
   hasChild           Boolean  @default(false) @map("has_child")

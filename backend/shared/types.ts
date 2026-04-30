@@ -24,6 +24,7 @@ export interface User {
   name: string;
   role: UserRole;
   teamId: number | null;
+  workingHoursPerDay: number;
   employmentStartDate: string | null;
   birthDate: string | null;
   hasChild: boolean;

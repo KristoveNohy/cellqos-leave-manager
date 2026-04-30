@@ -2,13 +2,12 @@ import { HOURS_PER_WORKDAY } from "./date-utils";
 
 const FULL_ALLOWANCE_WITH_CHILD_DAYS = 25;
 const FULL_ALLOWANCE_STANDARD_DAYS = 20;
-const FULL_ALLOWANCE_WITH_CHILD_HOURS = FULL_ALLOWANCE_WITH_CHILD_DAYS * HOURS_PER_WORKDAY;
-const FULL_ALLOWANCE_STANDARD_HOURS = FULL_ALLOWANCE_STANDARD_DAYS * HOURS_PER_WORKDAY;
 
 type AnnualLeaveAllowanceInput = {
   birthDate: string | null;
   hasChild: boolean;
   year: number;
+  workingHoursPerDay?: number;
   employmentStartDate?: string | null;
   manualAllowanceHours?: number | null;
   accrualPolicy?: "YEAR_START" | "PRO_RATA";
@@ -18,18 +17,22 @@ export function getAnnualLeaveGroupAllowanceHours({
   birthDate,
   hasChild,
   year,
-}: Pick<AnnualLeaveAllowanceInput, "birthDate" | "hasChild" | "year">): number {
+  workingHoursPerDay = HOURS_PER_WORKDAY,
+}: Pick<AnnualLeaveAllowanceInput, "birthDate" | "hasChild" | "year" | "workingHoursPerDay">): number {
+  const fullAllowanceWithChildHours = FULL_ALLOWANCE_WITH_CHILD_DAYS * workingHoursPerDay;
+  const fullAllowanceStandardHours = FULL_ALLOWANCE_STANDARD_DAYS * workingHoursPerDay;
+
   if (hasChild) {
-    return FULL_ALLOWANCE_WITH_CHILD_HOURS;
+    return fullAllowanceWithChildHours;
   }
 
   if (!birthDate) {
-    return FULL_ALLOWANCE_STANDARD_HOURS;
+    return fullAllowanceStandardHours;
   }
 
   const birthYear = Number(birthDate.slice(0, 4));
   const cutoffYear = year - 33;
-  return birthYear <= cutoffYear ? FULL_ALLOWANCE_WITH_CHILD_HOURS : FULL_ALLOWANCE_STANDARD_HOURS;
+  return birthYear <= cutoffYear ? fullAllowanceWithChildHours : fullAllowanceStandardHours;
 }
 
 function roundLeaveHours(value: number): number {
@@ -40,11 +43,17 @@ export function computeAnnualLeaveAllowanceHours({
   birthDate,
   hasChild,
   year,
+  workingHoursPerDay = HOURS_PER_WORKDAY,
   employmentStartDate,
   manualAllowanceHours,
   accrualPolicy = "YEAR_START",
 }: AnnualLeaveAllowanceInput): number {
-  const baseAllowanceHours = getAnnualLeaveGroupAllowanceHours({ birthDate, hasChild, year });
+  const baseAllowanceHours = getAnnualLeaveGroupAllowanceHours({
+    birthDate,
+    hasChild,
+    year,
+    workingHoursPerDay,
+  });
   let allowanceHours = baseAllowanceHours;
 
   if (employmentStartDate) {

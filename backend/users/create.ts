@@ -12,6 +12,7 @@ interface CreateUserRequest {
   name: string;
   role: UserRole;
   teamId?: number;
+  workingHoursPerDay?: number;
   birthDate?: string | null;
   hasChild?: boolean;
 }
@@ -23,17 +24,22 @@ export const create = api(
     const auth = getAuthData()!;
     requireAdmin(auth.role);
     validateEmail(req.email);
+    const workingHoursPerDay = req.workingHoursPerDay ?? 8;
+    if (!Number.isFinite(workingHoursPerDay) || workingHoursPerDay <= 0) {
+      throw new Error("Working hours per day must be a positive number.");
+    }
     const resolvedTeamId = req.role === "ADMIN" ? null : req.teamId || null;
     const defaultPassword = "Password123!";
     
     await db.exec`
-      INSERT INTO users (id, email, name, role, team_id, birth_date, has_child, password_hash, must_change_password)
+      INSERT INTO users (id, email, name, role, team_id, working_hours_per_day, birth_date, has_child, password_hash, must_change_password)
       VALUES (
         ${req.id},
         ${req.email},
         ${req.name},
         ${req.role},
         ${resolvedTeamId},
+        ${workingHoursPerDay},
         ${req.birthDate || null},
         ${req.hasChild ?? false},
         crypt(${defaultPassword}, gen_salt('bf')),
@@ -45,6 +51,7 @@ export const create = api(
       SELECT 
         id, email, name, role,
         team_id as "teamId",
+        working_hours_per_day as "workingHoursPerDay",
         birth_date::text as "birthDate",
         has_child as "hasChild",
         is_active as "isActive",

@@ -22,16 +22,39 @@ test("calculates group allowance based on age and child status", () => {
   );
 });
 
+test("calculates allowance from custom working hours per day", () => {
+  assert.equal(
+    getAnnualLeaveGroupAllowanceHours({
+      birthDate: "1995-01-01",
+      hasChild: false,
+      year: 2024,
+      workingHoursPerDay: 7.5,
+    }),
+    150
+  );
+
+  assert.equal(
+    getAnnualLeaveGroupAllowanceHours({
+      birthDate: null,
+      hasChild: true,
+      year: 2024,
+      workingHoursPerDay: 7.5,
+    }),
+    187.5
+  );
+});
+
 test("applies pro-rata allowance for employees starting mid-year", () => {
   const allowance = computeAnnualLeaveAllowanceHours({
     birthDate: "1995-01-01",
     hasChild: false,
     year: 2024,
+    workingHoursPerDay: 7.5,
     employmentStartDate: "2024-03-10",
     accrualPolicy: "PRO_RATA",
   });
 
-  assert.equal(allowance, 133.33);
+  assert.equal(allowance, 125);
 });
 
 test("uses manual allowance when provided", () => {

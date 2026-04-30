@@ -69,6 +69,7 @@ export default function ProfilePage() {
               value={displayedUser?.birthDate ? new Date(displayedUser.birthDate).toLocaleDateString() : "—"}
             />
             <ProfileRow label="Dieťa" value={displayedUser?.hasChild ? "Áno" : "Nie"} />
+            <ProfileRow label="Pracovná doba za deň" value={`${displayedUser?.workingHoursPerDay ?? 8} h`} />
           </div>
         </Card>
 

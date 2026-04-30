@@ -12,6 +12,7 @@ export const me = api(
       SELECT 
         id, email, name, role,
         team_id as "teamId",
+        working_hours_per_day as "workingHoursPerDay",
         birth_date::text as "birthDate",
         has_child as "hasChild",
         is_active as "isActive",

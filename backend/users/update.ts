@@ -12,6 +12,7 @@ interface UpdateUserParams {
   name?: string;
   role?: UserRole;
   teamId?: number;
+  workingHoursPerDay?: number;
   birthDate?: string | null;
   hasChild?: boolean;
 }
@@ -19,7 +20,7 @@ interface UpdateUserParams {
 export const update = api<UpdateUserParams, User>(
   { auth: true, expose: true, method: "PATCH", path: "/users/:id" },
   async (req): Promise<User> => {
-    const { id, email, name, role, teamId, birthDate, hasChild } = req;
+    const { id, email, name, role, teamId, workingHoursPerDay, birthDate, hasChild } = req;
     const auth = getAuthData()!;
     requireAdmin(auth.role);
     const before = await db.queryRow`
@@ -55,6 +56,13 @@ export const update = api<UpdateUserParams, User>(
       updates.push(`team_id = $${values.length + 1}`);
       values.push(teamId || null);
     }
+    if (workingHoursPerDay !== undefined) {
+      if (!Number.isFinite(workingHoursPerDay) || workingHoursPerDay <= 0) {
+        throw new Error("Working hours per day must be a positive number.");
+      }
+      updates.push(`working_hours_per_day = $${values.length + 1}`);
+      values.push(workingHoursPerDay);
+    }
     if (birthDate !== undefined) {
       updates.push(`birth_date = $${values.length + 1}`);
       values.push(birthDate);
@@ -76,6 +84,7 @@ export const update = api<UpdateUserParams, User>(
       SELECT 
         id, email, name, role,
         team_id as "teamId",
+        working_hours_per_day as "workingHoursPerDay",
         birth_date::text as "birthDate",
         has_child as "hasChild",
         is_active as "isActive",
