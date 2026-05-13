@@ -117,25 +117,37 @@ export const cancel = api(
             AND is_active = true
         `;
 
+    const notificationPayload = {
+      requestId: id,
+      userId: request.userId,
+      userName: requester?.name,
+      type: updated?.type,
+      startDate: updated?.startDate,
+      endDate: updated?.endDate,
+      startTime: updated?.startTime,
+      endTime: updated?.endTime,
+      status: updated?.status,
+      computedHours: updated?.computedHours,
+    };
+
+    const notificationJobs: Promise<unknown>[] = [];
     for (const manager of managers) {
-      await createNotification(
-        manager.id,
-        "REQUEST_CANCELLED",
-        {
-          requestId: id,
-          userId: request.userId,
-          userName: requester?.name,
-          type: updated?.type,
-          startDate: updated?.startDate,
-          endDate: updated?.endDate,
-          startTime: updated?.startTime,
-          endTime: updated?.endTime,
-          status: updated?.status,
-          computedHours: updated?.computedHours,
-        },
-        `leave_request:${id}:cancelled:${manager.id}`
+      notificationJobs.push(
+        createNotification(
+          manager.id,
+          "REQUEST_CANCELLED",
+          notificationPayload,
+          `leave_request:${id}:cancelled:${manager.id}`
+        )
       );
     }
+
+    void Promise.allSettled(notificationJobs).then((results) => {
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      if (failedCount > 0) {
+        console.warn(`Leave request ${id}: ${failedCount} cancellation notification(s) failed`);
+      }
+    });
 
     return updated!;
   }

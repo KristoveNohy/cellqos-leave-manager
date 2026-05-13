@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import moment from "moment";
 import { useBackend } from "@/lib/backend";
@@ -54,6 +54,7 @@ export default function RequestFormDialog({
   initialEndDate,
 }: RequestFormDialogProps) {
   const backend = useBackend();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const canManageUsers = user?.role === "MANAGER" || user?.role === "ADMIN";
   const { toast } = useToast();
@@ -93,7 +94,15 @@ export default function RequestFormDialog({
     mutationFn: async (data: any) => {
       return backend.leave_requests.create(data);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["my-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["team-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["pending-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+        queryClient.invalidateQueries({ queryKey: ["leave-balance"] }),
+      ]);
       toast({ title: "Žiadosť bola úspešne vytvorená" });
       onClose();
     },
@@ -111,7 +120,15 @@ export default function RequestFormDialog({
     mutationFn: async (data: any) => {
       return backend.leave_requests.update(data);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["my-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["team-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["pending-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+        queryClient.invalidateQueries({ queryKey: ["leave-balance"] }),
+      ]);
       toast({ title: "Žiadosť bola úspešne upravená" });
       onClose();
     },

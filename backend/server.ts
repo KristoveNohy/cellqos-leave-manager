@@ -174,7 +174,37 @@ async function hasManagerTeamsTable(): Promise<boolean> {
     `
   );
 
-  managerTeamsTableSupported = Boolean(result?.exists);
+  if (!result?.exists) {
+    await pool.query(
+      `
+        CREATE TABLE IF NOT EXISTS manager_teams (
+          manager_user_id TEXT NOT NULL,
+          team_id BIGINT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (manager_user_id, team_id),
+          CONSTRAINT fk_manager_teams_user
+            FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT fk_manager_teams_team
+            FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+        )
+      `
+    );
+    await pool.query(
+      "CREATE INDEX IF NOT EXISTS idx_manager_teams_team_id ON manager_teams(team_id)"
+    );
+  }
+
+  const afterCreate = await queryRow<{ exists: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'manager_teams'
+      ) as "exists"
+    `
+  );
+
+  managerTeamsTableSupported = Boolean(afterCreate?.exists);
   return managerTeamsTableSupported;
 }
 
@@ -187,22 +217,48 @@ async function getManagedTeamIds(userId: string): Promise<number[]> {
     return Array.from(new Set(rows.map((row) => Number(row.teamId))));
   }
 
-  // Backward compatibility for environments that don't have manager_teams yet.
-  const fallbackTeam = await queryRow<{ teamId: number | null }>(
-    "SELECT team_id as \"teamId\" FROM users WHERE id = $1",
-    [userId]
-  );
-  return fallbackTeam?.teamId !== null && fallbackTeam?.teamId !== undefined
-    ? [Number(fallbackTeam.teamId)]
-    : [];
+  // Never infer managed teams from employee team assignment.
+  return [];
 }
 
-async function canManagerAccessTeam(userId: string, teamId: number | null): Promise<boolean> {
+async function canManagerAccessTeam(userId: string, teamId: number | string | null): Promise<boolean> {
   if (teamId === null || teamId === undefined) {
     return false;
   }
+
+  const normalizedTeamId = Number(teamId);
+  if (!Number.isFinite(normalizedTeamId)) {
+    return false;
+  }
+
   const managedTeamIds = await getManagedTeamIds(userId);
-  return managedTeamIds.includes(teamId);
+  return managedTeamIds.includes(normalizedTeamId);
+}
+
+async function getManagerRecipientIds(teamId: number | null): Promise<string[]> {
+  if (teamId !== null && teamId !== undefined) {
+    if (await hasManagerTeamsTable()) {
+      const rows = await queryRows<{ id: string }>(
+        `
+          SELECT DISTINCT u.id
+          FROM users u
+          JOIN manager_teams mt ON mt.manager_user_id = u.id
+          WHERE u.role = 'MANAGER'
+            AND u.is_active = true
+            AND mt.team_id = $1
+        `,
+        [teamId]
+      );
+      return rows.map((row) => row.id);
+    }
+    return [];
+  }
+
+  const rows = await queryRows<{ id: string }>(
+    "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true",
+    []
+  );
+  return rows.map((row) => row.id);
 }
 
 async function replaceManagerTeamAssignments(userId: string, teamIds: number[]): Promise<void> {
@@ -1043,6 +1099,83 @@ async function createNotification(
       [notificationId]
     );
   }
+}
+
+function runInBackground(task: Promise<void>, context: string): void {
+  void task.catch((error) => {
+    console.warn(`Background task failed: ${context}`, error);
+  });
+}
+
+async function sendLeaveSubmittedNotifications(
+  requestId: number,
+  requesterUserId: string,
+  payload: {
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    status?: string;
+    computedHours?: number;
+  }
+): Promise<void> {
+  const requester = await queryRow<{ teamId: number | null; name: string }>(
+    "SELECT team_id as \"teamId\", name FROM users WHERE id = $1",
+    [requesterUserId]
+  );
+
+  const notificationPayload = {
+    requestId,
+    userId: requesterUserId,
+    userName: requester?.name,
+    type: payload.type,
+    startDate: payload.startDate,
+    endDate: payload.endDate,
+    startTime: payload.startTime,
+    endTime: payload.endTime,
+    status: payload.status,
+    computedHours: payload.computedHours,
+  };
+
+  await createNotification(
+    requesterUserId,
+    "REQUEST_SUBMITTED",
+    notificationPayload,
+    `leave_request:${requestId}:submitted:requester`
+  );
+
+  const managerIds = await getManagerRecipientIds(requester?.teamId ?? null);
+  await Promise.all(
+    managerIds.map((managerId) =>
+      createNotification(
+        managerId,
+        "NEW_PENDING_REQUEST",
+        notificationPayload,
+        `leave_request:${requestId}:submitted:${managerId}`
+      )
+    )
+  );
+
+  const admins = await queryRows<{ id: string }>(
+    `
+      SELECT id
+      FROM users
+      WHERE role = 'ADMIN'
+        AND is_active = true
+    `,
+    []
+  );
+  await Promise.all(
+    admins.map((admin) =>
+      createNotification(
+        admin.id,
+        "NEW_PENDING_REQUEST",
+        notificationPayload,
+        `leave_request:${requestId}:submitted:${admin.id}`
+      )
+    )
+  );
 }
 
 async function applyLeaveBalanceOverride(
@@ -2565,13 +2698,29 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     endTime ?? null
   );
 
+  const overlaps = await queryRow<{ count: number }>(
+    `
+      SELECT COUNT(*) as count
+      FROM leave_requests
+      WHERE user_id = $1
+        AND status IN ('PENDING', 'APPROVED')
+        AND start_date <= $2
+        AND end_date >= $3
+    `,
+    [targetUserId, endDate, startDate]
+  );
+
+  if (overlaps && overlaps.count > 0) {
+    throw new HttpError(409, "Request overlaps with existing pending or approved request");
+  }
+
   const result = await queryRow<{ id: number }>(
     `
       INSERT INTO leave_requests (
         user_id, type, start_date, end_date, start_time, end_time,
         reason, computed_hours, status,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT', NOW(), NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PENDING', NOW(), NOW())
       RETURNING id
     `,
     [
@@ -2616,6 +2765,19 @@ app.post("/leave-requests", asyncHandler(async (req, res) => {
     "CREATE",
     null,
     leaveRequest as unknown as Record<string, unknown>
+  );
+
+  runInBackground(
+    sendLeaveSubmittedNotifications(leaveRequest!.id, leaveRequest!.userId, {
+      type: leaveRequest?.type,
+      startDate: leaveRequest?.startDate,
+      endDate: leaveRequest?.endDate,
+      startTime: leaveRequest?.startTime,
+      endTime: leaveRequest?.endTime,
+      status: leaveRequest?.status,
+      computedHours: leaveRequest?.computedHours,
+    }),
+    `leave-submitted:${leaveRequest!.id}`
   );
 
   res.json(leaveRequest);
@@ -3002,42 +3164,18 @@ app.post("/leave-requests/:id/submit", asyncHandler(async (req, res) => {
     updated as unknown as Record<string, unknown>
   );
 
-  const managers = requester?.teamId
-    ? await queryRows<{ id: string }>(
-        `
-          SELECT DISTINCT u.id
-          FROM users u
-          LEFT JOIN manager_teams mt ON mt.manager_user_id = u.id
-          WHERE u.role = 'MANAGER'
-            AND u.is_active = true
-            AND (u.team_id = $1 OR mt.team_id = $1)
-        `,
-        [requester.teamId]
-      )
-    : await queryRows<{ id: string }>(
-        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true",
-        []
-      );
-
-  for (const manager of managers) {
-    await createNotification(
-      manager.id,
-      "NEW_PENDING_REQUEST",
-      {
-        requestId: id,
-        userId: request.userId,
-        userName: requester?.name,
-        type: updated?.type,
-        startDate: updated?.startDate,
-        endDate: updated?.endDate,
-        startTime: updated?.startTime,
-        endTime: updated?.endTime,
-        status: updated?.status,
-        computedHours: updated?.computedHours,
-      },
-      `leave_request:${id}:submitted:${manager.id}`
-    );
-  }
+  runInBackground(
+    sendLeaveSubmittedNotifications(id, request.userId, {
+      type: updated?.type,
+      startDate: updated?.startDate,
+      endDate: updated?.endDate,
+      startTime: updated?.startTime,
+      endTime: updated?.endTime,
+      status: updated?.status,
+      computedHours: updated?.computedHours,
+    }),
+    `leave-submitted:${id}`
+  );
 
   res.json(updated);
 }));
@@ -3379,42 +3517,33 @@ app.post("/leave-requests/:id/cancel", asyncHandler(async (req, res) => {
     updated as unknown as Record<string, unknown>
   );
 
-  const managers = requester?.teamId
-    ? await queryRows<{ id: string }>(
-        `
-          SELECT DISTINCT u.id
-          FROM users u
-          LEFT JOIN manager_teams mt ON mt.manager_user_id = u.id
-          WHERE u.role = 'MANAGER'
-            AND u.is_active = true
-            AND (u.team_id = $1 OR mt.team_id = $1)
-        `,
-        [requester.teamId]
-      )
-    : await queryRows<{ id: string }>(
-        "SELECT id FROM users WHERE role = 'MANAGER' AND is_active = true",
-        []
-      );
+  const notificationPayload = {
+    requestId: id,
+    userId: request.userId,
+    userName: requester?.name,
+    type: updated?.type,
+    startDate: updated?.startDate,
+    endDate: updated?.endDate,
+    startTime: updated?.startTime,
+    endTime: updated?.endTime,
+    status: updated?.status,
+    computedHours: updated?.computedHours,
+  };
 
-  for (const manager of managers) {
-    await createNotification(
-      manager.id,
-      "REQUEST_CANCELLED",
-      {
-        requestId: id,
-        userId: request.userId,
-        userName: requester?.name,
-        type: updated?.type,
-        startDate: updated?.startDate,
-        endDate: updated?.endDate,
-        startTime: updated?.startTime,
-        endTime: updated?.endTime,
-        status: updated?.status,
-        computedHours: updated?.computedHours,
-      },
-      `leave_request:${id}:cancelled:${manager.id}`
-    );
-  }
+  const managerIds = await getManagerRecipientIds(requester?.teamId ?? null);
+  runInBackground(
+    Promise.allSettled(
+      managerIds.map((managerId) =>
+        createNotification(
+          managerId,
+          "REQUEST_CANCELLED",
+          notificationPayload,
+          `leave_request:${id}:cancelled:${managerId}`
+        )
+      )
+    ).then(() => undefined),
+    `leave-cancelled:${id}`
+  );
 
   res.json(updated);
 }));

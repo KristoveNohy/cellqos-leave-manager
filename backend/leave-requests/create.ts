@@ -1,9 +1,9 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 import db from "../db";
 import { validateDateRange, validateNotInPast } from "../shared/validation";
 import { computeWorkingHours } from "../shared/date-utils";
-import { createAuditLog } from "../shared/audit";
+import { createAuditLog, createNotification } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
 import { isAdmin, isManager } from "../shared/rbac";
 import type { LeaveRequest, LeaveType } from "../shared/types";
@@ -50,6 +50,19 @@ export const create = api(
       req.endTime || null
     );
 
+    const overlaps = await db.queryRow<{ count: number }>`
+      SELECT COUNT(*) as count
+      FROM leave_requests
+      WHERE user_id = ${userId}
+        AND status IN ('PENDING', 'APPROVED')
+        AND start_date <= ${req.endDate}
+        AND end_date >= ${req.startDate}
+    `;
+
+    if (overlaps && overlaps.count > 0) {
+      throw APIError.failedPrecondition("Request overlaps with existing pending or approved request");
+    }
+
     if (req.type === "ANNUAL_LEAVE") {
       await ensureAnnualLeaveBalance({
         userId,
@@ -72,7 +85,7 @@ export const create = api(
         ${req.endTime || null},
         ${req.reason || null},
         ${computedHours},
-        'DRAFT',
+        'PENDING',
         NOW(),
         NOW()
       )
@@ -105,6 +118,85 @@ export const create = api(
       null,
       leaveRequest
     );
+
+    const requester = await db.queryRow<{ teamId: number | null; name: string }>`
+      SELECT team_id as "teamId", name
+      FROM users
+      WHERE id = ${userId}
+    `;
+
+    const notificationPayload = {
+      requestId: leaveRequest!.id,
+      userId: leaveRequest!.userId,
+      userName: requester?.name,
+      type: leaveRequest?.type,
+      startDate: leaveRequest?.startDate,
+      endDate: leaveRequest?.endDate,
+      startTime: leaveRequest?.startTime,
+      endTime: leaveRequest?.endTime,
+      status: leaveRequest?.status,
+      computedHours: leaveRequest?.computedHours,
+    };
+
+    const notificationJobs: Promise<unknown>[] = [];
+    notificationJobs.push(
+      createNotification(
+        leaveRequest!.userId,
+        "REQUEST_SUBMITTED",
+        notificationPayload,
+        `leave_request:${leaveRequest!.id}:submitted:requester`
+      )
+    );
+
+    const managers = requester?.teamId
+      ? await db.queryAll<{ id: string }>`
+          SELECT id
+          FROM users
+          WHERE role = 'MANAGER'
+            AND is_active = true
+            AND team_id = ${requester.teamId}
+        `
+      : await db.queryAll<{ id: string }>`
+          SELECT id
+          FROM users
+          WHERE role = 'MANAGER'
+            AND is_active = true
+        `;
+
+    for (const manager of managers) {
+      notificationJobs.push(
+        createNotification(
+          manager.id,
+          "NEW_PENDING_REQUEST",
+          notificationPayload,
+          `leave_request:${leaveRequest!.id}:submitted:${manager.id}`
+        )
+      );
+    }
+
+    const admins = await db.queryAll<{ id: string }>`
+      SELECT id
+      FROM users
+      WHERE role = 'ADMIN'
+        AND is_active = true
+    `;
+    for (const admin of admins) {
+      notificationJobs.push(
+        createNotification(
+          admin.id,
+          "NEW_PENDING_REQUEST",
+          notificationPayload,
+          `leave_request:${leaveRequest!.id}:submitted:${admin.id}`
+        )
+      );
+    }
+
+    void Promise.allSettled(notificationJobs).then((results) => {
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      if (failedCount > 0) {
+        console.warn(`Leave request ${leaveRequest!.id}: ${failedCount} notification(s) failed`);
+      }
+    });
     
     return leaveRequest!;
   }

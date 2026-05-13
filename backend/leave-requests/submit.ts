@@ -127,6 +127,29 @@ export const submit = api(
       updated
     );
 
+    const notificationPayload = {
+      requestId: id,
+      userId: request.userId,
+      userName: requester?.name,
+      type: updated?.type,
+      startDate: updated?.startDate,
+      endDate: updated?.endDate,
+      startTime: updated?.startTime,
+      endTime: updated?.endTime,
+      status: updated?.status,
+      computedHours: updated?.computedHours,
+    };
+
+    const notificationJobs: Promise<unknown>[] = [];
+    notificationJobs.push(
+      createNotification(
+        request.userId,
+        "REQUEST_SUBMITTED",
+        notificationPayload,
+        `leave_request:${id}:submitted:requester`
+      )
+    );
+
     const managers = requester?.teamId
       ? await db.queryAll<{ id: string }>`
           SELECT id
@@ -141,26 +164,42 @@ export const submit = api(
           WHERE role = 'MANAGER'
             AND is_active = true
         `;
-    
+
     for (const manager of managers) {
-      await createNotification(
-        manager.id,
-        "NEW_PENDING_REQUEST",
-        {
-          requestId: id,
-          userId: request.userId,
-          userName: requester?.name,
-          type: updated?.type,
-          startDate: updated?.startDate,
-          endDate: updated?.endDate,
-          startTime: updated?.startTime,
-          endTime: updated?.endTime,
-          status: updated?.status,
-          computedHours: updated?.computedHours,
-        },
-        `leave_request:${id}:submitted:${manager.id}`
+      notificationJobs.push(
+        createNotification(
+          manager.id,
+          "NEW_PENDING_REQUEST",
+          notificationPayload,
+          `leave_request:${id}:submitted:${manager.id}`
+        )
       );
     }
+
+    const admins = await db.queryAll<{ id: string }>`
+      SELECT id
+      FROM users
+      WHERE role = 'ADMIN'
+        AND is_active = true
+    `;
+
+    for (const admin of admins) {
+      notificationJobs.push(
+        createNotification(
+          admin.id,
+          "NEW_PENDING_REQUEST",
+          notificationPayload,
+          `leave_request:${id}:submitted:${admin.id}`
+        )
+      );
+    }
+
+    void Promise.allSettled(notificationJobs).then((results) => {
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      if (failedCount > 0) {
+        console.warn(`Leave request ${id}: ${failedCount} notification(s) failed`);
+      }
+    });
     
     return updated!;
   }

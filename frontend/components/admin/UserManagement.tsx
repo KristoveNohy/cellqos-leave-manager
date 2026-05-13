@@ -319,16 +319,20 @@ export default function UserManagement() {
           {users.map((user) => {
             const managedTeamNames = Array.isArray(user.managedTeamIds)
               ? teams
-                  .filter((team: any) => user.managedTeamIds.includes(team.id))
+                  .filter((team: any) =>
+                    user.managedTeamIds.some((managedId: number | string) => String(managedId) === String(team.id))
+                  )
                   .map((team: any) => team.name)
               : [];
             const teamName = teams.find((team: any) => team.id === user.teamId)?.name;
             const teamLabel =
               user.role === "MANAGER"
-                ? [
-                    `Člen: ${teamName || "Bez tímu"}`,
-                    `Riadi: ${managedTeamNames.length > 0 ? managedTeamNames.join(", ") : "Žiadny tím"}`,
-                  ].join(" | ")
+                ? managedTeamNames.length > 0
+                  ? [
+                      `Člen: ${teamName || "Bez tímu"}`,
+                      `Riadi: ${managedTeamNames.join(", ")}`,
+                    ].join(" | ")
+                  : `Člen: ${teamName || "Bez tímu"}`
                 : (teamName || "Bez tímu");
 
             return (

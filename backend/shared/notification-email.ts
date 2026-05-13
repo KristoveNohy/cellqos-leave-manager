@@ -73,6 +73,14 @@ export function buildNotificationEmail(type: string, payload: any): Notification
   const safePayload = payload ?? {};
 
   switch (type) {
+    case "REQUEST_SUBMITTED":
+      return {
+        subject: "Ziadost bola odoslana",
+        text: [
+          "Vasa ziadost o dovolenku bola odoslana na schvalenie.",
+          ...buildLeaveRequestDetails(safePayload),
+        ].join("\n"),
+      };
     case "NEW_PENDING_REQUEST":
       return {
         subject: "Nová žiadosť na schválenie",
