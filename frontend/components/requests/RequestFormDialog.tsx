@@ -56,6 +56,14 @@ function getEndTimeFromWorkingHours(startTime = DEFAULT_START_TIME, workingHours
     .format("HH:mm");
 }
 
+function getUserWorkingHours(users: any[], userId?: string, fallbackWorkingHoursPerDay?: number | null) {
+  if (!userId) {
+    return fallbackWorkingHoursPerDay;
+  }
+
+  return users.find((entry: any) => entry.id === userId)?.workingHoursPerDay ?? fallbackWorkingHoursPerDay;
+}
+
 export default function RequestFormDialog({
   open,
   onClose,
@@ -82,14 +90,14 @@ export default function RequestFormDialog({
   const users = usersData?.users || [];
   const requestUserWorkingHoursPerDay = request
     ? canManageUsers
-      ? users.find((entry: any) => entry.id === request.userId)?.workingHoursPerDay
+      ? getUserWorkingHours(users, request.userId)
       : meData?.workingHoursPerDay
     : undefined;
   const defaultStartTime = request ? request.startTime || DEFAULT_START_TIME : DEFAULT_START_TIME;
   const defaultWorkingHoursPerDay = request
     ? requestUserWorkingHoursPerDay
     : canManageUsers
-      ? users.find((entry: any) => entry.id === (user?.id ?? ""))?.workingHoursPerDay
+      ? getUserWorkingHours(users, user?.id ?? "")
       : meData?.workingHoursPerDay;
   const defaultEndTime = request
     ? request.endTime || getEndTimeFromWorkingHours(defaultStartTime, defaultWorkingHoursPerDay)
@@ -105,7 +113,6 @@ export default function RequestFormDialog({
       reason: request?.reason || "",
     },
   });
-
   const selectedUserId = watch("userId");
 
   useEffect(() => {
@@ -258,7 +265,12 @@ export default function RequestFormDialog({
               <Label>Žiadateľ</Label>
               <Select
                 value={watch("userId")}
-                onValueChange={(value) => setValue("userId", value)}
+                onValueChange={(value) => {
+                  const workingHoursPerDay = getUserWorkingHours(users, value, meData?.workingHoursPerDay);
+                  setValue("userId", value);
+                  setValue("startTime", DEFAULT_START_TIME);
+                  setValue("endTime", getEndTimeFromWorkingHours(DEFAULT_START_TIME, workingHoursPerDay));
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Vyberte používateľa" />
