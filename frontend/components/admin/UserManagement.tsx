@@ -33,6 +33,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+type UnitType = "HOURS" | "DAYS";
+
 type UserFormValues = {
   name: string;
   email: string;
@@ -44,7 +46,9 @@ type UserFormValues = {
   birthDate: string;
   hasChild: boolean;
   manualLeaveAllowanceHours: string;
+  manualLeaveAllowanceUnit: UnitType;
   manualCarryOverHours: string;
+  manualCarryOverUnit: UnitType;
   emailNotificationsEnabled: boolean;
 };
 
@@ -60,9 +64,30 @@ function getDefaultValues(): UserFormValues {
     birthDate: "",
     hasChild: false,
     manualLeaveAllowanceHours: "",
+    manualLeaveAllowanceUnit: "HOURS",
     manualCarryOverHours: "",
+    manualCarryOverUnit: "HOURS",
     emailNotificationsEnabled: true,
   };
+}
+
+function parsePositiveNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function formatUnitValue(value: number) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+}
+
+function convertValueBetweenUnits(value: string, from: UnitType, to: UnitType, workingHoursPerDay: number) {
+  const parsedValue = parsePositiveNumber(value);
+  if (parsedValue === null || from === to) {
+    return value;
+  }
+
+  const convertedValue = to === "DAYS" ? parsedValue / workingHoursPerDay : parsedValue * workingHoursPerDay;
+  return formatUnitValue(convertedValue);
 }
 
 export default function UserManagement() {
@@ -202,10 +227,12 @@ export default function UserManagement() {
         user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== undefined
           ? String(user.manualLeaveAllowanceHours)
           : "",
+      manualLeaveAllowanceUnit: "HOURS",
       manualCarryOverHours:
         user.manualCarryOverHours !== null && user.manualCarryOverHours !== undefined
           ? String(user.manualCarryOverHours)
           : "",
+      manualCarryOverUnit: "HOURS",
       emailNotificationsEnabled:
         user.emailNotificationsEnabled !== null && user.emailNotificationsEnabled !== undefined
           ? Boolean(user.emailNotificationsEnabled)
@@ -265,6 +292,32 @@ export default function UserManagement() {
       return;
     }
 
+    const parsedManualLeaveAllowanceValue =
+      values.manualLeaveAllowanceHours !== ""
+        ? parsePositiveNumber(values.manualLeaveAllowanceHours)
+        : null;
+    if (values.manualLeaveAllowanceHours !== "" && parsedManualLeaveAllowanceValue === null) {
+      toast({
+        title: "Neplatný nárok dovolenky",
+        description: "Zadajte platnú hodnotu nároku dovolenky.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parsedManualCarryOverValue =
+      values.manualCarryOverHours !== ""
+        ? parsePositiveNumber(values.manualCarryOverHours)
+        : null;
+    if (values.manualCarryOverHours !== "" && parsedManualCarryOverValue === null) {
+      toast({
+        title: "Neplatná prenesená dovolenka",
+        description: "Zadajte platnú hodnotu prenesenej dovolenky.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const payload = {
       email: values.email.trim(),
       name: values.name.trim(),
@@ -276,12 +329,16 @@ export default function UserManagement() {
       birthDate: values.birthDate ? values.birthDate : null,
       hasChild: values.hasChild,
       manualLeaveAllowanceHours:
-        values.manualLeaveAllowanceHours !== ""
-          ? Number(values.manualLeaveAllowanceHours)
+        parsedManualLeaveAllowanceValue !== null
+          ? values.manualLeaveAllowanceUnit === "DAYS"
+            ? parsedManualLeaveAllowanceValue * parsedWorkingHoursPerDay
+            : parsedManualLeaveAllowanceValue
           : null,
       manualCarryOverHours:
-        values.manualCarryOverHours !== ""
-          ? Number(values.manualCarryOverHours)
+        parsedManualCarryOverValue !== null
+          ? values.manualCarryOverUnit === "DAYS"
+            ? parsedManualCarryOverValue * parsedWorkingHoursPerDay
+            : parsedManualCarryOverValue
           : null,
       emailNotificationsEnabled:
         values.role === "ADMIN" ? Boolean(values.emailNotificationsEnabled) : true,
@@ -541,29 +598,92 @@ export default function UserManagement() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="user-manual-allowance">Nárok dovolenky na začiatku roka (hodiny)</Label>
-                <Input
-                  id="user-manual-allowance"
-                  type="number"
-                  min={0}
-                  step="0.5"
-                  placeholder="Napr. 160"
-                  {...register("manualLeaveAllowanceHours")}
-                />
+                <Label htmlFor="user-manual-allowance">Nárok dovolenky na začiatku roka</Label>
+                <p className="text-xs text-muted-foreground">
+                  Aktuálny formát zadania: {watch("manualLeaveAllowanceUnit") === "DAYS" ? "dni" : "hodiny"}
+                </p>
+                <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <Input
+                    id="user-manual-allowance"
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    placeholder={watch("manualLeaveAllowanceUnit") === "DAYS" ? "Napr. 20" : "Napr. 160"}
+                    {...register("manualLeaveAllowanceHours")}
+                  />
+                  <Select
+                    value={watch("manualLeaveAllowanceUnit")}
+                    onValueChange={(value) => {
+                      const nextUnit = value as UserFormValues["manualLeaveAllowanceUnit"];
+                      const currentUnit = watch("manualLeaveAllowanceUnit");
+                      const workingHoursPerDay = Number(watch("workingHoursPerDay")) || 8;
+                      setValue(
+                        "manualLeaveAllowanceHours",
+                        convertValueBetweenUnits(
+                          watch("manualLeaveAllowanceHours"),
+                          currentUnit,
+                          nextUnit,
+                          workingHoursPerDay
+                        )
+                      );
+                      setValue("manualLeaveAllowanceUnit", nextUnit);
+                    }}
+                  >
+                    <SelectTrigger className="w-[110px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HOURS">Hodiny</SelectItem>
+                      <SelectItem value="DAYS">Dni</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Ak pole necháte prázdne, systém vypočíta nárok automaticky.
                 </p>
               </div>
+
               <div className="space-y-1">
-                <Label htmlFor="user-manual-carry-over">Prenesená dovolenka z minulého roka (hodiny)</Label>
-                <Input
-                  id="user-manual-carry-over"
-                  type="number"
-                  min={0}
-                  step="0.5"
-                  placeholder="Napr. 24"
-                  {...register("manualCarryOverHours")}
-                />
+                <Label htmlFor="user-manual-carry-over"> dovolenka z minulého roka</Label>
+                <p className="text-xs text-muted-foreground">
+                  Aktuálny formát zadania: {watch("manualCarryOverUnit") === "DAYS" ? "dni" : "hodiny"}
+                </p>
+                <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <Input
+                    id="user-manual-carry-over"
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    placeholder={watch("manualCarryOverUnit") === "DAYS" ? "Napr. 3" : "Napr. 24"}
+                    {...register("manualCarryOverHours")}
+                  />
+                  <Select
+                    value={watch("manualCarryOverUnit")}
+                    onValueChange={(value) => {
+                      const nextUnit = value as UserFormValues["manualCarryOverUnit"];
+                      const currentUnit = watch("manualCarryOverUnit");
+                      const workingHoursPerDay = Number(watch("workingHoursPerDay")) || 8;
+                      setValue(
+                        "manualCarryOverHours",
+                        convertValueBetweenUnits(
+                          watch("manualCarryOverHours"),
+                          currentUnit,
+                          nextUnit,
+                          workingHoursPerDay
+                        )
+                      );
+                      setValue("manualCarryOverUnit", nextUnit);
+                    }}
+                  >
+                    <SelectTrigger className="w-[110px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HOURS">Hodiny</SelectItem>
+                      <SelectItem value="DAYS">Dni</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Ručne nastaví počet hodín prenesených do aktuálneho roka.
                 </p>
