@@ -5,10 +5,11 @@ import { validateDateRange, validateNotInPast } from "../shared/validation";
 import { computeWorkingHours } from "../shared/date-utils";
 import { createAuditLog, createNotification } from "../shared/audit";
 import { ensureAnnualLeaveBalance } from "../shared/leave-balance";
-import { isAdmin, isManager } from "../shared/rbac";
+import { isAdmin, isManager, isManagerOrAdmin } from "../shared/rbac";
 import type { LeaveRequest, LeaveType } from "../shared/types";
 
 interface CreateLeaveRequestRequest {
+  userId?: string;
   type: LeaveType;
   startDate: string;
   endDate: string;
@@ -21,11 +22,50 @@ export const create = api(
   { auth: true, expose: true, method: "POST", path: "/leave-requests" },
   async (req: CreateLeaveRequestRequest): Promise<LeaveRequest> => {
     const auth = getAuthData()!;
-    const userId = auth.userID;
+    const actorUserId = auth.userID;
     const allowPast = isAdmin(auth.role) || isManager(auth.role);
+    const requestedUserId = req.userId?.trim();
+    const targetUserId = requestedUserId || actorUserId;
     validateDateRange(req.startDate, req.endDate);
     validateNotInPast(req.startDate, { allowPast });
-    
+
+    if (targetUserId !== actorUserId && !isManagerOrAdmin(auth.role)) {
+      throw APIError.permissionDenied("You can only create leave requests for yourself");
+    }
+
+    const actor = await db.queryRow<{ teamId: number | null }>`
+      SELECT team_id as "teamId"
+      FROM users
+      WHERE id = ${actorUserId}
+    `;
+
+    const targetUser = await db.queryRow<{
+      id: string;
+      name: string;
+      teamId: number | null;
+      workingHoursPerDay: number;
+      isActive: boolean;
+    }>`
+      SELECT
+        id,
+        name,
+        team_id as "teamId",
+        working_hours_per_day as "workingHoursPerDay",
+        is_active as "isActive"
+      FROM users
+      WHERE id = ${targetUserId}
+    `;
+
+    if (!targetUser || !targetUser.isActive) {
+      throw APIError.notFound("Target user not found");
+    }
+
+    if (isManager(auth.role) && !isAdmin(auth.role) && targetUserId !== actorUserId) {
+      if (actor?.teamId === null || actor?.teamId !== targetUser.teamId) {
+        throw APIError.permissionDenied("Managers can only create leave requests for users in their team");
+      }
+    }
+
     // Get holidays for computation
     const holidayDates = new Set<string>();
     for await (const holiday of db.query<{ date: string }>`
@@ -35,17 +75,11 @@ export const create = api(
     `) {
       holidayDates.add(holiday.date);
     }
-    const user = await db.queryRow<{ workingHoursPerDay: number }>`
-      SELECT working_hours_per_day as "workingHoursPerDay"
-      FROM users
-      WHERE id = ${userId}
-    `;
-    
     const computedHours = computeWorkingHours(
       req.startDate,
       req.endDate,
       holidayDates,
-      Number(user?.workingHoursPerDay ?? 8),
+      Number(targetUser.workingHoursPerDay ?? 8),
       req.startTime || null,
       req.endTime || null
     );
@@ -53,7 +87,7 @@ export const create = api(
     const overlaps = await db.queryRow<{ count: number }>`
       SELECT COUNT(*) as count
       FROM leave_requests
-      WHERE user_id = ${userId}
+      WHERE user_id = ${targetUserId}
         AND status IN ('PENDING', 'APPROVED')
         AND start_date <= ${req.endDate}
         AND end_date >= ${req.startDate}
@@ -65,7 +99,7 @@ export const create = api(
 
     if (req.type === "ANNUAL_LEAVE") {
       await ensureAnnualLeaveBalance({
-        userId,
+        userId: targetUserId,
         startDate: req.startDate,
         requestedHours: computedHours,
       });
@@ -77,7 +111,7 @@ export const create = api(
         reason, computed_hours, status,
         created_at, updated_at
       ) VALUES (
-        ${userId},
+        ${targetUserId},
         ${req.type},
         ${req.startDate},
         ${req.endDate},
@@ -111,7 +145,7 @@ export const create = api(
     `;
     
     await createAuditLog(
-      userId,
+      actorUserId,
       "leave_request",
       result!.id,
       "CREATE",
@@ -119,16 +153,10 @@ export const create = api(
       leaveRequest
     );
 
-    const requester = await db.queryRow<{ teamId: number | null; name: string }>`
-      SELECT team_id as "teamId", name
-      FROM users
-      WHERE id = ${userId}
-    `;
-
     const notificationPayload = {
       requestId: leaveRequest!.id,
       userId: leaveRequest!.userId,
-      userName: requester?.name,
+      userName: targetUser.name,
       type: leaveRequest?.type,
       startDate: leaveRequest?.startDate,
       endDate: leaveRequest?.endDate,
@@ -148,13 +176,13 @@ export const create = api(
       )
     );
 
-    const managers = requester?.teamId
+    const managers = targetUser.teamId
       ? await db.queryAll<{ id: string }>`
           SELECT id
           FROM users
           WHERE role = 'MANAGER'
             AND is_active = true
-            AND team_id = ${requester.teamId}
+            AND team_id = ${targetUser.teamId}
         `
       : await db.queryAll<{ id: string }>`
           SELECT id

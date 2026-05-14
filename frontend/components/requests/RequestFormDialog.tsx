@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import moment from "moment";
@@ -32,6 +33,19 @@ interface RequestFormDialogProps {
   request?: any;
   initialStartDate?: string;
   initialEndDate?: string;
+}
+
+interface RequestFormValues {
+  userId: string;
+  selectedUserIds: string[];
+  bulkMode: boolean;
+  type: LeaveType;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+  skipApproval: boolean;
 }
 
 const formatDateValue = (value?: string) => {
@@ -104,9 +118,11 @@ export default function RequestFormDialog({
   const defaultEndTime = request
     ? request.endTime || getEndTimeFromWorkingHours(defaultStartTime, defaultWorkingHoursPerDay)
     : getEndTimeFromWorkingHours(defaultStartTime, defaultWorkingHoursPerDay);
-  const { register, handleSubmit, setValue, watch, reset } = useForm({
+  const { register, handleSubmit, setValue, watch, reset } = useForm<RequestFormValues>({
     defaultValues: {
       userId: user?.id ?? "",
+      selectedUserIds: [],
+      bulkMode: false,
       type: request?.type || "ANNUAL_LEAVE",
       startDate: formatDateValue(request?.startDate || initialStartDate),
       endDate: formatDateValue(request?.endDate || initialEndDate),
@@ -117,6 +133,8 @@ export default function RequestFormDialog({
     },
   });
   const selectedUserId = watch("userId");
+  const bulkMode = watch("bulkMode");
+  const selectedUserIds = watch("selectedUserIds");
 
   const invalidateRequestQueries = async () => {
     await Promise.all([
@@ -132,6 +150,8 @@ export default function RequestFormDialog({
   useEffect(() => {
     reset({
       userId: request?.userId || user?.id || "",
+      selectedUserIds: [],
+      bulkMode: false,
       type: request?.type || "ANNUAL_LEAVE",
       startDate: formatDateValue(request?.startDate || initialStartDate),
       endDate: formatDateValue(request?.endDate || initialEndDate),
@@ -157,9 +177,15 @@ export default function RequestFormDialog({
   
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
+      if (Array.isArray(data.userIds)) {
+        const { userIds, ...rest } = data;
+        return Promise.all(
+          userIds.map((userId: string) => backend.leave_requests.create({ ...rest, userId }))
+        );
+      }
       return backend.leave_requests.create(data);
     },
-    onSuccess: async () => {
+    onSuccess: async (_result) => {
       await invalidateRequestQueries();
       toast({ title: "Žiadosť bola úspešne vytvorená" });
       onClose();
@@ -193,11 +219,22 @@ export default function RequestFormDialog({
     },
   });
   
-  const onSubmit = (data: any) => {
-    const { skipApproval, ...formData } = data;
+  const onSubmit = (data: RequestFormValues) => {
+    const { skipApproval, selectedUserIds: formSelectedUserIds, bulkMode: _bulkMode, ...formData } = data;
+    const isBulkCreate = canManageUsers && !request && bulkMode;
+
+    if (isBulkCreate && formSelectedUserIds.length === 0) {
+      toast({
+        title: "Vyberte aspoň jedného používateľa",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const payload = {
       ...formData,
       userId: canManageUsers ? formData.userId : undefined,
+      userIds: isBulkCreate ? formSelectedUserIds : undefined,
     };
 
     if (request) {
@@ -208,8 +245,13 @@ export default function RequestFormDialog({
 
     createMutation.mutate(payload, {
       onSuccess: async (createdRequest: any) => {
-        if (canSkipApproval && skipApproval && createdRequest?.id) {
-          await backend.leave_requests.approve({ id: createdRequest.id });
+        const createdRequests = Array.isArray(createdRequest) ? createdRequest : [createdRequest];
+        if (canSkipApproval && skipApproval && createdRequests.length > 0) {
+          await Promise.all(
+            createdRequests
+              .filter((entry: any) => entry?.id)
+              .map((entry: any) => backend.leave_requests.approve({ id: entry.id }))
+          );
           await invalidateRequestQueries();
         }
       },
@@ -253,6 +295,11 @@ export default function RequestFormDialog({
     enabled: Boolean(startDate && endDate),
   });
   const holidaysInRange = holidayRange?.holidays || [];
+
+  const handleBulkSelectionChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextSelectedUserIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+    setValue("selectedUserIds", nextSelectedUserIds);
+  };
   
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -270,6 +317,43 @@ export default function RequestFormDialog({
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {canManageUsers && !request && (
+            <>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="request-bulk-mode"
+                  checked={Boolean(bulkMode)}
+                  onCheckedChange={(value) => {
+                    const nextBulkMode = Boolean(value);
+                    setValue("bulkMode", nextBulkMode);
+                    setValue("selectedUserIds", nextBulkMode && selectedUserId ? [selectedUserId] : []);
+                  }}
+                />
+                <Label htmlFor="request-bulk-mode">Podať dovolenku viacerým naraz</Label>
+              </div>
+
+              {bulkMode && (
+                <div className="space-y-2">
+                  <Label>Žiadatelia</Label>
+                  <select
+                    multiple
+                    value={selectedUserIds}
+                    onChange={handleBulkSelectionChange}
+                    className="h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    {users.map((entry: any) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name} ({entry.email})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-muted-foreground">
+                    Podržte Ctrl alebo Cmd pre výber viacerých používateľov.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+          {canManageUsers && !request && !bulkMode && (
             <div>
               <Label>Žiadateľ</Label>
               <Select
