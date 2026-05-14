@@ -205,6 +205,14 @@ export default function CalendarPage() {
     };
   };
 
+  const dayPropGetter = (date: Date) => {
+    const day = date.getDay();
+    if (day === 0 || day === 6) {
+      return { className: "weekend" };
+    }
+    return {};
+  };
+
   const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
     const startMoment = moment(start);
     const endMoment = moment(end);
@@ -265,28 +273,29 @@ export default function CalendarPage() {
 
       <Card className="p-2 sm:p-6">
         <div className="calendar-container">
-          <BigCalendar
-            localizer={localizer}
-            culture="sk"
-            formats={calendarFormats}
-            views={isMobile ? ["month", "day", "agenda"] : ["month", "week", "work_week", "day", "agenda"]}
-            events={calendarEvents}
-            startAccessor="start"
-            endAccessor="end"
-            style={{ height: isMobile ? 540 : 600, minWidth: 0 }}
-            view={view}
-            onView={(nextView: string) => setView(nextView as CalendarView)}
-            date={date}
-            onNavigate={setDate}
-            eventPropGetter={eventStyleGetter}
-            onSelectEvent={(event: CalendarEvent) => {
-              if (event.resource?.kind === "HOLIDAY" || event.resource?.kind === "BIRTHDAY") {
-                return;
-              }
-              setSelectedEvent(event.resource);
-            }}
-            selectable
-            onSelectSlot={handleSelectSlot}
+<BigCalendar
+             localizer={localizer}
+             culture="sk"
+             formats={calendarFormats}
+             views={isMobile ? ["month", "day", "agenda"] : ["month", "week", "work_week", "day", "agenda"]}
+             events={calendarEvents}
+             startAccessor="start"
+             endAccessor="end"
+             style={{ height: isMobile ? 540 : 600, minWidth: 0 }}
+             view={view}
+             onView={(nextView: string) => setView(nextView as CalendarView)}
+             date={date}
+             onNavigate={setDate}
+             eventPropGetter={eventStyleGetter}
+             dayPropGetter={dayPropGetter}
+             onSelectEvent={(event: CalendarEvent) => {
+               if (event.resource?.kind === "HOLIDAY" || event.resource?.kind === "BIRTHDAY") {
+                 return;
+               }
+               setSelectedEvent(event.resource);
+             }}
+             selectable
+             onSelectSlot={handleSelectSlot}
             messages={{
               allDay: "Celý deň",
               previous: "Späť",
