@@ -19,7 +19,7 @@ var __privateWrapper = (obj, member, setter, getter) => ({
   }
 });
 var require_index_001 = __commonJS({
-  "assets/index-DKuVyc9v.js"(exports, module) {
+  "assets/index-jjtUYLKW.js"(exports, module) {
     var _provider, _providerCalled, _a, _focused, _cleanup, _setup, _b, _online, _cleanup2, _setup2, _c, _gcTimeout, _d, _initialState, _revertState, _cache, _client, _retryer, _defaultOptions, _abortSignalConsumed, _Query_instances, dispatch_fn, _e, _client2, _currentQuery, _currentQueryInitialState, _currentResult, _currentResultState, _currentResultOptions, _currentThenable, _selectError, _selectFn, _selectResult, _lastQueryWithDefinedData, _staleTimeoutId, _refetchIntervalId, _currentRefetchInterval, _trackedProps, _QueryObserver_instances, executeFetch_fn, updateStaleTimeout_fn, computeRefetchInterval_fn, updateRefetchInterval_fn, updateTimers_fn, clearStaleTimeout_fn, clearRefetchInterval_fn, updateQuery_fn, notify_fn, _f, _client3, _observers, _mutationCache, _retryer2, _Mutation_instances, dispatch_fn2, _g, _mutations, _scopes, _mutationId, _h, _client4, _currentResult2, _currentMutation, _mutateOptions, _MutationObserver_instances, updateResult_fn, notify_fn2, _i, _queries, _j, _queryCache, _mutationCache2, _defaultOptions2, _queryDefaults, _mutationDefaults, _mountCount, _unsubscribeFocus, _unsubscribeOnline, _k;
     function _mergeNamespaces(n, m) {
       for (var i = 0; i < m.length; i++) {
@@ -45411,6 +45411,331 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         }
       );
     }
+    function usePrevious(value) {
+      const ref = reactExports.useRef({ value, previous: value });
+      return reactExports.useMemo(() => {
+        if (ref.current.value !== value) {
+          ref.current.previous = ref.current.value;
+          ref.current.value = value;
+        }
+        return ref.current.previous;
+      }, [value]);
+    }
+    function useSize(element) {
+      const [size2, setSize] = reactExports.useState(void 0);
+      useLayoutEffect2(() => {
+        if (element) {
+          setSize({ width: element.offsetWidth, height: element.offsetHeight });
+          const resizeObserver = new ResizeObserver((entries) => {
+            if (!Array.isArray(entries)) {
+              return;
+            }
+            if (!entries.length) {
+              return;
+            }
+            const entry = entries[0];
+            let width;
+            let height2;
+            if ("borderBoxSize" in entry) {
+              const borderSizeEntry = entry["borderBoxSize"];
+              const borderSize = Array.isArray(borderSizeEntry) ? borderSizeEntry[0] : borderSizeEntry;
+              width = borderSize["inlineSize"];
+              height2 = borderSize["blockSize"];
+            } else {
+              width = element.offsetWidth;
+              height2 = element.offsetHeight;
+            }
+            setSize({ width, height: height2 });
+          });
+          resizeObserver.observe(element, { box: "border-box" });
+          return () => resizeObserver.unobserve(element);
+        } else {
+          setSize(void 0);
+        }
+      }, [element]);
+      return size2;
+    }
+    var CHECKBOX_NAME = "Checkbox";
+    var [createCheckboxContext] = createContextScope(CHECKBOX_NAME);
+    var [CheckboxProviderImpl, useCheckboxContext] = createCheckboxContext(CHECKBOX_NAME);
+    function CheckboxProvider(props) {
+      const {
+        __scopeCheckbox,
+        checked: checkedProp,
+        children,
+        defaultChecked,
+        disabled,
+        form,
+        name,
+        onCheckedChange,
+        required,
+        value = "on",
+        // @ts-expect-error
+        internal_do_not_use_render
+      } = props;
+      const [checked, setChecked] = useControllableState({
+        prop: checkedProp,
+        defaultProp: defaultChecked ?? false,
+        onChange: onCheckedChange,
+        caller: CHECKBOX_NAME
+      });
+      const [control, setControl] = reactExports.useState(null);
+      const [bubbleInput, setBubbleInput] = reactExports.useState(null);
+      const hasConsumerStoppedPropagationRef = reactExports.useRef(false);
+      const isFormControl = control ? !!form || !!control.closest("form") : (
+        // We set this to true by default so that events bubble to forms without JS (SSR)
+        true
+      );
+      const context = {
+        checked,
+        disabled,
+        setChecked,
+        control,
+        setControl,
+        name,
+        form,
+        value,
+        hasConsumerStoppedPropagationRef,
+        required,
+        defaultChecked: isIndeterminate(defaultChecked) ? false : defaultChecked,
+        isFormControl,
+        bubbleInput,
+        setBubbleInput
+      };
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CheckboxProviderImpl,
+        {
+          scope: __scopeCheckbox,
+          ...context,
+          children: isFunction(internal_do_not_use_render) ? internal_do_not_use_render(context) : children
+        }
+      );
+    }
+    var TRIGGER_NAME$2 = "CheckboxTrigger";
+    var CheckboxTrigger = reactExports.forwardRef(
+      ({ __scopeCheckbox, onKeyDown, onClick, ...checkboxProps }, forwardedRef) => {
+        const {
+          control,
+          value,
+          disabled,
+          checked,
+          required,
+          setControl,
+          setChecked,
+          hasConsumerStoppedPropagationRef,
+          isFormControl,
+          bubbleInput
+        } = useCheckboxContext(TRIGGER_NAME$2, __scopeCheckbox);
+        const composedRefs = useComposedRefs(forwardedRef, setControl);
+        const initialCheckedStateRef = reactExports.useRef(checked);
+        reactExports.useEffect(() => {
+          const form = control == null ? void 0 : control.form;
+          if (form) {
+            const reset = () => setChecked(initialCheckedStateRef.current);
+            form.addEventListener("reset", reset);
+            return () => form.removeEventListener("reset", reset);
+          }
+        }, [control, setChecked]);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Primitive$1.button,
+          {
+            type: "button",
+            role: "checkbox",
+            "aria-checked": isIndeterminate(checked) ? "mixed" : checked,
+            "aria-required": required,
+            "data-state": getState(checked),
+            "data-disabled": disabled ? "" : void 0,
+            disabled,
+            value,
+            ...checkboxProps,
+            ref: composedRefs,
+            onKeyDown: composeEventHandlers(onKeyDown, (event) => {
+              if (event.key === "Enter") event.preventDefault();
+            }),
+            onClick: composeEventHandlers(onClick, (event) => {
+              setChecked((prevChecked) => isIndeterminate(prevChecked) ? true : !prevChecked);
+              if (bubbleInput && isFormControl) {
+                hasConsumerStoppedPropagationRef.current = event.isPropagationStopped();
+                if (!hasConsumerStoppedPropagationRef.current) event.stopPropagation();
+              }
+            })
+          }
+        );
+      }
+    );
+    CheckboxTrigger.displayName = TRIGGER_NAME$2;
+    var Checkbox$1 = reactExports.forwardRef(
+      (props, forwardedRef) => {
+        const {
+          __scopeCheckbox,
+          name,
+          checked,
+          defaultChecked,
+          required,
+          disabled,
+          value,
+          onCheckedChange,
+          form,
+          ...checkboxProps
+        } = props;
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CheckboxProvider,
+          {
+            __scopeCheckbox,
+            checked,
+            defaultChecked,
+            disabled,
+            required,
+            onCheckedChange,
+            name,
+            form,
+            value,
+            internal_do_not_use_render: ({ isFormControl }) => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                CheckboxTrigger,
+                {
+                  ...checkboxProps,
+                  ref: forwardedRef,
+                  __scopeCheckbox
+                }
+              ),
+              isFormControl && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                CheckboxBubbleInput,
+                {
+                  __scopeCheckbox
+                }
+              )
+            ] })
+          }
+        );
+      }
+    );
+    Checkbox$1.displayName = CHECKBOX_NAME;
+    var INDICATOR_NAME = "CheckboxIndicator";
+    var CheckboxIndicator = reactExports.forwardRef(
+      (props, forwardedRef) => {
+        const { __scopeCheckbox, forceMount, ...indicatorProps } = props;
+        const context = useCheckboxContext(INDICATOR_NAME, __scopeCheckbox);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Presence,
+          {
+            present: forceMount || isIndeterminate(context.checked) || context.checked === true,
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Primitive$1.span,
+              {
+                "data-state": getState(context.checked),
+                "data-disabled": context.disabled ? "" : void 0,
+                ...indicatorProps,
+                ref: forwardedRef,
+                style: { pointerEvents: "none", ...props.style }
+              }
+            )
+          }
+        );
+      }
+    );
+    CheckboxIndicator.displayName = INDICATOR_NAME;
+    var BUBBLE_INPUT_NAME$1 = "CheckboxBubbleInput";
+    var CheckboxBubbleInput = reactExports.forwardRef(
+      ({ __scopeCheckbox, ...props }, forwardedRef) => {
+        const {
+          control,
+          hasConsumerStoppedPropagationRef,
+          checked,
+          defaultChecked,
+          required,
+          disabled,
+          name,
+          value,
+          form,
+          bubbleInput,
+          setBubbleInput
+        } = useCheckboxContext(BUBBLE_INPUT_NAME$1, __scopeCheckbox);
+        const composedRefs = useComposedRefs(forwardedRef, setBubbleInput);
+        const prevChecked = usePrevious(checked);
+        const controlSize = useSize(control);
+        reactExports.useEffect(() => {
+          const input = bubbleInput;
+          if (!input) return;
+          const inputProto = window.HTMLInputElement.prototype;
+          const descriptor = Object.getOwnPropertyDescriptor(
+            inputProto,
+            "checked"
+          );
+          const setChecked = descriptor.set;
+          const bubbles = !hasConsumerStoppedPropagationRef.current;
+          if (prevChecked !== checked && setChecked) {
+            const event = new Event("click", { bubbles });
+            input.indeterminate = isIndeterminate(checked);
+            setChecked.call(input, isIndeterminate(checked) ? false : checked);
+            input.dispatchEvent(event);
+          }
+        }, [bubbleInput, prevChecked, checked, hasConsumerStoppedPropagationRef]);
+        const defaultCheckedRef = reactExports.useRef(isIndeterminate(checked) ? false : checked);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Primitive$1.input,
+          {
+            type: "checkbox",
+            "aria-hidden": true,
+            defaultChecked: defaultChecked ?? defaultCheckedRef.current,
+            required,
+            disabled,
+            name,
+            value,
+            form,
+            ...props,
+            tabIndex: -1,
+            ref: composedRefs,
+            style: {
+              ...props.style,
+              ...controlSize,
+              position: "absolute",
+              pointerEvents: "none",
+              opacity: 0,
+              margin: 0,
+              // We transform because the input is absolutely positioned but we have
+              // rendered it **after** the button. This pulls it back to sit on top
+              // of the button.
+              transform: "translateX(-100%)"
+            }
+          }
+        );
+      }
+    );
+    CheckboxBubbleInput.displayName = BUBBLE_INPUT_NAME$1;
+    function isFunction(value) {
+      return typeof value === "function";
+    }
+    function isIndeterminate(checked) {
+      return checked === "indeterminate";
+    }
+    function getState(checked) {
+      return isIndeterminate(checked) ? "indeterminate" : checked ? "checked" : "unchecked";
+    }
+    function Checkbox({
+      className,
+      ...props
+    }) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Checkbox$1,
+        {
+          "data-slot": "checkbox",
+          className: cn(
+            "peer border-input dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+            className
+          ),
+          ...props,
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            CheckboxIndicator,
+            {
+              "data-slot": "checkbox-indicator",
+              className: "grid place-content-center text-current transition-none",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(Check, { className: "size-3.5" })
+            }
+          )
+        }
+      );
+    }
     function Input({ className, type, ...props }) {
       return /* @__PURE__ */ jsxRuntimeExports.jsx(
         "input",
@@ -47416,40 +47741,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
     });
     Arrow$1.displayName = NAME;
     var Root$1 = Arrow$1;
-    function useSize(element) {
-      const [size2, setSize] = reactExports.useState(void 0);
-      useLayoutEffect2(() => {
-        if (element) {
-          setSize({ width: element.offsetWidth, height: element.offsetHeight });
-          const resizeObserver = new ResizeObserver((entries) => {
-            if (!Array.isArray(entries)) {
-              return;
-            }
-            if (!entries.length) {
-              return;
-            }
-            const entry = entries[0];
-            let width;
-            let height2;
-            if ("borderBoxSize" in entry) {
-              const borderSizeEntry = entry["borderBoxSize"];
-              const borderSize = Array.isArray(borderSizeEntry) ? borderSizeEntry[0] : borderSizeEntry;
-              width = borderSize["inlineSize"];
-              height2 = borderSize["blockSize"];
-            } else {
-              width = element.offsetWidth;
-              height2 = element.offsetHeight;
-            }
-            setSize({ width, height: height2 });
-          });
-          resizeObserver.observe(element, { box: "border-box" });
-          return () => resizeObserver.unobserve(element);
-        } else {
-          setSize(void 0);
-        }
-      }, [element]);
-      return size2;
-    }
     var POPPER_NAME = "Popper";
     var [createPopperContext, createPopperScope] = createContextScope(POPPER_NAME);
     var [PopperProvider, usePopperContext] = createPopperContext(POPPER_NAME);
@@ -47804,16 +48095,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       }
       return element.props.ref || element.ref;
     }
-    function usePrevious(value) {
-      const ref = reactExports.useRef({ value, previous: value });
-      return reactExports.useMemo(() => {
-        if (ref.current.value !== value) {
-          ref.current.previous = ref.current.value;
-          ref.current.value = value;
-        }
-        return ref.current.previous;
-      }, [value]);
-    }
     var OPEN_KEYS = [" ", "Enter", "ArrowUp", "ArrowDown"];
     var SELECTION_KEYS = [" ", "Enter"];
     var SELECT_NAME = "Select";
@@ -47924,12 +48205,12 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       ) });
     };
     Select$1.displayName = SELECT_NAME;
-    var TRIGGER_NAME$2 = "SelectTrigger";
+    var TRIGGER_NAME$1 = "SelectTrigger";
     var SelectTrigger$1 = reactExports.forwardRef(
       (props, forwardedRef) => {
         const { __scopeSelect, disabled = false, ...triggerProps } = props;
         const popperScope = usePopperScope(__scopeSelect);
-        const context = useSelectContext(TRIGGER_NAME$2, __scopeSelect);
+        const context = useSelectContext(TRIGGER_NAME$1, __scopeSelect);
         const isDisabled = context.disabled || disabled;
         const composedRefs = useComposedRefs(forwardedRef, context.onTriggerChange);
         const getItems = useCollection$1(__scopeSelect);
@@ -48001,7 +48282,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         ) });
       }
     );
-    SelectTrigger$1.displayName = TRIGGER_NAME$2;
+    SelectTrigger$1.displayName = TRIGGER_NAME$1;
     var VALUE_NAME = "SelectValue";
     var SelectValue$1 = reactExports.forwardRef(
       (props, forwardedRef) => {
@@ -48865,7 +49146,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       }
     );
     SelectArrow.displayName = ARROW_NAME;
-    var BUBBLE_INPUT_NAME$1 = "SelectBubbleInput";
+    var BUBBLE_INPUT_NAME = "SelectBubbleInput";
     var SelectBubbleInput = reactExports.forwardRef(
       ({ __scopeSelect, value, ...props }, forwardedRef) => {
         const ref = reactExports.useRef(null);
@@ -48897,7 +49178,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         );
       }
     );
-    SelectBubbleInput.displayName = BUBBLE_INPUT_NAME$1;
+    SelectBubbleInput.displayName = BUBBLE_INPUT_NAME;
     function shouldShowPlaceholder(value) {
       return value === "" || value === void 0;
     }
@@ -49094,6 +49375,19 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       }
       return value.split(" ")[0] || value;
     };
+    const DEFAULT_START_TIME = "08:00";
+    function getEndTimeFromWorkingHours(startTime = DEFAULT_START_TIME, workingHoursPerDay) {
+      const hours2 = Number(workingHoursPerDay ?? 8);
+      const normalizedHours = Number.isFinite(hours2) && hours2 > 0 ? hours2 : 8;
+      return hooks(startTime, "HH:mm").add(normalizedHours, "hours").format("HH:mm");
+    }
+    function getUserWorkingHours(users, userId, fallbackWorkingHoursPerDay) {
+      var _a2;
+      if (!userId) {
+        return fallbackWorkingHoursPerDay;
+      }
+      return ((_a2 = users.find((entry) => entry.id === userId)) == null ? void 0 : _a2.workingHoursPerDay) ?? fallbackWorkingHoursPerDay;
+    }
     function RequestFormDialog({
       open,
       onClose,
@@ -49102,43 +49396,88 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       initialEndDate
     }) {
       const backend = useBackend();
+      const queryClient2 = useQueryClient();
       const { user } = useAuth();
       const canManageUsers = (user == null ? void 0 : user.role) === "MANAGER" || (user == null ? void 0 : user.role) === "ADMIN";
+      const canSkipApproval = (user == null ? void 0 : user.role) === "ADMIN";
       const { toast: toast2 } = useToast();
-      const defaultStartTime = request2 ? request2.startTime || "08:00" : "08:00";
-      const defaultEndTime = request2 ? request2.endTime || "16:00" : "16:00";
-      const { register, handleSubmit, setValue, watch, reset } = useForm({
-        defaultValues: {
-          userId: (user == null ? void 0 : user.id) ?? "",
-          type: (request2 == null ? void 0 : request2.type) || "ANNUAL_LEAVE",
-          startDate: formatDateValue((request2 == null ? void 0 : request2.startDate) || initialStartDate),
-          endDate: formatDateValue((request2 == null ? void 0 : request2.endDate) || initialEndDate),
-          startTime: defaultStartTime,
-          endTime: defaultEndTime,
-          reason: (request2 == null ? void 0 : request2.reason) || ""
-        }
-      });
       const { data: usersData } = useQuery({
         queryKey: ["users"],
         queryFn: async () => backend.users.list(),
         enabled: canManageUsers
       });
-      reactExports.useEffect(() => {
-        reset({
-          userId: (request2 == null ? void 0 : request2.userId) || (user == null ? void 0 : user.id) || "",
+      const { data: meData } = useQuery({
+        queryKey: ["me"],
+        queryFn: async () => backend.users.me(),
+        enabled: !canManageUsers
+      });
+      const users = (usersData == null ? void 0 : usersData.users) || [];
+      const requestUserWorkingHoursPerDay = request2 ? canManageUsers ? getUserWorkingHours(users, request2.userId) : meData == null ? void 0 : meData.workingHoursPerDay : void 0;
+      const defaultStartTime = request2 ? request2.startTime || DEFAULT_START_TIME : DEFAULT_START_TIME;
+      const defaultWorkingHoursPerDay = request2 ? requestUserWorkingHoursPerDay : canManageUsers ? getUserWorkingHours(users, (user == null ? void 0 : user.id) ?? "") : meData == null ? void 0 : meData.workingHoursPerDay;
+      const defaultEndTime = request2 ? request2.endTime || getEndTimeFromWorkingHours(defaultStartTime, defaultWorkingHoursPerDay) : getEndTimeFromWorkingHours(defaultStartTime, defaultWorkingHoursPerDay);
+      const { register, handleSubmit, setValue, watch, reset } = useForm({
+        defaultValues: {
+          userId: (user == null ? void 0 : user.id) ?? "",
+          selectedUserIds: [],
+          bulkMode: false,
           type: (request2 == null ? void 0 : request2.type) || "ANNUAL_LEAVE",
           startDate: formatDateValue((request2 == null ? void 0 : request2.startDate) || initialStartDate),
           endDate: formatDateValue((request2 == null ? void 0 : request2.endDate) || initialEndDate),
           startTime: defaultStartTime,
           endTime: defaultEndTime,
-          reason: (request2 == null ? void 0 : request2.reason) || ""
+          reason: (request2 == null ? void 0 : request2.reason) || "",
+          skipApproval: false
+        }
+      });
+      const selectedUserId = watch("userId");
+      const bulkMode = watch("bulkMode");
+      const selectedUserIds = watch("selectedUserIds");
+      const invalidateRequestQueries = async () => {
+        await Promise.all([
+          queryClient2.invalidateQueries({ queryKey: ["my-requests"] }),
+          queryClient2.invalidateQueries({ queryKey: ["team-requests"] }),
+          queryClient2.invalidateQueries({ queryKey: ["pending-requests"] }),
+          queryClient2.invalidateQueries({ queryKey: ["calendar"] }),
+          queryClient2.invalidateQueries({ queryKey: ["notifications"] }),
+          queryClient2.invalidateQueries({ queryKey: ["leave-balance"] })
+        ]);
+      };
+      reactExports.useEffect(() => {
+        reset({
+          userId: (request2 == null ? void 0 : request2.userId) || (user == null ? void 0 : user.id) || "",
+          selectedUserIds: [],
+          bulkMode: false,
+          type: (request2 == null ? void 0 : request2.type) || "ANNUAL_LEAVE",
+          startDate: formatDateValue((request2 == null ? void 0 : request2.startDate) || initialStartDate),
+          endDate: formatDateValue((request2 == null ? void 0 : request2.endDate) || initialEndDate),
+          startTime: defaultStartTime,
+          endTime: defaultEndTime,
+          reason: (request2 == null ? void 0 : request2.reason) || "",
+          skipApproval: false
         });
       }, [defaultEndTime, defaultStartTime, initialEndDate, initialStartDate, request2, reset, user == null ? void 0 : user.id]);
+      reactExports.useEffect(() => {
+        if (request2) {
+          return;
+        }
+        const selectedUser = canManageUsers ? users.find((entry) => entry.id === selectedUserId) : meData;
+        const endTime = getEndTimeFromWorkingHours(DEFAULT_START_TIME, selectedUser == null ? void 0 : selectedUser.workingHoursPerDay);
+        setValue("startTime", DEFAULT_START_TIME);
+        setValue("endTime", endTime);
+      }, [canManageUsers, meData, request2, selectedUserId, setValue, users]);
       const createMutation = useMutation({
         mutationFn: async (data) => {
+          if (Array.isArray(data.userIds)) {
+            const { userIds, ...rest } = data;
+            return Promise.all(
+              userIds.map((userId) => backend.leave_requests.create({ ...rest, userId }))
+            );
+          }
           return backend.leave_requests.create(data);
         },
-        onSuccess: () => {
+        onSuccess: async (_result) => {
+          await invalidateRequestQueries();
           toast2({ title: "Žiadosť bola úspešne vytvorená" });
           onClose();
         },
@@ -49155,7 +49494,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         mutationFn: async (data) => {
           return backend.leave_requests.update(data);
         },
-        onSuccess: () => {
+        onSuccess: async () => {
+          await invalidateRequestQueries();
           toast2({ title: "Žiadosť bola úspešne upravená" });
           onClose();
         },
@@ -49169,18 +49509,37 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         }
       });
       const onSubmit = (data) => {
+        const { skipApproval, selectedUserIds: formSelectedUserIds, bulkMode: _bulkMode, ...formData } = data;
+        const isBulkCreate = canManageUsers && !request2 && bulkMode;
+        if (isBulkCreate && formSelectedUserIds.length === 0) {
+          toast2({
+            title: "Vyberte aspoň jedného používateľa",
+            variant: "destructive"
+          });
+          return;
+        }
         const payload = {
-          ...data,
-          userId: canManageUsers ? data.userId : void 0
+          ...formData,
+          userId: canManageUsers ? formData.userId : void 0,
+          userIds: isBulkCreate ? formSelectedUserIds : void 0
         };
         if (request2) {
           const { userId: _userId, ...rest } = payload;
           updateMutation.mutate({ id: request2.id, ...rest });
           return;
         }
-        createMutation.mutate(payload);
+        createMutation.mutate(payload, {
+          onSuccess: async (createdRequest) => {
+            const createdRequests = Array.isArray(createdRequest) ? createdRequest : [createdRequest];
+            if (canSkipApproval && skipApproval && createdRequests.length > 0) {
+              await Promise.all(
+                createdRequests.filter((entry) => entry == null ? void 0 : entry.id).map((entry) => backend.leave_requests.approve({ id: entry.id }))
+              );
+              await invalidateRequestQueries();
+            }
+          }
+        });
       };
-      const users = (usersData == null ? void 0 : usersData.users) || [];
       const startDate = watch("startDate");
       const endDate = watch("endDate");
       const isSameDay = Boolean(startDate && endDate && startDate === endDate);
@@ -49214,19 +49573,64 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         enabled: Boolean(startDate && endDate)
       });
       const holidaysInRange = (holidayRange == null ? void 0 : holidayRange.holidays) || [];
+      const handleBulkSelectionChange = (event) => {
+        const nextSelectedUserIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+        setValue("selectedUserIds", nextSelectedUserIds);
+      };
       return /* @__PURE__ */ jsxRuntimeExports.jsx(Dialog, { open, onOpenChange: onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(DialogContent, { className: "w-full max-w-2xl max-h-[90vh] overflow-y-auto", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(DialogHeader, { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(DialogTitle, { children: request2 ? "Upraviť žiadosť o voľno" : "Nová žiadosť o voľno" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DialogDescription, { children: request2 ? "Upravte detaily žiadosti podľa potreby." : "Vyplňte detaily žiadosti a odošlite ju na schválenie." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit(onSubmit), className: "space-y-4", children: [
-          canManageUsers && !request2 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          canManageUsers && !request2 && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                Checkbox,
+                {
+                  id: "request-bulk-mode",
+                  checked: Boolean(bulkMode),
+                  onCheckedChange: (value) => {
+                    const nextBulkMode = Boolean(value);
+                    setValue("bulkMode", nextBulkMode);
+                    setValue("selectedUserIds", nextBulkMode && selectedUserId ? [selectedUserId] : []);
+                  }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "request-bulk-mode", children: "Podať dovolenku viacerým naraz" })
+            ] }),
+            bulkMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { children: "Žiadatelia" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "select",
+                {
+                  multiple: true,
+                  value: selectedUserIds,
+                  onChange: handleBulkSelectionChange,
+                  className: "h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+                  children: users.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: entry.id, children: [
+                    entry.name,
+                    " (",
+                    entry.email,
+                    ")"
+                  ] }, entry.id))
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Podržte Ctrl alebo Cmd pre výber viacerých používateľov." })
+            ] })
+          ] }),
+          canManageUsers && !request2 && !bulkMode && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { children: "Žiadateľ" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
               Select,
               {
                 value: watch("userId"),
-                onValueChange: (value) => setValue("userId", value),
+                onValueChange: (value) => {
+                  const workingHoursPerDay = getUserWorkingHours(users, value, meData == null ? void 0 : meData.workingHoursPerDay);
+                  setValue("userId", value);
+                  setValue("startTime", DEFAULT_START_TIME);
+                  setValue("endTime", getEndTimeFromWorkingHours(DEFAULT_START_TIME, workingHoursPerDay));
+                },
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(SelectTrigger, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(SelectValue, { placeholder: "Vyberte používateľa" }) }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(SelectContent, { children: users.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectItem, { value: entry.id, children: [
@@ -49304,6 +49708,17 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
             /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { children: "Dôvod (nepovinné)" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(Textarea, { ...register("reason"), rows: 3 })
           ] }),
+          canSkipApproval && !request2 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Checkbox,
+              {
+                id: "request-skip-approval",
+                checked: Boolean(watch("skipApproval")),
+                onCheckedChange: (value) => setValue("skipApproval", Boolean(value))
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "request-skip-approval", children: "Pridať bez schvaľovacieho procesu" })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap justify-end gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { type: "button", variant: "outline", onClick: onClose, className: "min-w-[120px]", children: "Zrušiť" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -49367,6 +49782,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
     }
     function RequestDetailDialog({ request: request2, open, onClose }) {
       const backend = useBackend();
+      const queryClient2 = useQueryClient();
       const { user } = useAuth();
       const isManager = (user == null ? void 0 : user.role) === "MANAGER" || (user == null ? void 0 : user.role) === "ADMIN";
       const { toast: toast2 } = useToast();
@@ -49375,82 +49791,77 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       const endDateLabel = formatRequestDateTime(request2.endDate, request2.endTime);
       const startTimeLabel = request2.startTime ? request2.startTime.slice(0, 5) : null;
       const endTimeLabel = request2.endTime ? request2.endTime.slice(0, 5) : null;
-      const timeRangeLabel = startTimeLabel && endTimeLabel ? `${startTimeLabel} – ${endTimeLabel}` : startTimeLabel || endTimeLabel;
+      const timeRangeLabel = startTimeLabel && endTimeLabel ? `${startTimeLabel} - ${endTimeLabel}` : startTimeLabel || endTimeLabel;
+      const invalidateData = async () => {
+        await Promise.all([
+          queryClient2.invalidateQueries({ queryKey: ["my-requests"] }),
+          queryClient2.invalidateQueries({ queryKey: ["team-requests"] }),
+          queryClient2.invalidateQueries({ queryKey: ["pending-requests"] }),
+          queryClient2.invalidateQueries({ queryKey: ["calendar"] }),
+          queryClient2.invalidateQueries({ queryKey: ["notifications"] }),
+          queryClient2.invalidateQueries({ queryKey: ["leave-balance"] })
+        ]);
+      };
       const submitMutation = useMutation({
-        mutationFn: async () => {
-          return backend.leave_requests.submit({ id: request2.id });
-        },
-        onSuccess: () => {
-          toast2({ title: "Žiadosť bola odoslaná na schválenie" });
+        mutationFn: async () => backend.leave_requests.submit({ id: request2.id }),
+        onSuccess: async () => {
+          await invalidateData();
+          toast2({ title: "Ziadost bola odoslana na schvalenie" });
           onClose();
         },
         onError: (error) => {
           console.error("Failed to submit request:", error);
-          toast2({
-            title: "Odoslanie žiadosti zlyhalo",
-            description: error.message,
-            variant: "destructive"
-          });
+          toast2({ title: "Odoslanie ziadosti zlyhalo", description: error.message, variant: "destructive" });
         }
       });
       const cancelMutation = useMutation({
-        mutationFn: async () => {
-          return backend.leave_requests.cancel({ id: request2.id });
-        },
-        onSuccess: () => {
-          toast2({ title: "Žiadosť bola zrušená" });
+        mutationFn: async () => backend.leave_requests.cancel({ id: request2.id }),
+        onSuccess: async () => {
+          await invalidateData();
+          toast2({ title: "Ziadost bola zrusena" });
           onClose();
         },
         onError: (error) => {
           console.error("Failed to cancel request:", error);
-          toast2({
-            title: "Zrušenie žiadosti zlyhalo",
-            description: error.message,
-            variant: "destructive"
-          });
+          toast2({ title: "Zrusenie ziadosti zlyhalo", description: error.message, variant: "destructive" });
         }
       });
       const deleteMutation = useMutation({
-        mutationFn: async () => {
-          return backend.leave_requests.remove({ id: request2.id });
-        },
-        onSuccess: () => {
-          toast2({ title: "Žiadosť bola odstránená" });
+        mutationFn: async () => backend.leave_requests.remove({ id: request2.id }),
+        onSuccess: async () => {
+          await invalidateData();
+          toast2({ title: "Ziadost bola odstranena" });
           onClose();
         },
         onError: (error) => {
           console.error("Failed to delete request:", error);
-          toast2({
-            title: "Odstránenie žiadosti zlyhalo",
-            description: error.message,
-            variant: "destructive"
-          });
+          toast2({ title: "Odstranenie ziadosti zlyhalo", description: error.message, variant: "destructive" });
         }
       });
       const statusColors = {
         DRAFT: "bg-gray-500",
-        PENDING: "bg-yellow-500",
+        PENDING: "bg-red-500",
         APPROVED: "bg-green-500",
         REJECTED: "bg-red-500",
         CANCELLED: "bg-gray-400"
       };
       const statusLabels = {
-        DRAFT: "Návrh",
-        PENDING: "Čaká",
-        APPROVED: "Schválené",
-        REJECTED: "Zamietnuté",
-        CANCELLED: "Zrušené"
+        DRAFT: "Navrh",
+        PENDING: "Caka",
+        APPROVED: "Schvalene",
+        REJECTED: "Zamietnute",
+        CANCELLED: "Zrusene"
       };
       const actionLabels = {
-        CREATE: "Vytvorená",
-        UPDATE: "Upravená",
-        SUBMIT: "Odoslaná",
-        APPROVE: "Schválená",
-        REJECT: "Zamietnutá",
-        CANCEL: "Zrušená",
-        DELETE: "Odstránená",
-        BULK_APPROVE: "Hromadné schválenie",
-        BULK_REJECT: "Hromadné zamietnutie"
+        CREATE: "Vytvorena",
+        UPDATE: "Upravena",
+        SUBMIT: "Odoslana",
+        APPROVE: "Schvalena",
+        REJECT: "Zamietnuta",
+        CANCEL: "Zrusena",
+        DELETE: "Odstranena",
+        BULK_APPROVE: "Hromadne schvalenie",
+        BULK_REJECT: "Hromadne zamietnutie"
       };
       const canViewHistory = Boolean((user == null ? void 0 : user.role) === "MANAGER" || (user == null ? void 0 : user.role) === "ADMIN" || request2.userId === (user == null ? void 0 : user.id));
       const historyQuery = useQuery({
@@ -49465,12 +49876,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         }
       });
       const sortedHistory = reactExports.useMemo(() => {
-        if (!historyQuery.data) {
-          return [];
-        }
-        return [...historyQuery.data].sort(
-          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
+        if (!historyQuery.data) return [];
+        return [...historyQuery.data].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       }, [historyQuery.data]);
       const formatHistoryEntry = (entry) => {
         const before = entry.beforeJson ?? {};
@@ -49479,40 +49886,34 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         const endDate = formatRequestDateTime(after.endDate ?? before.endDate, after.endTime ?? before.endTime);
         const beforeStatus = before.status;
         const afterStatus = after.status;
-        const statusChange = beforeStatus && afterStatus && beforeStatus !== afterStatus ? `${statusLabels[beforeStatus] ?? beforeStatus} → ${statusLabels[afterStatus] ?? afterStatus}` : afterStatus ? statusLabels[afterStatus] ?? afterStatus : null;
+        const statusChange = beforeStatus && afterStatus && beforeStatus !== afterStatus ? `${statusLabels[beforeStatus] ?? beforeStatus} -> ${statusLabels[afterStatus] ?? afterStatus}` : afterStatus ? statusLabels[afterStatus] ?? afterStatus : null;
         const pieces = [
           statusChange ? `Stav: ${statusChange}` : null,
-          startDate && endDate ? `Obdobie: ${startDate} – ${endDate}` : null
+          startDate && endDate ? `Obdobie: ${startDate} - ${endDate}` : null
         ].filter(Boolean);
-        return pieces.length > 0 ? pieces.join(" • ") : "Bez detailu zmeny";
+        return pieces.length > 0 ? pieces.join(" | ") : "Bez detailu zmeny";
       };
       const typeLabels = {
         ANNUAL_LEAVE: "Dovolenka",
         SICK_LEAVE: "PN",
         HOME_OFFICE: "Home office",
-        UNPAID_LEAVE: "Neplatené voľno",
-        OTHER: "Iné"
+        UNPAID_LEAVE: "Neplatene volno",
+        OTHER: "Ine"
       };
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(Dialog, { open, onOpenChange: onClose, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(DialogContent, { className: "max-w-2xl max-h-[90vh] overflow-y-auto", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DialogHeader, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(DialogTitle, { children: "Detail žiadosti o voľno" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DialogHeader, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(DialogTitle, { children: "Detail ziadosti o volno" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground", children: "Typ" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium", children: typeLabels[request2.type] })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Badge,
-                {
-                  className: `${statusColors[request2.status]} px-3 py-1 text-xs shrink-0`,
-                  children: statusLabels[request2.status] ?? request2.status
-                }
-              )
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { className: `${statusColors[request2.status]} px-3 py-1 text-xs shrink-0`, children: statusLabels[request2.status] ?? request2.status })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-4 sm:grid-cols-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Začiatok" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Zaciatok" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(Calendar$2, { className: "h-4 w-4 text-muted-foreground" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all", children: startDateLabel })
@@ -49527,7 +49928,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
               ] })
             ] }),
             timeRangeLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Čas" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Cas" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 text-sm text-muted-foreground", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Clock, { className: "h-4 w-4" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: timeRangeLabel })
@@ -49541,24 +49942,24 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
               ] })
             ] }),
             request2.reason && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Dôvod" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Dovod" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 bg-muted rounded-md", children: request2.reason })
             ] }),
             request2.managerComment && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Komentár manažéra" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-1", children: "Komentar manazera" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 bg-muted rounded-md", children: request2.managerComment })
             ] }),
             canViewHistory && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground mb-2", children: "History" }),
-              historyQuery.isLoading && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground", children: "Načítavam históriu..." }),
-              historyQuery.isError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-destructive", children: "Históriu sa nepodarilo načítať." }),
-              !historyQuery.isLoading && !historyQuery.isError && sortedHistory.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground", children: "Žiadna história." }),
+              historyQuery.isLoading && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground", children: "Nacitavam historiu..." }),
+              historyQuery.isError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-destructive", children: "Historiu sa nepodarilo nacitat." }),
+              !historyQuery.isLoading && !historyQuery.isError && sortedHistory.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground", children: "Ziadna historia." }),
               !historyQuery.isLoading && !historyQuery.isError && sortedHistory.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: sortedHistory.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-start gap-3", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { variant: "outline", children: actionLabels[entry.action] ?? entry.action }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 min-w-0", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm", children: [
                     new Date(entry.createdAt).toLocaleString("sk-SK"),
-                    " • ",
+                    " | ",
                     entry.actorName ?? entry.actorUserId
                   ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-muted-foreground", children: formatHistoryEntry(entry) })
@@ -49567,24 +49968,24 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap justify-end gap-2", children: [
               isManager && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "sm", variant: "outline", onClick: () => setShowEditDialog(true), children: "Upraviť" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "sm", variant: "outline", onClick: () => setShowEditDialog(true), children: "Upravit" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   Button,
                   {
                     size: "sm",
                     variant: "destructive",
                     onClick: () => {
-                      if (window.confirm("Naozaj chcete odstrániť túto žiadosť?")) {
+                      if (window.confirm("Naozaj chcete odstranit tuto ziadost?")) {
                         deleteMutation.mutate();
                       }
                     },
                     disabled: deleteMutation.isPending,
-                    children: "Odstrániť"
+                    children: "Odstranit"
                   }
                 )
               ] }),
-              request2.status === "DRAFT" && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "sm", className: "font-semibold", onClick: () => submitMutation.mutate(), children: "Odoslať na schválenie" }),
-              (request2.status === "DRAFT" || request2.status === "PENDING") && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "sm", variant: "destructive", onClick: () => cancelMutation.mutate(), children: "Zrušiť žiadosť" })
+              request2.status === "DRAFT" && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "sm", className: "font-semibold", onClick: () => submitMutation.mutate(), children: "Odoslat na schvalenie" }),
+              (request2.status === "DRAFT" || request2.status === "PENDING") && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "sm", variant: "destructive", onClick: () => cancelMutation.mutate(), children: "Zrusit ziadost" })
             ] })
           ] })
         ] }),
@@ -49737,7 +50138,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         }
         const status = event.resource.status;
         const colors = {
-          PENDING: "bg-yellow-500",
+          PENDING: "bg-red-500",
           APPROVED: "bg-green-500",
           REJECTED: "bg-red-500",
           CANCELLED: "bg-gray-500"
@@ -49745,6 +50146,13 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         return {
           className: colors[status] || "bg-blue-500"
         };
+      };
+      const dayPropGetter = (date22) => {
+        const day2 = date22.getDay();
+        if (day2 === 0 || day2 === 6) {
+          return { className: "weekend" };
+        }
+        return {};
       };
       const handleSelectSlot = ({ start: start2, end: end2 }) => {
         const startMoment = hooks(start2);
@@ -49801,6 +50209,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
             date: date2,
             onNavigate: setDate,
             eventPropGetter: eventStyleGetter,
+            dayPropGetter,
             onSelectEvent: (event) => {
               var _a3, _b2;
               if (((_a3 = event.resource) == null ? void 0 : _a3.kind) === "HOLIDAY" || ((_b2 = event.resource) == null ? void 0 : _b2.kind) === "BIRTHDAY") {
@@ -49851,7 +50260,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       const [selectedRequest, setSelectedRequest] = reactExports.useState(null);
       const statusColors = {
         DRAFT: "bg-gray-500",
-        PENDING: "bg-yellow-500",
+        PENDING: "bg-red-500",
         APPROVED: "bg-green-500",
         REJECTED: "bg-red-500",
         CANCELLED: "bg-gray-400"
@@ -50238,11 +50647,11 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       }
     );
     TabsList$1.displayName = TAB_LIST_NAME;
-    var TRIGGER_NAME$1 = "TabsTrigger";
+    var TRIGGER_NAME = "TabsTrigger";
     var TabsTrigger$1 = reactExports.forwardRef(
       (props, forwardedRef) => {
         const { __scopeTabs, value, disabled = false, ...triggerProps } = props;
-        const context = useTabsContext(TRIGGER_NAME$1, __scopeTabs);
+        const context = useTabsContext(TRIGGER_NAME, __scopeTabs);
         const rovingFocusGroupScope = useRovingFocusGroupScope(__scopeTabs);
         const triggerId = makeTriggerId(context.baseId, value);
         const contentId = makeContentId(context.baseId, value);
@@ -50289,7 +50698,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         );
       }
     );
-    TabsTrigger$1.displayName = TRIGGER_NAME$1;
+    TabsTrigger$1.displayName = TRIGGER_NAME;
     var CONTENT_NAME = "TabsContent";
     var TabsContent$1 = reactExports.forwardRef(
       (props, forwardedRef) => {
@@ -50437,287 +50846,6 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           }
         )
       ] });
-    }
-    var CHECKBOX_NAME = "Checkbox";
-    var [createCheckboxContext] = createContextScope(CHECKBOX_NAME);
-    var [CheckboxProviderImpl, useCheckboxContext] = createCheckboxContext(CHECKBOX_NAME);
-    function CheckboxProvider(props) {
-      const {
-        __scopeCheckbox,
-        checked: checkedProp,
-        children,
-        defaultChecked,
-        disabled,
-        form,
-        name,
-        onCheckedChange,
-        required,
-        value = "on",
-        // @ts-expect-error
-        internal_do_not_use_render
-      } = props;
-      const [checked, setChecked] = useControllableState({
-        prop: checkedProp,
-        defaultProp: defaultChecked ?? false,
-        onChange: onCheckedChange,
-        caller: CHECKBOX_NAME
-      });
-      const [control, setControl] = reactExports.useState(null);
-      const [bubbleInput, setBubbleInput] = reactExports.useState(null);
-      const hasConsumerStoppedPropagationRef = reactExports.useRef(false);
-      const isFormControl = control ? !!form || !!control.closest("form") : (
-        // We set this to true by default so that events bubble to forms without JS (SSR)
-        true
-      );
-      const context = {
-        checked,
-        disabled,
-        setChecked,
-        control,
-        setControl,
-        name,
-        form,
-        value,
-        hasConsumerStoppedPropagationRef,
-        required,
-        defaultChecked: isIndeterminate(defaultChecked) ? false : defaultChecked,
-        isFormControl,
-        bubbleInput,
-        setBubbleInput
-      };
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CheckboxProviderImpl,
-        {
-          scope: __scopeCheckbox,
-          ...context,
-          children: isFunction(internal_do_not_use_render) ? internal_do_not_use_render(context) : children
-        }
-      );
-    }
-    var TRIGGER_NAME = "CheckboxTrigger";
-    var CheckboxTrigger = reactExports.forwardRef(
-      ({ __scopeCheckbox, onKeyDown, onClick, ...checkboxProps }, forwardedRef) => {
-        const {
-          control,
-          value,
-          disabled,
-          checked,
-          required,
-          setControl,
-          setChecked,
-          hasConsumerStoppedPropagationRef,
-          isFormControl,
-          bubbleInput
-        } = useCheckboxContext(TRIGGER_NAME, __scopeCheckbox);
-        const composedRefs = useComposedRefs(forwardedRef, setControl);
-        const initialCheckedStateRef = reactExports.useRef(checked);
-        reactExports.useEffect(() => {
-          const form = control == null ? void 0 : control.form;
-          if (form) {
-            const reset = () => setChecked(initialCheckedStateRef.current);
-            form.addEventListener("reset", reset);
-            return () => form.removeEventListener("reset", reset);
-          }
-        }, [control, setChecked]);
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
-          Primitive$1.button,
-          {
-            type: "button",
-            role: "checkbox",
-            "aria-checked": isIndeterminate(checked) ? "mixed" : checked,
-            "aria-required": required,
-            "data-state": getState(checked),
-            "data-disabled": disabled ? "" : void 0,
-            disabled,
-            value,
-            ...checkboxProps,
-            ref: composedRefs,
-            onKeyDown: composeEventHandlers(onKeyDown, (event) => {
-              if (event.key === "Enter") event.preventDefault();
-            }),
-            onClick: composeEventHandlers(onClick, (event) => {
-              setChecked((prevChecked) => isIndeterminate(prevChecked) ? true : !prevChecked);
-              if (bubbleInput && isFormControl) {
-                hasConsumerStoppedPropagationRef.current = event.isPropagationStopped();
-                if (!hasConsumerStoppedPropagationRef.current) event.stopPropagation();
-              }
-            })
-          }
-        );
-      }
-    );
-    CheckboxTrigger.displayName = TRIGGER_NAME;
-    var Checkbox$1 = reactExports.forwardRef(
-      (props, forwardedRef) => {
-        const {
-          __scopeCheckbox,
-          name,
-          checked,
-          defaultChecked,
-          required,
-          disabled,
-          value,
-          onCheckedChange,
-          form,
-          ...checkboxProps
-        } = props;
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CheckboxProvider,
-          {
-            __scopeCheckbox,
-            checked,
-            defaultChecked,
-            disabled,
-            required,
-            onCheckedChange,
-            name,
-            form,
-            value,
-            internal_do_not_use_render: ({ isFormControl }) => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                CheckboxTrigger,
-                {
-                  ...checkboxProps,
-                  ref: forwardedRef,
-                  __scopeCheckbox
-                }
-              ),
-              isFormControl && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                CheckboxBubbleInput,
-                {
-                  __scopeCheckbox
-                }
-              )
-            ] })
-          }
-        );
-      }
-    );
-    Checkbox$1.displayName = CHECKBOX_NAME;
-    var INDICATOR_NAME = "CheckboxIndicator";
-    var CheckboxIndicator = reactExports.forwardRef(
-      (props, forwardedRef) => {
-        const { __scopeCheckbox, forceMount, ...indicatorProps } = props;
-        const context = useCheckboxContext(INDICATOR_NAME, __scopeCheckbox);
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
-          Presence,
-          {
-            present: forceMount || isIndeterminate(context.checked) || context.checked === true,
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-              Primitive$1.span,
-              {
-                "data-state": getState(context.checked),
-                "data-disabled": context.disabled ? "" : void 0,
-                ...indicatorProps,
-                ref: forwardedRef,
-                style: { pointerEvents: "none", ...props.style }
-              }
-            )
-          }
-        );
-      }
-    );
-    CheckboxIndicator.displayName = INDICATOR_NAME;
-    var BUBBLE_INPUT_NAME = "CheckboxBubbleInput";
-    var CheckboxBubbleInput = reactExports.forwardRef(
-      ({ __scopeCheckbox, ...props }, forwardedRef) => {
-        const {
-          control,
-          hasConsumerStoppedPropagationRef,
-          checked,
-          defaultChecked,
-          required,
-          disabled,
-          name,
-          value,
-          form,
-          bubbleInput,
-          setBubbleInput
-        } = useCheckboxContext(BUBBLE_INPUT_NAME, __scopeCheckbox);
-        const composedRefs = useComposedRefs(forwardedRef, setBubbleInput);
-        const prevChecked = usePrevious(checked);
-        const controlSize = useSize(control);
-        reactExports.useEffect(() => {
-          const input = bubbleInput;
-          if (!input) return;
-          const inputProto = window.HTMLInputElement.prototype;
-          const descriptor = Object.getOwnPropertyDescriptor(
-            inputProto,
-            "checked"
-          );
-          const setChecked = descriptor.set;
-          const bubbles = !hasConsumerStoppedPropagationRef.current;
-          if (prevChecked !== checked && setChecked) {
-            const event = new Event("click", { bubbles });
-            input.indeterminate = isIndeterminate(checked);
-            setChecked.call(input, isIndeterminate(checked) ? false : checked);
-            input.dispatchEvent(event);
-          }
-        }, [bubbleInput, prevChecked, checked, hasConsumerStoppedPropagationRef]);
-        const defaultCheckedRef = reactExports.useRef(isIndeterminate(checked) ? false : checked);
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
-          Primitive$1.input,
-          {
-            type: "checkbox",
-            "aria-hidden": true,
-            defaultChecked: defaultChecked ?? defaultCheckedRef.current,
-            required,
-            disabled,
-            name,
-            value,
-            form,
-            ...props,
-            tabIndex: -1,
-            ref: composedRefs,
-            style: {
-              ...props.style,
-              ...controlSize,
-              position: "absolute",
-              pointerEvents: "none",
-              opacity: 0,
-              margin: 0,
-              // We transform because the input is absolutely positioned but we have
-              // rendered it **after** the button. This pulls it back to sit on top
-              // of the button.
-              transform: "translateX(-100%)"
-            }
-          }
-        );
-      }
-    );
-    CheckboxBubbleInput.displayName = BUBBLE_INPUT_NAME;
-    function isFunction(value) {
-      return typeof value === "function";
-    }
-    function isIndeterminate(checked) {
-      return checked === "indeterminate";
-    }
-    function getState(checked) {
-      return isIndeterminate(checked) ? "indeterminate" : checked ? "checked" : "unchecked";
-    }
-    function Checkbox({
-      className,
-      ...props
-    }) {
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        Checkbox$1,
-        {
-          "data-slot": "checkbox",
-          className: cn(
-            "peer border-input dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
-            className
-          ),
-          ...props,
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            CheckboxIndicator,
-            {
-              "data-slot": "checkbox-indicator",
-              className: "grid place-content-center text-current transition-none",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(Check, { className: "size-3.5" })
-            }
-          )
-        }
-      );
     }
     function ApprovalInbox({ requests, isLoading, onUpdate }) {
       const backend = useBackend();
@@ -50901,7 +51029,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                   }
                 ),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold", children: typeLabels[request2.type] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { className: "bg-yellow-500", children: "ČAKÁ" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { className: "bg-red-500", children: "ČAKÁ" })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 text-sm text-muted-foreground", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -51099,6 +51227,45 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         }
       );
     }
+    function getDefaultValues() {
+      return {
+        name: "",
+        email: "",
+        role: "EMPLOYEE",
+        teamId: "none",
+        managedTeamIds: [],
+        workingHoursPerDay: "8",
+        employmentStartDate: "",
+        birthDate: "",
+        hasChild: false,
+        manualLeaveAllowanceHours: "",
+        manualLeaveAllowanceUnit: "HOURS",
+        manualCarryOverHours: "",
+        manualCarryOverUnit: "HOURS",
+        emailNotificationsEnabled: true
+      };
+    }
+    function parsePositiveNumber(value) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    }
+    function formatUnitValue(value) {
+      return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+    }
+    function convertValueBetweenUnits(value, from2, to2, workingHoursPerDay) {
+      const parsedValue = parsePositiveNumber(value);
+      if (parsedValue === null || from2 === to2) {
+        return value;
+      }
+      const convertedValue = to2 === "DAYS" ? parsedValue / workingHoursPerDay : parsedValue * workingHoursPerDay;
+      return formatUnitValue(convertedValue);
+    }
+    function formatHoursWithDays(hours2, workingHoursPerDay) {
+      const resolvedWorkingHoursPerDay = Number.isFinite(Number(workingHoursPerDay)) && Number(workingHoursPerDay) > 0 ? Number(workingHoursPerDay) : 8;
+      const resolvedHours = Number(hours2 ?? 0);
+      const days2 = resolvedHours / resolvedWorkingHoursPerDay;
+      return `${formatLeaveHours(resolvedHours)} (${formatUnitValue(days2)} d)`;
+    }
     function UserManagement() {
       const backend = useBackend();
       const queryClient2 = useQueryClient();
@@ -51114,18 +51281,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         queryFn: async () => backend.teams.list()
       });
       const { register, handleSubmit, setValue, watch, reset } = useForm({
-        defaultValues: {
-          name: "",
-          email: "",
-          role: "EMPLOYEE",
-          teamId: "none",
-          managedTeamIds: [],
-          employmentStartDate: "",
-          birthDate: "",
-          hasChild: false,
-          manualLeaveAllowanceHours: "",
-          manualCarryOverHours: ""
-        }
+        defaultValues: getDefaultValues()
       });
       const createMutation = useMutation({
         mutationFn: async (payload) => backend.users.create(payload),
@@ -51185,7 +51341,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         }
       });
       if (isLoading) {
-        return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center py-12", children: "Načítava sa..." });
+        return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-12 text-center", children: "Načítava sa..." });
       }
       const users = (data == null ? void 0 : data.users) || [];
       const teams = (teamsData == null ? void 0 : teamsData.teams) || [];
@@ -51196,18 +51352,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       };
       const openCreate = () => {
         setEditingUser(null);
-        reset({
-          name: "",
-          email: "",
-          role: "EMPLOYEE",
-          teamId: "none",
-          managedTeamIds: [],
-          employmentStartDate: "",
-          birthDate: "",
-          hasChild: false,
-          manualLeaveAllowanceHours: "",
-          manualCarryOverHours: ""
-        });
+        reset(getDefaultValues());
         setDialogOpen(true);
       };
       const openEdit = (user) => {
@@ -51219,11 +51364,15 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           role: user.role ?? "EMPLOYEE",
           teamId: user.teamId ? String(user.teamId) : "none",
           managedTeamIds: initialManagedTeamIds,
+          workingHoursPerDay: user.workingHoursPerDay !== null && user.workingHoursPerDay !== void 0 ? String(user.workingHoursPerDay) : "8",
           employmentStartDate: user.employmentStartDate ? String(user.employmentStartDate).slice(0, 10) : "",
           birthDate: user.birthDate ? String(user.birthDate).slice(0, 10) : "",
           hasChild: Boolean(user.hasChild),
           manualLeaveAllowanceHours: user.manualLeaveAllowanceHours !== null && user.manualLeaveAllowanceHours !== void 0 ? String(user.manualLeaveAllowanceHours) : "",
-          manualCarryOverHours: user.manualCarryOverHours !== null && user.manualCarryOverHours !== void 0 ? String(user.manualCarryOverHours) : ""
+          manualLeaveAllowanceUnit: "HOURS",
+          manualCarryOverHours: user.manualCarryOverHours !== null && user.manualCarryOverHours !== void 0 ? String(user.manualCarryOverHours) : "",
+          manualCarryOverUnit: "HOURS",
+          emailNotificationsEnabled: user.emailNotificationsEnabled !== null && user.emailNotificationsEnabled !== void 0 ? Boolean(user.emailNotificationsEnabled) : true
         });
         setDialogOpen(true);
       };
@@ -51234,9 +51383,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
         }
       };
       const handleResetPassword = (user) => {
-        const confirmed = window.confirm(
-          `Naozaj chcete resetovať heslo používateľa ${user.name}?`
-        );
+        const confirmed = window.confirm(`Naozaj chcete resetovať heslo používateľa ${user.name}?`);
         if (confirmed) {
           resetPasswordMutation.mutate({ id: user.id });
         }
@@ -51257,17 +51404,46 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
       const onSubmit = (values) => {
         const parsedManagedTeamIds = (values.managedTeamIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id));
         const resolvedTeamId = values.role === "ADMIN" ? null : values.teamId !== "none" ? Number(values.teamId) : null;
+        const parsedWorkingHoursPerDay = Number(values.workingHoursPerDay);
+        if (!Number.isFinite(parsedWorkingHoursPerDay) || parsedWorkingHoursPerDay <= 0) {
+          toast2({
+            title: "Neplatná pracovná doba",
+            description: "Zadajte počet hodín za deň väčší ako 0.",
+            variant: "destructive"
+          });
+          return;
+        }
+        const parsedManualLeaveAllowanceValue = values.manualLeaveAllowanceHours !== "" ? parsePositiveNumber(values.manualLeaveAllowanceHours) : null;
+        if (values.manualLeaveAllowanceHours !== "" && parsedManualLeaveAllowanceValue === null) {
+          toast2({
+            title: "Neplatný nárok dovolenky",
+            description: "Zadajte platnú hodnotu nároku dovolenky.",
+            variant: "destructive"
+          });
+          return;
+        }
+        const parsedManualCarryOverValue = values.manualCarryOverHours !== "" ? parsePositiveNumber(values.manualCarryOverHours) : null;
+        if (values.manualCarryOverHours !== "" && parsedManualCarryOverValue === null) {
+          toast2({
+            title: "Neplatná prenesená dovolenka",
+            description: "Zadajte platnú hodnotu prenesenej dovolenky.",
+            variant: "destructive"
+          });
+          return;
+        }
         const payload = {
           email: values.email.trim(),
           name: values.name.trim(),
           role: values.role,
           teamId: resolvedTeamId,
           managedTeamIds: values.role === "MANAGER" ? parsedManagedTeamIds : [],
+          workingHoursPerDay: parsedWorkingHoursPerDay,
           employmentStartDate: values.employmentStartDate ? values.employmentStartDate : null,
           birthDate: values.birthDate ? values.birthDate : null,
           hasChild: values.hasChild,
-          manualLeaveAllowanceHours: values.manualLeaveAllowanceHours !== "" ? Number(values.manualLeaveAllowanceHours) : null,
-          manualCarryOverHours: values.manualCarryOverHours !== "" ? Number(values.manualCarryOverHours) : null
+          manualLeaveAllowanceHours: parsedManualLeaveAllowanceValue !== null ? values.manualLeaveAllowanceUnit === "DAYS" ? parsedManualLeaveAllowanceValue * parsedWorkingHoursPerDay : parsedManualLeaveAllowanceValue : null,
+          manualCarryOverHours: parsedManualCarryOverValue !== null ? values.manualCarryOverUnit === "DAYS" ? parsedManualCarryOverValue * parsedWorkingHoursPerDay : parsedManualCarryOverValue : null,
+          emailNotificationsEnabled: values.role === "ADMIN" ? Boolean(values.emailNotificationsEnabled) : true
         };
         if (editingUser) {
           updateMutation.mutate({ id: editingUser.id, ...payload });
@@ -51290,6 +51466,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Rola" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Tím" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Nástup" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Pracovná doba" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Narodenie" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Dieťa" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { children: "Nárok dovolenky (hodiny)" }),
@@ -51300,23 +51477,29 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TableBody, { children: users.map((user) => {
             var _a2;
-            const managedTeamNames = Array.isArray(user.managedTeamIds) ? teams.filter((team) => user.managedTeamIds.includes(team.id)).map((team) => team.name) : [];
+            const managedTeamNames = Array.isArray(user.managedTeamIds) ? teams.filter(
+              (team) => user.managedTeamIds.some((managedId) => String(managedId) === String(team.id))
+            ).map((team) => team.name) : [];
             const teamName = (_a2 = teams.find((team) => team.id === user.teamId)) == null ? void 0 : _a2.name;
-            const teamLabel = user.role === "MANAGER" ? [
+            const teamLabel = user.role === "MANAGER" ? managedTeamNames.length > 0 ? [
               `Člen: ${teamName || "Bez tímu"}`,
-              `Riadi: ${managedTeamNames.length > 0 ? managedTeamNames.join(", ") : "Žiadny tím"}`
-            ].join(" | ") : teamName || "Bez tímu";
+              `Riadi: ${managedTeamNames.join(", ")}`
+            ].join(" | ") : `Člen: ${teamName || "Bez tímu"}` : teamName || "Bez tímu";
             return /* @__PURE__ */ jsxRuntimeExports.jsxs(TableRow, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { className: "font-medium", children: user.name }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.email }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { variant: user.role === "ADMIN" ? "default" : user.role === "MANAGER" ? "secondary" : "outline", children: roleLabels[user.role] ?? user.role }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: teamLabel }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.employmentStartDate ? new Date(user.employmentStartDate).toLocaleDateString() : "—" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(TableCell, { children: [
+                user.workingHoursPerDay ?? 8,
+                " h"
+              ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "—" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: user.hasChild ? "Áno" : "Nie" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatLeaveHours(user.annualLeaveAllowanceHours) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatLeaveHours(user.carryOverHours) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatLeaveHours(user.remainingLeaveHours) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatHoursWithDays(user.annualLeaveAllowanceHours, user.workingHoursPerDay) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatHoursWithDays(user.carryOverHours, user.workingHoursPerDay) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: formatHoursWithDays(user.remainingLeaveHours, user.workingHoursPerDay) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { variant: user.isActive ? "default" : "destructive", children: user.isActive ? "Aktívny" : "Neaktívny" }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { className: "text-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-end gap-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "outline", size: "sm", onClick: () => openEdit(user), children: "Upraviť" }),
@@ -51425,6 +51608,17 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
               }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Manažér bude mať prístup k žiadostiam a kalendáru vo vybraných tímoch." })
             ] }),
+            watch("role") === "ADMIN" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                Checkbox,
+                {
+                  id: "user-email-notifications-enabled",
+                  checked: watch("emailNotificationsEnabled"),
+                  onCheckedChange: (value) => setValue("emailNotificationsEnabled", Boolean(value))
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-email-notifications-enabled", children: "Odosielať notifikácie na email" })
+            ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-birth-date", children: "Dátum narodenia" }),
@@ -51444,37 +51638,121 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-start-date", children: "Dátum nástupu" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Input, { id: "user-start-date", type: "date", ...register("employmentStartDate") })
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-working-hours", children: "Pracovná doba za deň (hodiny)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Input,
+                  {
+                    id: "user-working-hours",
+                    type: "number",
+                    min: 0.5,
+                    step: "0.5",
+                    placeholder: "Napr. 7.5",
+                    ...register("workingHoursPerDay", { required: true })
+                  }
+                )
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-manual-allowance", children: "Nárok dovolenky na začiatku roka (hodiny)" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  Input,
-                  {
-                    id: "user-manual-allowance",
-                    type: "number",
-                    min: 0,
-                    step: "0.5",
-                    placeholder: "Napr. 160",
-                    ...register("manualLeaveAllowanceHours")
-                  }
-                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-start-date", children: "Dátum nástupu" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Input, { id: "user-start-date", type: "date", ...register("employmentStartDate") })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-manual-allowance", children: "Nárok dovolenky na začiatku roka" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground", children: [
+                  "Aktuálny formát zadania: ",
+                  watch("manualLeaveAllowanceUnit") === "DAYS" ? "dni" : "hodiny"
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[1fr_auto] gap-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    Input,
+                    {
+                      id: "user-manual-allowance",
+                      type: "number",
+                      min: 0,
+                      step: "0.5",
+                      placeholder: watch("manualLeaveAllowanceUnit") === "DAYS" ? "Napr. 20" : "Napr. 160",
+                      ...register("manualLeaveAllowanceHours")
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                    Select,
+                    {
+                      value: watch("manualLeaveAllowanceUnit"),
+                      onValueChange: (value) => {
+                        const nextUnit = value;
+                        const currentUnit = watch("manualLeaveAllowanceUnit");
+                        const workingHoursPerDay = Number(watch("workingHoursPerDay")) || 8;
+                        setValue(
+                          "manualLeaveAllowanceHours",
+                          convertValueBetweenUnits(
+                            watch("manualLeaveAllowanceHours"),
+                            currentUnit,
+                            nextUnit,
+                            workingHoursPerDay
+                          )
+                        );
+                        setValue("manualLeaveAllowanceUnit", nextUnit);
+                      },
+                      children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(SelectTrigger, { className: "w-[110px]", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SelectValue, {}) }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectContent, { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: "HOURS", children: "Hodiny" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: "DAYS", children: "Dni" })
+                        ] })
+                      ]
+                    }
+                  )
+                ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Ak pole necháte prázdne, systém vypočíta nárok automaticky." })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 md:col-start-2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-manual-carry-over", children: "Prenesená dovolenka z minulého roka (hodiny)" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  Input,
-                  {
-                    id: "user-manual-carry-over",
-                    type: "number",
-                    min: 0,
-                    step: "0.5",
-                    placeholder: "Napr. 24",
-                    ...register("manualCarryOverHours")
-                  }
-                ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "user-manual-carry-over", children: " dovolenka z minulého roka" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground", children: [
+                  "Aktuálny formát zadania: ",
+                  watch("manualCarryOverUnit") === "DAYS" ? "dni" : "hodiny"
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[1fr_auto] gap-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    Input,
+                    {
+                      id: "user-manual-carry-over",
+                      type: "number",
+                      min: 0,
+                      step: "0.5",
+                      placeholder: watch("manualCarryOverUnit") === "DAYS" ? "Napr. 3" : "Napr. 24",
+                      ...register("manualCarryOverHours")
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                    Select,
+                    {
+                      value: watch("manualCarryOverUnit"),
+                      onValueChange: (value) => {
+                        const nextUnit = value;
+                        const currentUnit = watch("manualCarryOverUnit");
+                        const workingHoursPerDay = Number(watch("workingHoursPerDay")) || 8;
+                        setValue(
+                          "manualCarryOverHours",
+                          convertValueBetweenUnits(
+                            watch("manualCarryOverHours"),
+                            currentUnit,
+                            nextUnit,
+                            workingHoursPerDay
+                          )
+                        );
+                        setValue("manualCarryOverUnit", nextUnit);
+                      },
+                      children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(SelectTrigger, { className: "w-[110px]", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SelectValue, {}) }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectContent, { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: "HOURS", children: "Hodiny" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: "DAYS", children: "Dni" })
+                        ] })
+                      ]
+                    }
+                  )
+                ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Ručne nastaví počet hodín prenesených do aktuálneho roka." })
               ] })
             ] }),
@@ -52290,7 +52568,8 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                   value: (displayedUser == null ? void 0 : displayedUser.birthDate) ? new Date(displayedUser.birthDate).toLocaleDateString() : "—"
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(ProfileRow, { label: "Dieťa", value: (displayedUser == null ? void 0 : displayedUser.hasChild) ? "Áno" : "Nie" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ProfileRow, { label: "Dieťa", value: (displayedUser == null ? void 0 : displayedUser.hasChild) ? "Áno" : "Nie" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ProfileRow, { label: "Pracovná doba za deň", value: `${(displayedUser == null ? void 0 : displayedUser.workingHoursPerDay) ?? 8} h` })
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "space-y-4 p-6", children: [
@@ -52348,6 +52627,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           birthDate: "",
           hasChild: false,
           teamId: "none",
+          workingHoursPerDay: "8",
           employmentStartDate: "",
           unknownStartDate: false
         }
@@ -52360,6 +52640,7 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           birthDate: userQuery.data.birthDate ? String(userQuery.data.birthDate).slice(0, 10) : "",
           hasChild: Boolean(userQuery.data.hasChild),
           teamId: userQuery.data.teamId ? String(userQuery.data.teamId) : "none",
+          workingHoursPerDay: userQuery.data.workingHoursPerDay ? String(userQuery.data.workingHoursPerDay) : "8",
           employmentStartDate: userQuery.data.employmentStartDate ? String(userQuery.data.employmentStartDate).slice(0, 10) : "",
           unknownStartDate: !userQuery.data.employmentStartDate
         });
@@ -52407,9 +52688,19 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           });
           return;
         }
+        const parsedWorkingHoursPerDay = Number(values.workingHoursPerDay);
+        if (!Number.isFinite(parsedWorkingHoursPerDay) || parsedWorkingHoursPerDay <= 0) {
+          toast2({
+            title: "Neplatná pracovná doba",
+            description: "Zadajte počet hodín za deň väčší ako 0.",
+            variant: "destructive"
+          });
+          return;
+        }
         onboardingMutation.mutate({
           birthDate: values.birthDate,
           hasChild: values.hasChild,
+          workingHoursPerDay: parsedWorkingHoursPerDay,
           employmentStartDate: values.unknownStartDate ? null : values.employmentStartDate || null,
           teamId: values.teamId !== "none" ? Number(values.teamId) : null
         });
@@ -52450,35 +52741,48 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "employmentStartDate", children: "Dátum nástupu" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "workingHoursPerDay", children: "Pracovná doba za deň (hodiny)" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   Input,
                   {
-                    id: "employmentStartDate",
-                    type: "date",
-                    disabled: unknownStartDate,
-                    ...register("employmentStartDate")
+                    id: "workingHoursPerDay",
+                    type: "number",
+                    min: "0.5",
+                    step: "0.5",
+                    ...register("workingHoursPerDay", { required: true })
                   }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 pt-1", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    Checkbox,
-                    {
-                      id: "unknownStartDate",
-                      checked: unknownStartDate,
-                      onCheckedChange: (value) => {
-                        const checked = Boolean(value);
-                        setValue("unknownStartDate", checked);
-                        if (checked) {
-                          setValue("employmentStartDate", "");
-                        }
-                      }
-                    }
-                  ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "unknownStartDate", children: "Neviem dátum nástupu" })
-                ] })
+                )
               ] })
             ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-4 md:grid-cols-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "employmentStartDate", children: "Dátum nástupu" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                Input,
+                {
+                  id: "employmentStartDate",
+                  type: "date",
+                  disabled: unknownStartDate,
+                  ...register("employmentStartDate")
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 pt-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Checkbox,
+                  {
+                    id: "unknownStartDate",
+                    checked: unknownStartDate,
+                    onCheckedChange: (value) => {
+                      const checked = Boolean(value);
+                      setValue("unknownStartDate", checked);
+                      if (checked) {
+                        setValue("employmentStartDate", "");
+                      }
+                    }
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label, { htmlFor: "unknownStartDate", children: "Neviem dátum nástupu" })
+              ] })
+            ] }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 Button,
@@ -52498,11 +52802,11 @@ For more information, see https://radix-ui.com/primitives/docs/components/${titl
           /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "p-6 space-y-4", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold", children: "Prečo to potrebujeme" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Tieto údaje používame na výpočet 160 alebo 200 hodinového nároku a na správne priradenie do tímu." })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Tieto údaje používame na výpočet nároku v hodinách a na správne priradenie do tímu." })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 text-sm text-muted-foreground", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Zostatok z minulého roka sa pri prvom dokončení profilu neprenáša." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Váš nárok na dovolenku sa vypočítá na základe osobných údajov a dátumu narodenia." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Váš nárok na dovolenku sa vypočíta z pracovných hodín za deň a z pravidla 20 alebo 25 dní." }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Údaje môžete po uložení skontrolovať v profile." })
             ] }),
             ((_b2 = userQuery.data) == null ? void 0 : _b2.profileCompleted) === false ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-dashed p-4 text-sm text-muted-foreground", children: "Údaje ešte nie sú dokončené. Po odoslaní budete presmerovaný do aplikácie." }) : null

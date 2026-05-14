@@ -194,7 +194,7 @@ export default function CalendarPage() {
 
     const status = event.resource.status;
     const colors = {
-      PENDING: "bg-yellow-500",
+      PENDING: "bg-red-500",
       APPROVED: "bg-green-500",
       REJECTED: "bg-red-500",
       CANCELLED: "bg-gray-500",

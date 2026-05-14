@@ -206,7 +206,7 @@ export default function ApprovalInbox({ requests, isLoading, onUpdate }: Approva
                   <h3 className="font-semibold">
                     {typeLabels[request.type as keyof typeof typeLabels]}
                   </h3>
-                  <Badge className="bg-yellow-500">ČAKÁ</Badge>
+                  <Badge className="bg-red-500">ČAKÁ</Badge>
                 </div>
 
                 <div className="space-y-1 text-sm text-muted-foreground">

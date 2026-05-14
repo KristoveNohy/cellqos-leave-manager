@@ -93,7 +93,7 @@ export default function RequestDetailDialog({ request, open, onClose }: RequestD
 
   const statusColors = {
     DRAFT: "bg-gray-500",
-    PENDING: "bg-yellow-500",
+    PENDING: "bg-red-500",
     APPROVED: "bg-green-500",
     REJECTED: "bg-red-500",
     CANCELLED: "bg-gray-400",
